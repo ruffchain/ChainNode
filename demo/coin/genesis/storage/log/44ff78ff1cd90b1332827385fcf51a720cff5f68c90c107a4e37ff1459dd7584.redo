@@ -1,0 +1,1 @@
+³async function redo() {let kv0 = (await storage.getReadWritableKeyValue("__balance")).kv;await kv0.set("1Je1wpeMJKCUQ7HMc7rk7HpnihumgcmyNg", "1");}; redo().then(()=>{resolve(0);})

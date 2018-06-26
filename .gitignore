@@ -1,0 +1,7 @@
+dist
+node_modules
+data
+.vscode
+test_data*
+data_*
+yarn.lock
