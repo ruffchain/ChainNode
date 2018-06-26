@@ -7,6 +7,20 @@ import {Miner} from '../../core/value_chain/miner';
 import {Transaction} from '../../core/value_chain/transaction';
 import { BufferReader } from '../../core/lib/reader';
 import { isUndefined } from 'util';
+import {stringify} from '../../core/serializable';
+
+function promisify(f: any) {
+    return function () {
+        let args = Array.prototype.slice.call(arguments);
+        return new Promise(function (resolve, reject) {
+            args.push(function (err: any, result: any) {
+                if (err) reject(err);
+                else resolve(result);
+            });
+            f.apply(null, args);
+        });
+    }
+}
 
 export class ChainServer {
     constructor(chain: Chain, miner?: Miner) {
@@ -30,15 +44,16 @@ export class ChainServer {
     }
 
     _initMethods() {
-        this.m_server!.on('sendTransaction', async (params: {tx: Buffer}, resp)=>{
+        this.m_server!.on('sendTransaction', async (params: {tx: any}, resp)=>{
             let tx = new Transaction();
-            let err = tx.decode(new BufferReader(params.tx));
+            let err = tx.decode(new BufferReader(Buffer.from(params.tx.data)));
             if (err) {
-                resp.write(JSON.stringify(err));
-                return ;
+                await promisify(resp.write.bind(resp)(JSON.stringify(err)));
+            } else {
+                err = await this.m_chain.addTransaction(tx);
+                await promisify(resp.write.bind(resp)(JSON.stringify(err)));
             }
-            err = await this.m_chain.addTransaction(tx);
-            resp.write(JSON.stringify(err));
+            await promisify(resp.end.bind(resp)());
         });
 
         this.m_server!.on('getTransaction', ()=>{
@@ -51,30 +66,41 @@ export class ChainServer {
 
         this.m_server!.on('getNonce', async (params: {address: string}, resp)=>{
             let nonce = await this.m_chain.getNonce(params.address);
-            resp.write(JSON.stringify(nonce));
+            await promisify(resp.write.bind(resp)(JSON.stringify(nonce)));
+            await promisify(resp.end.bind(resp)());
         });
 
         this.m_server!.on('view', async (params: {method: string, params: any, from?: number|string|'latest'}, resp)=>{
             let cr = await this.m_chain.callGet(isUndefined(params.from) ? 'latest' : params.from , params.method, params.params);
             if (cr.err) {
-                resp.write(JSON.stringify({err: cr.err}));
-                return ;
+                await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
+            } else {
+                let s;
+                try {
+                    s = stringify(cr.value!);
+                    cr.value = s;
+                } catch(e) {
+                    cr.err = ErrorCode.RESULT_INVALID_FORMAT;
+                    delete cr.value;
+                }
+                await promisify(resp.write.bind(resp)(JSON.stringify(cr)));
             }
-            resp.write(JSON.stringify(cr));
+            await promisify(resp.end.bind(resp)());
         });
 
         this.m_server!.on('getBlock', async (params: {which: number|string|'latest', transactions?:boolean}, resp)=>{
             let hr = await this.m_chain.getHeader(params.which);
             if (hr.err) {
-                resp.write(JSON.stringify({err: hr.err}));
-                return ;
-            }
-            if (params.transactions) {
-                
+                await promisify(resp.write.bind(resp)(JSON.stringify({err: hr.err})));
             } else {
-                resp.write(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()}));
-                return ;
+                if (params.transactions) {
+                
+                } else {
+                    await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
+                    return ;
+                }
             }
+            await promisify(resp.end.bind(resp))();
         });
     }
 

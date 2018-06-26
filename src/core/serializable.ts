@@ -9,10 +9,42 @@ export {ErrorCode} from './error_code';
 
 import {Encoding} from './lib/encoding';
 import * as digest from './lib/digest';
+import {BigNumber} from 'bignumber.js';
+import { isUndefined, isNull, isNumber, isBuffer, isBoolean, isString, isArray, isObject } from 'util';
 
 
 export interface JSONable {
     stringify(): any;
+}
+
+export function stringify(o: any): any {
+    if (isUndefined(o) || isNull(o)) {
+        return o;
+    } else if (isNumber(o) || isString(o) || isBuffer(o) || isBoolean(o)) {
+        return o;
+    } else if (o instanceof BigNumber) {
+        return o.toString();
+    } else if (isArray(o) || o instanceof Array) {
+        let s = [];
+        for (let e of o) {
+            s.push(stringify(o));
+        }
+        return s;
+    } else if (isObject(o)) {
+        let s = Object.create(null);
+        for (let k of Object.keys(o)) {
+            s[k] = stringify(o[k]);
+        }
+        return s;
+    } else if (o instanceof Map) {
+        let s = Object.create(null);
+        for (let k of o.keys()) {
+            s[k] = stringify(o.get(k));
+        }
+        return s;
+    } else {
+        throw new Error('not JSONable');
+    }
 }
 
 export interface Serializable {

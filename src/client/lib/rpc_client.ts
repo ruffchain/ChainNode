@@ -16,7 +16,7 @@ export class RPCClient {
 
                 if (xmlhttp.status == 200) {
                     let strResp = xmlhttp.responseText;
-                    onComplete(strResp, 0);
+                    onComplete(strResp, xmlhttp.status);
                 } else {
                     onComplete(null, xmlhttp.status);
                 }
@@ -36,7 +36,7 @@ export class RPCClient {
     async callAsync(funcName: string, funcArgs: any): Promise<{ resp: string | null, ret: number }> {
         return new Promise<{ resp: string | null, ret: number }>((reslove, reject) => {
             this.call(funcName, funcArgs, (resp, statusCode) => {
-                reslove({ resp: resp, ret: statusCode === 200 ? 0 : statusCode });
+                reslove({ resp: resp, ret: statusCode });
             });
         });
     }

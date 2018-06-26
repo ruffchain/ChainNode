@@ -1,4 +1,4 @@
-import { BufferReader, BufferWriter, Serializable, ErrorCode, SerializableWithHash } from '../serializable';
+import { BufferReader, BufferWriter, Serializable, ErrorCode, SerializableWithHash, stringify } from '../serializable';
 import { Encoding } from '../lib/encoding';
 import * as Address from '../address';
 import * as digest from '../lib/digest';
@@ -42,12 +42,13 @@ export class Transaction extends SerializableWithHash {
         this.m_nonce = n;
     }
 
-    get input(): any {
-        return this.m_input;
+    get input() {
+        const input = this.m_input;
+        return input;
     }
 
     set input(i: any) {
-        this.m_input = i;
+        this.m_input = stringify(i);
     }
 
     set publickey(b:  Buffer) {

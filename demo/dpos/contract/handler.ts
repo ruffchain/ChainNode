@@ -2,7 +2,7 @@ import {ErrorCode, BigNumber} from '../../../src/client/types';
 import {ViewContext, EventContext, TransactionContext} from '../../../src/client/dpos/types';
 import handler = require('../../../src/client/handler');
 
-handler.addViewMethod('getBalance', async (context: ViewContext, params: any): Promise<any> => {
+handler.addViewMethod('getBalance', async (context: ViewContext, params: any): Promise<BigNumber> => {
     return await context.getBalance(params.address);
 });
 
@@ -18,8 +18,9 @@ handler.addViewMethod('getCandidates', async (context: ViewContext, params: any)
     return await context.getCandidates();
 });
 
+
 handler.addTX('transferTo', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
-    return await context.transferTo(params.to, new BigNumber(params.amount));
+    return context.transferTo(params.to, context.value);
 });
 
 handler.addTX('vote', async (context: TransactionContext, params: any): Promise<ErrorCode> => {

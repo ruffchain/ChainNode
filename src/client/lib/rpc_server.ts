@@ -1,19 +1,18 @@
 import { EventEmitter } from "events";
-import { createServer, Http2Server, Http2ServerResponse } from "http2";
+import * as http from "http";
 
 
 export class RPCServer extends EventEmitter {
     private m_addr: string;
     private m_port: number;
-    private m_server: Http2Server|null;
+    private m_server?: http.Server;
     constructor(listenaddr: string, port: number) {
         super();
         this.m_addr = listenaddr;
         this.m_port = port;
-        this.m_server = null;
     }
 
-    on(funcName: string, listener: (args: any, resp: Http2ServerResponse) => void): this;
+    on(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
     on(event: string, listener: any): this  {
         return super.on(event, listener);
     }
@@ -22,14 +21,14 @@ export class RPCServer extends EventEmitter {
         if (this.m_server) {
             return;
         }
-        this.m_server = createServer();
+        this.m_server = http.createServer();
         this.m_server.on('request', (req, resp) => {
             if (req.url !== '/rpc' || req.method !== 'POST') {
                 resp.writeHead(404);
                 resp.end();
             } else {
                 let jsonData = '';
-                req.on('data', (chunk) => {
+                req.on('data', (chunk: any) => {
                     jsonData += chunk;
                 });
                 req.on('end', () => {
@@ -49,7 +48,7 @@ export class RPCServer extends EventEmitter {
     stop() {
         if (this.m_server) {
             this.m_server.close();
-            this.m_server = null;
+            delete this.m_server;
         }
     }
 }

@@ -42,7 +42,7 @@ export class ValueContext extends ValueViewContext {
     }
 
     async issue(to: string, amount: BigNumber): Promise<ErrorCode> {
-        let sh = await (<IReadWritableKeyValue>this.kvBalance).set(to, (await this.getBalance(to)).plus(amount));
+        let sh = await (<IReadWritableKeyValue>this.kvBalance).set(to, (await this.getBalance(to)).plus(amount).toString());
         return ErrorCode.RESULT_OK;
     }
 }
@@ -81,6 +81,8 @@ export class MethExecutor extends BaseTxExecutor.MethExecutor {
                 value: (<Transaction>this.m_tx).value
             } 
         );
+
+        return context;
     }
 
     public async execute(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<{err: ErrorCode, receipt?: TxBase.Receipt}> {

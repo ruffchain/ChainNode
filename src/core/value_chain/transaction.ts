@@ -28,14 +28,6 @@ export class Transaction extends BaseTransaction.Transaction {
         this.m_fee = value;
     }
 
-    public setValue(value: number) {
-        this.m_value = new BigNumber(value);
-    }
-
-    public setFee(value: number) {
-        this.m_fee = new BigNumber(value);
-    }
-
     protected _encodeHashContent(writer: BufferWriter): BufferWriter{
         super._encodeHashContent(writer);
         writer.writeBigNumber(this.m_value);

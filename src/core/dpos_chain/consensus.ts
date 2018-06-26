@@ -78,7 +78,7 @@ export class ViewContext {
             if (gr.err) {
                 return {err: gr.err};
             }
-            return {err: ErrorCode.RESULT_OK, stoke: new BigNumber(gr.value!)};
+            return {err: ErrorCode.RESULT_OK, stoke: new BigNumber(gr.value! as string)};
         }
     }
 
@@ -217,14 +217,14 @@ export class Context extends ViewContext {
             sysBalance = new BigNumber(sysBalanceInfo.value!);
         }
 
-        await kvBalance.set(from, balance.minus(amount));
-        await kvBalance.set(Chain.sysAddress, sysBalance.plus(amount));
+        await kvBalance.set(from, balance.minus(amount).toString());
+        await kvBalance.set(Chain.sysAddress, sysBalance.plus(amount).toString());
 
 
         let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let stokeInfo = await kvDPos.hget(ViewContext.keyStoke, from);
         let stoke: BigNumber = new BigNumber(stokeInfo.err === ErrorCode.RESULT_OK ? stokeInfo.value as string : 0);
-        await kvDPos.hset(ViewContext.keyStoke, from, stoke.plus(amount));
+        await kvDPos.hset(ViewContext.keyStoke, from, stoke.plus(amount).toString());
 
         await this._updatevote(curStorage, from, amount);
 
@@ -246,7 +246,7 @@ export class Context extends ViewContext {
         if (stoke.isEqualTo(amount)) {
             kvDPos.hdel(ViewContext.keyStoke, from);
         } else {
-            kvDPos.hset(ViewContext.keyStoke, from, stoke.minus(amount));
+            kvDPos.hset(ViewContext.keyStoke, from, stoke.minus(amount).toString());
         }
 
         let balance: BigNumber = new BigNumber(0);
@@ -260,8 +260,8 @@ export class Context extends ViewContext {
         let sysBalance: BigNumber = new BigNumber(sysBalanceInfo.value!);
         assert(sysBalance.gt(amount), `system balance must great amout,sys=${sysBalanceInfo.value!},amount=${amount.toString()}`)
 
-        await kvBalance.set(from, balance.plus(amount));
-        await kvBalance.set(Chain.sysAddress, sysBalance.minus(amount));
+        await kvBalance.set(from, balance.plus(amount).toString());
+        await kvBalance.set(Chain.sysAddress, sysBalance.minus(amount).toString());
 
         await this._updatevote(curStorage, from, (new BigNumber(0)).minus(amount));
         if (stoke.isEqualTo(amount)) {
