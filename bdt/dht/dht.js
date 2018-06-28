@@ -253,23 +253,22 @@ class DHTBase extends EventEmitter {
         }
     }
 
-    // callback({result, arrivedCount})
-    emitBroadcastEvent(eventName, params, arriveNodeCount, callback) {
-        return compatible(this, this._emitBroadcastEvent, eventName, params, arriveNodeCount, callback)
+    emitBroadcastEvent(eventName, params) {
+        // return compatible(this, this._emitBroadcastEvent, eventName, params);
+        return this._emitBroadcastEvent(eventName, params);
     }
 
-    _emitBroadcastEvent(eventName, params, arriveNodeCount, callback) {
-        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) emitBroadcastEvent(${eventName}:${params}:${arriveNodeCount})`);
-        if (typeof eventName === 'string' && typeof arriveNodeCount === 'number' && arriveNodeCount > 0) {
+    _emitBroadcastEvent(eventName, params) {
+        LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) emitBroadcastEvent(${eventName}:${params})`);
+        if (typeof eventName === 'string') {
             this.m_taskExecutor.emitBroadcastEvent(eventName,
                 params,
-                arriveNodeCount,
-                this.m_bucket.localPeer.peerid,
-                {ttl: 1, isForward: false},
-                (result, arrivedPeerids) => callback(result, arrivedPeerids.size));
+                this.m_bucket.localPeer,
+                null,
+                {});
             return DHTResult.PENDING;
         } else {
-            LOG_ASSERT(false, `emitBroadcastEvent invalid args, (eventName type: ${typeof eventName}, arriveNodeCount: ${arriveNodeCount}).`);
+            LOG_ASSERT(false, `emitBroadcastEvent invalid args, (eventName type: ${typeof eventName}).`);
             return DHTResult.INVALID_ARGS;
         }
     }

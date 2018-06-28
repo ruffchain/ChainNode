@@ -180,44 +180,28 @@ class PackageProcessor {
         let {event, params, source} = cmdPackage.body;
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got broadcast event(${event}:${params}) from peer(${source})`);
 
-        // 已经退出服务就不再发出事件通知了，但继续协助做完广播操作
-        let serviceDescriptor = this.m_bucket.localPeer.findService(this.m_servicePath);
-        if (serviceDescriptor && serviceDescriptor.isSigninServer()) {
-            setImmediate(() => this.m_broadcastEventEmitter.emit(event, event, params, source));
-        }
-
-        let response = (arrivedPeerids) => {
+        let response = () => {
             let respPackage = this.m_packageFactory.createPackage(DHTCommandType.BROADCAST_EVENT_RESP);
             respPackage.common.packageID = cmdPackage.common.packageID;
             respPackage.common.ackSeq = cmdPackage.common.seq;
             respPackage.body = {taskid: cmdPackage.body.taskid};
-    
-            let eNodes =  new Set(cmdPackage.body.e_nodes || []);
-            if (arrivedPeerids) {
-                arrivedPeerids.forEach(peerid => eNodes.add(peerid));
-            }
-            let peerList = this.m_bucket.getRandomPeers({excludePeerids: eNodes});
-            if (peerList && peerList.length > 0) {
-                respPackage.body.n_nodes = [];
-                peerList.forEach(peer => respPackage.body.n_nodes.push({id: peer.peerid, eplist: [...peer.eplist]}));
-            }
-
-            if (arrivedPeerids && arrivedPeerids.size > 0) {
-                respPackage.body.r_nodes = [];
-                arrivedPeerids.forEach(peerid => respPackage.body.r_nodes.push(peerid));
-            }
             this.m_packageSender.sendPackage(remotePeer, respPackage);
         }
 
-        if (cmdPackage.common.ttl > 0) {
-            this.m_taskExecutor.emitBroadcastEvent(event,
+        response();
+
+        let isNewEvent = this.m_taskExecutor.emitBroadcastEvent(event,
                 params,
-                BucketConfig.FindPeerCount,
                 source,
-                {ttl: cmdPackage.common.ttl - 1, isForward: true, timeout: cmdPackage.body.timeout, excludePeerids: cmdPackage.body.e_nodes},
-                (result, arrivedPeerids) => response(arrivedPeerids));
-        } else {
-            response();
+                cmdPackage.body.taskid,
+                {timeout: cmdPackage.body.timeout, passPeerid: remotePeer.peerid});
+
+        if (isNewEvent) {
+            // 已经退出服务就不再发出事件通知了，但继续协助做完广播操作
+            let serviceDescriptor = this.m_bucket.localPeer.findService(this.m_servicePath);
+            if (serviceDescriptor && serviceDescriptor.isSigninServer()) {
+                setImmediate(() => this.m_broadcastEventEmitter.emit(event, event, params, source));
+            }
         }
     }
 

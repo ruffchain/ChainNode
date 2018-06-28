@@ -1,5 +1,0 @@
-2018-06-26T08:25:22.390Z - warn: [node_storage NodeStorage constructor] Error: demo\dpos\genesis\nodeinfo: ENOENT: no such file or directory, open 'C:\workspace\chainSDK\demo\dpos\genesis\nodeinfo'
-2018-06-26T08:34:46.685Z - warn: [node_storage NodeStorage constructor] Error: demo\dpos\genesis\nodeinfo: ENOENT: no such file or directory, open 'c:\workspace\chainSDK\demo\dpos\genesis\nodeinfo'
-2018-06-26T08:36:24.086Z - warn: [node_storage NodeStorage constructor] Error: demo\dpos\genesis\nodeinfo: ENOENT: no such file or directory, open 'c:\workspace\chainSDK\demo\dpos\genesis\nodeinfo'
-2018-06-26T08:36:50.367Z - warn: [node_storage NodeStorage constructor] Error: demo\dpos\genesis\nodeinfo: ENOENT: no such file or directory, open 'c:\workspace\chainSDK\demo\dpos\genesis\nodeinfo'
-2018-06-26T08:44:51.337Z - warn: [node_storage NodeStorage constructor] Error: demo\dpos\genesis\nodeinfo: ENOENT: no such file or directory, open 'c:\workspace\chainSDK\demo\dpos\genesis\nodeinfo'

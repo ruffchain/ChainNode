@@ -18,6 +18,7 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 const TaskConfig = Config.Task;
+const BroadcastConfig = Config.Broadcast;
 
 class TaskExecutor {
     constructor({taskMgr, bucket, packageSender, packageFactory, distributedValueTable}) {
@@ -93,13 +94,22 @@ class TaskExecutor {
         this.m_taskMgr._run(newTask);
     }
 
-    emitBroadcastEvent(eventName, params, arriveNodeCount, sourcePeerid, {ttl = 0, isForward = false, timeout = TaskConfig.TimeoutMS, excludePeerids = null} = {}, callback) {
+    emitBroadcastEvent(eventName, params, sourcePeer, taskid, {timeout = BroadcastConfig.TimeoutMS, passPeerid = null} = {}, callback) {
         // LOG_INFO(`BROADCAST: servicePath: ${this.servicePath}: eventName: ${eventName}`);
-        let newTask = new BroadcastEventTask(this, eventName, params, arriveNodeCount, sourcePeerid, {ttl, isForward, timeout, excludePeerids});
-        if (callback) {
-            newTask.addCallback(callback);
+        let task = this.m_taskMgr.m_taskMap.get(taskid);
+        if (task) {
+            if (callback) {
+                task.addCallback(callback);
+            }
+            return false;
         }
-        this.m_taskMgr._run(newTask);
+
+        task = new BroadcastEventTask(this, eventName, params, sourcePeer, taskid, {timeout, passPeerid});
+        if (callback) {
+            task.addCallback(callback);
+        }
+        this.m_taskMgr._run(task);
+        return true;
     }
 
     splitPackage(cmdPackage, peer) {

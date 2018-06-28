@@ -6,12 +6,13 @@ import { ErrorCode } from '../error_code';
 import {Block} from '../chain/block';
 import { IReadableStorage, Storage } from '../storage/storage';
 import * as ValueChain from '../value_chain/chain';
-import {BlockExecutor} from '../value_chain/executor';
+import {ValueContext, BlockExecutor} from '../value_chain/executor';
 
 import { BlockHeader } from './block';
 import * as DPOSConsensus from './consensus';
 
 import {ViewExecutor} from '../executor/view';
+import * as DPOSBlockExecutor from './executor';
 
 
 
@@ -41,15 +42,16 @@ export class Chain extends ValueChain.Chain {
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let nber = await super.newBlockExecutor(block, storage);
-        if (nber.err) {
-            return nber;
-        }
-        // let esr = await this._getElectionStorage(<BlockHeader>block.header);
-        // if (esr.err) {
-        //     return {err: esr.err};
-        // }
-        let externalContext = nber.executor!.externContext;
+        let kvBalance = (await storage.getReadWritableKeyValue(Chain.kvBalance)).kv!;
+
+        let ve = new ValueContext(kvBalance);
+        let externalContext = Object.create(null);
+        externalContext.getBalance = async (address: string): Promise<BigNumber> => {
+            return await ve.getBalance(address);
+        };
+        externalContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
+            return await ve.transferTo(Chain.sysAddress, address, amount);
+        };
         
         let de = new DPOSConsensus.Context();
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
@@ -97,12 +99,9 @@ export class Chain extends ValueChain.Chain {
 
             return gc.candidates!;
         }
-        // let oldUninit = nber.executor!.uninit; 
-        // nber.executor!.uninit = async (): Promise<void> => {
-        //     this.storageManager.releaseSnapshotView(esr.header!.hash);
-        //     await oldUninit.bind(nber.executor!)();
-        // };
-        return nber;
+
+        let executor = new DPOSBlockExecutor.BlockExecutor({block, storage, handler: this.m_options.handler, externContext: externalContext});
+        return {err: ErrorCode.RESULT_OK, executor: executor};
     }
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined,): Promise<{err: ErrorCode, executor?: ViewExecutor}> {

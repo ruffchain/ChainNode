@@ -352,7 +352,7 @@ class SN extends EventEmitter {
 
         LOG_INFO(`[SN]: call remote peer, ${srcPeerid} -> ${destPeerid}`);
         
-        let sendCallResp = (result, eplist) => {
+        let sendCallResp = (result, eplist, lastUpdateTime) => {
             LOG_INFO(`[SN]: will send call resp, result:${result}, ${srcPeerid} -> ${destPeerid}`);
     
             let respBody = {
@@ -360,6 +360,7 @@ class SN extends EventEmitter {
                     'dest': reqBody.src,
                     'result': result,
                     'eplist': eplist? Array.from(eplist) : [],
+                    'time': lastUpdateTime || 0,
                 };
             callResp.body = respBody;
             this._sendPackage(socket, callResp, remote);
@@ -410,11 +411,11 @@ class SN extends EventEmitter {
             if (srcPeerInfo) {
                 srcPeerInfo.eplist.set(wlanEPString, Date.now());
                 this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerInfo.peerid, srcPeerInfo.eplist.keys(), cmdPackage);
-                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys());
+                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys(), destPeerInfo.lastUpdateTime);
                 return Result.SUCCESS;
             } else {
                 this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerid, [wlanEPString], cmdPackage);
-                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys());
+                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys(), destPeerInfo.lastUpdateTime);
                 return Result.SUCCESS;
             }
             LOG_INFO(`Found dest peer(${srcPeerid}-${destPeerid}) from sn`);

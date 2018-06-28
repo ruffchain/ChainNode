@@ -46,7 +46,7 @@ export class ChainServer {
     _initMethods() {
         this.m_server!.on('sendTransaction', async (params: {tx: any}, resp)=>{
             let tx = new Transaction();
-            let err = tx.decode(new BufferReader(Buffer.from(params.tx.data)));
+            let err = tx.decode(new BufferReader(Buffer.from(params.tx, 'hex')));
             if (err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify(err)));
             } else {

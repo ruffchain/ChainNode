@@ -16,8 +16,9 @@ const LOG_CHECK = Base.BX_CHECK;
 const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
-// <TODO>
-// 1.控制每个周期发包总量
+// isForward: 控制该递归是否要向距离目标更近的范围缩小一步，
+//          一般初始发起节点置false，取距离目标较近的节点，但不一定要比自己更近，以便在更大范围内搜索；
+//          中间节点置true，只返回比自己更接近的节点
 class TouchNodeTask extends Task {
     constructor(owner, {ttl = 0, isForward = false, timeout = TaskConfig.TimeoutMS, excludePeerids = null, isImmediately = true} = {}) {
         if (new.target === TouchNodeTask) {
@@ -128,7 +129,7 @@ class TouchNodeTask extends Task {
         if (this.m_ttl > 0) {
             // 对方收到包后需要转发处理，超时时间应该比本地任务短，否则可能本地任务超时结束还收不到对方的结果；
             // 1500ms作为对方超时判定和网络传输的冗余
-            this.m_package.body.timeout = this.m_deadline - Date.now() - 1500;
+            this.m_package.body.timeout = this.deadline - Date.now() - 1500;
             if (this.m_package.body.timeout <= 0) {
                 delete this.m_package.body.timeout;
                 this.m_ttl = 0;
@@ -224,7 +225,7 @@ class BroadcastNodeTask extends TouchNodeTask {
         this.bucket.forEachPeer(peer => {
             let serviceDescriptor = peer.findService(this.servicePath);
             assert(serviceDescriptor && serviceDescriptor.isSigninServer(), `peer:${JSON.stringify(peer.toStruct())},servicePath:${JSON.stringify(this.servicePath)}`);
-        })        
+        });
 
         return this.bucket.getRandomPeers({excludePeerids: this.m_excludePeerids, count: this.m_arrivePeerCount});
     }

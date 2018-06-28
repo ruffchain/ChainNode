@@ -31,26 +31,26 @@ export interface IReadableKeyValue {
 
 export interface IWritableKeyValue {
     // 单值操作
-    set(key: string, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
+    set(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
     
     // hash
-    hset(key: string, field: string, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
-    hmset(key: string, fields: string[], values: (boolean|number|string|Buffer)[]): Promise<{ err: ErrorCode }>;
+    hset(key: string, field: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    hmset(key: string, fields: string[], values: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
     hclean(key: string): Promise<ErrorCode>;
     hdel(key: string, field: string): Promise<{err: ErrorCode}>;
     
     // array
-    lset(key: string, index: number, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
+    lset(key: string, index: number, value: boolean|number|string): Promise<{ err: ErrorCode }>;
 
-    lpush(key: string, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
-    lpushx(key: string, value: (boolean|number|string|Buffer)[]): Promise<{ err: ErrorCode }>;
+    lpush(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    lpushx(key: string, value: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
     lpop(key: string): Promise<{ err: ErrorCode, value?: any }>;
 
-    rpush(key: string, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
-    rpushx(key: string, value: (boolean|number|string|Buffer)[]): Promise<{ err: ErrorCode }>;
-    rpop(key: string): Promise<{ err: ErrorCode, value?: number|string|Buffer }>;
+    rpush(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    rpushx(key: string, value: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
+    rpop(key: string): Promise<{ err: ErrorCode, value?: boolean|number|string }>;
 
-    linsert(key: string, index: number, value: boolean|number|string|Buffer): Promise<{ err: ErrorCode }>;
+    linsert(key: string, index: number, value: boolean|number|string): Promise<{ err: ErrorCode }>;
     lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
 }
 

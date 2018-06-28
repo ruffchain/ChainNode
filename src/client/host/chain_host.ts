@@ -59,11 +59,11 @@ class ChainHost {
         this.m_asMiner = true;
         let defaultOptions = Object.create(null);
         defaultOptions.node = new StandaloneNode('');
-        if (!await this._createChain(commandOptions, defaultOptions)) {
-            return false;
-        }
         if (commandOptions.has('force')) {
             fs.emptyDirSync(commandOptions.get('dataDir'));
+        }
+        if (!await this._createChain(commandOptions, defaultOptions)) {
+            return false;
         }
         let ci = this.m_consensus.get(commandOptions.get('consensus'));
         let err = await this.m_miner!.create(ci!.create(commandOptions));
@@ -117,7 +117,6 @@ class ChainHost {
             level: 'debug', 
             file: {root: path.join(dataDir, 'log')}
         };
-
     
         if (!commandOptions.get('consensus')) {
             console.error('no consensus');

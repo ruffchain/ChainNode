@@ -145,8 +145,8 @@ class SNDHT {
         }
     }
 
-    emitBroadcastEvent(eventName, params, arriveNodeCount, callback) {
-        return this.m_snDHT.emitBroadcastEvent(eventName, params, arriveNodeCount, callback);
+    emitBroadcastEvent(eventName, params) {
+        return this.m_snDHT.emitBroadcastEvent(eventName, params);
     }
 
     // listener(eventName, params, sourcePeerid)
@@ -339,9 +339,9 @@ class SNDHT {
         // 判定是否满足加入DHT的条件
         let isOk = state => {
             return  state.distanceOk && // 距离范围满足条件
-                    state.sentCount && state.recvCount / state.sentCount > 0.9 && // 收包率
+                    state.sentCount && state.recvCount / state.sentCount > 1 && // 收包率
                     state.answer > 100 && state.question / state.answer > 1 && // QA比
-                    state.RTT < 500; // 延迟
+                    state.RTT < 100; // 延迟
         }
 
         let canJoinDHT = () => {
@@ -434,7 +434,7 @@ class SNDHT {
             this.m_eventEmitter.emit(SNDHT.Event.SN.online, {peerid: params.peerid});
         };
         this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, this.m_snOnlineListener);
-        this.m_snDHT.emitBroadcastEvent(SNDHT.Event.SN.online, {peerid: this.m_localPeer.peerid}, Infinity);
+        this.m_snDHT.emitBroadcastEvent(SNDHT.Event.SN.online, {peerid: this.m_localPeer.peerid});
     }
 
     _unjoinDHT() {

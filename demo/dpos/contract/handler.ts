@@ -24,13 +24,13 @@ handler.addTX('transferTo', async (context: TransactionContext, params: any): Pr
 });
 
 handler.addTX('vote', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
-    return await context.vote(params.from, params.candiates);
+    return await context.vote(context.caller, params);
 });
 
 handler.addTX('mortgage', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
-    return await context.mortgage(params.from, new BigNumber(params.amount));
+    return await context.mortgage(context.caller, new BigNumber(params));
 });
 
 handler.addTX('unmortgage', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
-    return await context.unmortgage(params.from, new BigNumber(params.amount));
+    return await context.unmortgage(context.caller, new BigNumber(params));
 });

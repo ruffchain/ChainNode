@@ -15,6 +15,7 @@ import { BlockHeader } from './block';
 export type MinerOptions = {minerSecret: Buffer} & ValueMiner.MinerOptions & ChainOptions;
 
 export type CreateOptions = {
+    candidates: string[],
     miners: string[]
 };
 
@@ -54,6 +55,7 @@ export class Miner extends ValueMiner.Miner {
         if (err) {
             return err;
         }
+        this.m_logger.info(`begin Mine...`);
         this._resetTimer();
 
         return ErrorCode.RESULT_OK;
@@ -82,6 +84,7 @@ export class Miner extends ValueMiner.Miner {
             if (dmr.err) {
                 return ;
             }
+            this.m_logger.info(`calcuted block ${blockHeader.number} creator: ${dmr.miner}`);
             if (this.m_address === dmr.miner) {
                 await this._createBlock(blockHeader);
             }
@@ -120,7 +123,7 @@ export class Miner extends ValueMiner.Miner {
         await storage.createKeyValue(Consensus.ViewContext.kvDPOS);
 
         let denv = new Consensus.Context();
-        let ir = await denv.init(storage, options.miners);
+        let ir = await denv.init(storage,options.candidates, options.miners);
         return ir.err;
     }
 }

@@ -15,6 +15,21 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
         console.error('invalid bdt port');
         return ;
     }
-    let nodeType = staticOutInstance(Node);
-    return new nodeType({host, port});
+    let snPeers = commandOptions.get('sn');
+    if (!snPeers) {
+        console.error('no sn');
+        return ;
+    }
+    let snconfig = (<string>snPeers).split('@');
+    if (snconfig.length !== 4) {
+        console.error('invalid sn: <SN_PEERID>@<SN_IP>@<SN_TCP_PORT>@<SN_UDP_PORT>')
+    }
+    const snPeer = {
+        peerid: `${snconfig[0]}`,
+        eplist: [
+            `4@${snconfig[1]}@${snconfig[2]}@t`,
+            `4@${snconfig[1]}@${snconfig[3]}@u`
+        ]
+    }
+    return new Node({host: host, port: port, snPeer: snPeer});
 });

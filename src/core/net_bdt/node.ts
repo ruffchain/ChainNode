@@ -8,11 +8,8 @@ const P2P = require('../../../../bdt/p2p/p2p');
 const DHTUtil = require('../../../../bdt/dht/util.js');
 const {NetHelper} = require('../../../../bdt/base/util.js');
 
-
 // 关闭 bdt 输出的logs
 P2P.debug(false)
-
-const assert = require('assert');
 
 export class Node extends INode {
     private m_options: any;
@@ -21,7 +18,7 @@ export class Node extends INode {
     private m_snPeerid: any;
 
 
-    constructor(options: {host: string, port: number}) {
+    constructor(options: {host: string, port: number, snPeer: any}) {
         const peerid = `${options.host}:${options.port}`
         super({peerid: peerid});
         this.m_options = Object.create(null);
@@ -92,6 +89,17 @@ export class Node extends INode {
         
         // 过滤掉不能握手的节点
         let peerids = peers.filter((val:any) => val).map((val:any) => val.id)
+
+        // 如果peer数量比传入的count多， 需要随机截取
+        if ( peerids.length > count ) {
+            var temp_peerids = [];
+            for(var i = 0; i < count -1; i++) {
+                var idx = Math.floor(Math.random() * peerids.length);
+                temp_peerids.push(peerids[idx]);
+                peerids.splice(idx, 1);
+            }
+            peerids = temp_peerids;
+        }
 
         // console.log('randomPeers', peerids)
         let errCode = peerids.length ? ErrorCode.RESULT_OK : ErrorCode.RESULT_SKIPPED;

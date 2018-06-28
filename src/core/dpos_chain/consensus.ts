@@ -8,7 +8,7 @@ import * as assert from 'assert';
 //DPOS的节点会定时出块，如果时间间隔已到，指定节点还未出块的话，就跳过这个节点，下一个节点出块
 //出块间隔时间必须远小于创建并广播块到所有DPOS出块节点的时间
 //所有time单位均为seconds
-export const blockInterval = 30    //先定一分钟一个块
+export const blockInterval = 10    //先定一分钟一个块
 
 export const maxBlockIntervalOffset = 1
 
@@ -25,13 +25,13 @@ export const minCreator = 2;
 export const dposVoteMaxProducers = 30;
 
 //超过该时间不出块就将被封禁
-export const timeOffsetToLastBlock = 24 * 3600 * 1000; 
+export const timeOffsetToLastBlock = 60 * 60 * 24; 
 
 //封禁时长
 export const timeBan = 30 * timeOffsetToLastBlock;
 
 //每unbanBlocks个块后进行一次解禁计算
-export const unbanBlocks = reSelectionBlocks * 10;
+export const unbanBlocks = reSelectionBlocks * 2;
 
 export class ViewContext {
     public static kvDPOS: string = 'dpos';
@@ -98,7 +98,7 @@ export class ViewContext {
             for (let c of cans.candidates!) {
                 if (c === s) {
                     return true;
-                } else if (c < s) {
+                } else if (c > s) {
                     return false;
                 }
             }
@@ -128,6 +128,16 @@ export class ViewContext {
 
         return {err: ErrorCode.RESULT_OK, candidates: candidates};
     }
+
+    async isBan(curStorage: IReadableStorage, address: string): Promise<{err: ErrorCode, ban?: boolean}> {
+        let kvDPos = (await curStorage.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let timeInfo = await kvDPos.hget(ViewContext.keyCandidate, address);
+        if (timeInfo.err) {
+            return {err: ErrorCode.RESULT_OK, ban: false};
+        }
+
+        return {err: ErrorCode.RESULT_OK, ban: (timeInfo.value as number) === 0 ? false : true};
+    }
 }
 
 export class Context extends ViewContext {
@@ -135,10 +145,10 @@ export class Context extends ViewContext {
         super();
     }
 
-    async init(curStorage: IReadWritableStorage, miners: string[]): Promise<{err: ErrorCode}> {
+    async init(curStorage: IReadWritableStorage, candidates: string[], miners: string[]): Promise<{err: ErrorCode}> {
         let kvCurDPOS = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
-        let candiateValues = miners.map(()=>{return 0});
-        let hmr = await kvCurDPOS.hmset(Context.keyCandidate, miners, candiateValues);
+        let candiateValues = candidates.map(()=>{return 0});
+        let hmr = await kvCurDPOS.hmset(Context.keyCandidate, candidates, candiateValues);
         if (hmr.err) {
             return hmr;
         }
@@ -175,6 +185,41 @@ export class Context extends ViewContext {
 
         if (creators.length === 0) {
             return {err: ErrorCode.RESULT_OK};
+        }
+
+        if (creators.length < minCreator) {
+            //这种情况下不需要更换出块序列,但是有可能有的出块者被禁止了，检查是否能补充进去
+            let minersInfo = await this.getNextMiners(curStorage);
+            assert(minersInfo.err === ErrorCode.RESULT_OK, 'miners must exist');
+            let currMiners = []; 
+            for (let m of minersInfo.creators!) {
+                if (!(await this.isBan(curStorage, m)).ban!) {
+                    currMiners.push(m);
+                }
+            }
+            if (currMiners.length < minCreator) {
+                //这个时候就需要从外面补充了
+                let currLen = currMiners.length;
+                while (creators.length > 0 && currMiners.length < minCreator) {
+                    let m = creators.shift();
+                    let i = 0;
+                    for (i = 0; i < currLen; i++) {
+                        if (m === currMiners[i]) {
+                            break;
+                        }
+                    }
+                    if (i === currLen) {
+                        currMiners.push(m);
+                    }
+                }
+            }
+            if (currMiners.length < minCreator) {
+                //补充起来后，数量都还小于最小出块人数，这种情况是不是不应该存在啊，先报错吧
+                //throw new Error();
+                creators = minersInfo.creators!;
+            } else {
+                creators = currMiners as string[];
+            }
         }
 
         this._shuffle(blockhash, creators);
@@ -244,9 +289,9 @@ export class Context extends ViewContext {
             return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_NOT_ENOUGH};
         }
         if (stoke.isEqualTo(amount)) {
-            kvDPos.hdel(ViewContext.keyStoke, from);
+            await kvDPos.hdel(ViewContext.keyStoke, from);
         } else {
-            kvDPos.hset(ViewContext.keyStoke, from, stoke.minus(amount).toString());
+            await kvDPos.hset(ViewContext.keyStoke, from, stoke.minus(amount).toString());
         }
 
         let balance: BigNumber = new BigNumber(0);
@@ -258,14 +303,14 @@ export class Context extends ViewContext {
         let sysBalanceInfo = await kvBalance.get(Chain.sysAddress);
         assert(sysBalanceInfo.err === ErrorCode.RESULT_OK, 'sys balance must exist');
         let sysBalance: BigNumber = new BigNumber(sysBalanceInfo.value!);
-        assert(sysBalance.gt(amount), `system balance must great amout,sys=${sysBalanceInfo.value!},amount=${amount.toString()}`)
+        assert(sysBalance.isGreaterThanOrEqualTo(amount), `system balance must great amout,sys=${sysBalanceInfo.value!},amount=${amount.toString()}`)
 
         await kvBalance.set(from, balance.plus(amount).toString());
         await kvBalance.set(Chain.sysAddress, sysBalance.minus(amount).toString());
 
         await this._updatevote(curStorage, from, (new BigNumber(0)).minus(amount));
         if (stoke.isEqualTo(amount)) {
-            kvDPos.hdel(ViewContext.keyProducers, from);
+            await kvDPos.hdel(ViewContext.keyProducers, from);
         }
 
         return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
@@ -284,7 +329,7 @@ export class Context extends ViewContext {
             for (let c of cans.candidates!) {
                 if (c === s) {
                     return true;
-                } else if (c < s) {
+                } else if (c > s) {
                     return false;
                 }
             }
@@ -343,51 +388,57 @@ export class Context extends ViewContext {
         }
     }
 
-    async updateProducerTime(curStorage: IReadWritableStorage, producer: string, timestamp: number) {
-        let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
-        await kvDPos.hset(ViewContext.keyNewBlockTime, producer, timestamp);
-    }
-
-    async maintain_producer(curStorage: IReadWritableStorage, timestamp: number): Promise<ErrorCode> {
+    async banProducer(curStorage: IReadWritableStorage, timestamp: number) {
         let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let allTimeInfo = await kvDPos.hgetall(ViewContext.keyNewBlockTime);
         let minersInfo = await this.getNextMiners(curStorage);
         assert( minersInfo.err === ErrorCode.RESULT_OK);
-        let intersection: string[] = [];
         for (let m of minersInfo.creators!) {
-            let i = 0;
-            for (i = 0; i < allTimeInfo.value.length; i++) {
+            for (let i = 0; i < allTimeInfo.value.length; i++) {
                 if (m === allTimeInfo.value[i].key) {
-                    intersection.push(m);
                     if (timestamp - (allTimeInfo.value[i].value as number) >= timeOffsetToLastBlock) {
                         await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + timeBan);
                     }
                     break;
                 }
             }
+        }
+    }
 
-            if (i === allTimeInfo.value.length) {
+    async updateProducerTime(curStorage: IReadWritableStorage, producer: string, timestamp: number) {
+        let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;       
+        await kvDPos.hset(ViewContext.keyNewBlockTime, producer, timestamp);
+    }
+
+    async maintain_producer(curStorage: IReadWritableStorage, timestamp: number): Promise<ErrorCode> {
+        let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let minersInfo = await this.getNextMiners(curStorage);
+        assert( minersInfo.err === ErrorCode.RESULT_OK);
+
+        for (let m of minersInfo.creators!) {
+            if (!(await kvDPos.hexists(ViewContext.keyNewBlockTime, m))) {
                 //可能是新进入序列，默认把当前block的时间当作它的初始出块时间
                 await kvDPos.hset(ViewContext.keyNewBlockTime, m, timestamp);
             }
         }
 
         //已经被剔除出块序列了，清理它的计时器
-        if (allTimeInfo.value.length !== intersection.length) {
-            for (let p of allTimeInfo.value) {
-                let i = 0;
-                for (i = 0; i < intersection.length; i++) {
-                    if (p.key === intersection[i]) {
-                        break;
-                    }
+        let allTimeInfo = await kvDPos.hgetall(ViewContext.keyNewBlockTime);
+        for (let p of allTimeInfo.value) {
+            let i = 0;
+            for (i = 0; i < minersInfo.creators!.length; i++) {
+                if (p.key === minersInfo.creators![i]) {
+                    break;
                 }
-    
-                if (i === intersection.length) {
+            }
+
+            if (i === minersInfo.creators!.length) {
+                if (await kvDPos.hexists(ViewContext.keyNewBlockTime, p.key)) {
                     await kvDPos.hdel(ViewContext.keyNewBlockTime, p.key);
                 }
             }
         }
-
+        
         return ErrorCode.RESULT_OK;
     }
 
@@ -399,7 +450,12 @@ export class Context extends ViewContext {
             for (let p of producers) {
                 let voteInfo = await kvDPos.hget(ViewContext.keyVote, p);
                 if (voteInfo.err === ErrorCode.RESULT_OK) {
-                    await kvDPos.hset(ViewContext.keyVote, p, (new BigNumber(voteInfo.value!)).plus(amount).toString());
+                    let vote: BigNumber = (new BigNumber(voteInfo.value!)).plus(amount);
+                    if (vote.eq(0)) {
+                        await kvDPos.hdel(ViewContext.keyVote, p);
+                    } else {
+                        await kvDPos.hset(ViewContext.keyVote, p, vote.toString());
+                    }
                 } else {
                     assert(amount.gt(0), '_updatevote amount must positive');
                     await kvDPos.hset(ViewContext.keyVote, p, amount.toString());

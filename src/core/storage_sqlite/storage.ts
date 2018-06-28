@@ -74,7 +74,7 @@ export class StorageTable implements BaseStorage.IReadWritableKeyValue {
     }
 
     public async hdel(key: string, field: string): Promise<{err: ErrorCode}> {
-        await this.db.exec(`DELETE FROM ${this.name} WHERE name=${key} and field=${field}`);
+        await this.db.exec(`DELETE FROM ${this.name} WHERE name='${key}' and field='${field}'`);
         return {err: ErrorCode.RESULT_OK};
     }
 
@@ -145,17 +145,17 @@ export class StorageTable implements BaseStorage.IReadWritableKeyValue {
 
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
         assert(key);
-        return this.hget(key, index.toString());
+        return await this.hget(key, index.toString());
     }
 
     public async lset(key: string, index: number, value: any): Promise<{ err: ErrorCode; }> {
         assert(key);
-        return this.hset(key, index.toString(), value);
+        return await this.hset(key, index.toString(), value);
     }
 
     public async llen(key: string): Promise<{ err: ErrorCode; value: number; }> {
         assert(key);
-        return this.hlen(key);
+        return await this.hlen(key);
     }
 
     public async lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode; value: any[]; }> {

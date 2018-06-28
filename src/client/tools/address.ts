@@ -7,7 +7,7 @@ import * as address from '../../core/address';
 function main() {
     let command = parseCommand();
     if (!command || !command.command) {
-        console.log(`Usage: node address.js <create | --secret {secret} | --pubkey {pubkey}>`);
+        console.log(`Usage: node address.js <create | convert> {--secret {secret} | --pubkey {pubkey}}`);
         process.exit();
     }
 

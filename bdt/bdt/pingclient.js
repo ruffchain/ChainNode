@@ -397,8 +397,12 @@ class PingClient extends EventEmitter {
         const opt = this.m_stack._getOptions();
         if (this.m_initSender.udp) {
             this.m_initSender.udp.postPackage(encoder, null, true, opt.pingDelay);
-        } else {
+        } else if (this.m_initSender.tcp) {
             this.m_initSender.tcp.postPackage(encoder, null, true, opt.pingDelay);
+        } else {
+            this.m_state = PingClient.STATE.offline;
+            this.emit(PingClient.EVENT.offline);
+            return;
         }
 
         let tryTimes = 0;

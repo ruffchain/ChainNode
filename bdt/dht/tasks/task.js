@@ -24,7 +24,7 @@ class Task {
         this.m_owner = owner;
         this.m_id = owner.genTaskID();
         this.m_startTime = Date.now();
-        this.m_deadline = this.m_startTime + timeout;
+        this.m_timeout = timeout || TaskConfig.TimeoutMS;
         this.m_lastActiveTime = Date.now();
         this.m_maxIdleTime = maxIdleTime;
 
@@ -43,6 +43,10 @@ class Task {
         return this.m_isComplete;
     }
 
+    get deadline() {
+        return this.m_startTime + this.m_timeout;
+    }
+
     start() {
         this._startImpl();
     }
@@ -54,8 +58,14 @@ class Task {
 
     wakeUp() {
         let now = Date.now();
+        // 时钟倒退
+        if (this.m_lastActiveTime > now) {
+            let lastActiveTime = this.m_lastActiveTime;
+            this.m_lastActiveTime = now - this.m_maxIdleTime;
+            this.m_startTime = now - (lastActiveTime - this.m_lastActiveTime);
+        }
 
-        if (now > this.m_deadline) {
+        if (now - this.m_startTime > this.m_timeout) {
             this._onComplete(DHTResult.TIMEOUT);
             return;
         }
@@ -93,6 +103,10 @@ class Task {
     
     addCallback(callback) {
         this.m_callbackList.push(callback);
+    }
+
+    static genGlobalTaskID(peerid, taskid) {
+        return `@pid:${peerid}@tid:${taskid}`;
     }
 
     _retry() {

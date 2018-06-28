@@ -51,6 +51,11 @@ const Config = {
     GetValue: {
     },
 
+    Broadcast: {
+        TimeoutMS: 600000,
+        LimitPeerCountOnce: 32, // 一次同时通知peer数
+    },
+
     Package: {
         MagicNum: 0x8084,
         MaxTTL: 1,
@@ -67,7 +72,10 @@ const Config = {
         MaxIdleTimeMS: 500,
         MinTaskID: 1,
         MaxTaskID: MAX_UINT32,
-        HandshakeTimeoutMS: 5000,
+    },
+
+    Handshake: {
+        TimeoutMS: 5000,
     },
 
     RouteTable: {

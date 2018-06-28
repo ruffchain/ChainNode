@@ -20,14 +20,16 @@ export interface JSONable {
 export function stringify(o: any): any {
     if (isUndefined(o) || isNull(o)) {
         return o;
-    } else if (isNumber(o) || isString(o) || isBuffer(o) || isBoolean(o)) {
+    } else if (isNumber(o) || isString(o) || isBoolean(o)) {
         return o;
     } else if (o instanceof BigNumber) {
         return o.toString();
+    } else if (isBuffer(o)) {
+        return o.toString('hex');
     } else if (isArray(o) || o instanceof Array) {
         let s = [];
         for (let e of o) {
-            s.push(stringify(o));
+            s.push(stringify(e));
         }
         return s;
     } else if (isObject(o)) {

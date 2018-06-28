@@ -21,10 +21,11 @@ export function parseCommand(): Command|undefined {
     while (start < process.argv.length) {
         let arg = process.argv[start];
         if (arg.startsWith('--')) {
-            if (curKey) {
-                command.options.set(curKey, true);
-            }
+            // if (curKey) {
+            //     command.options.set(curKey, true);
+            // }
             curKey = arg.substr(2);
+            command.options.set(curKey, true);
         } else {
             if (curKey) {
                 command.options.set(curKey, arg);

@@ -36,9 +36,13 @@ class PackageSender extends EventEmitter {
         this.m_taskExecutor = newValue;
     }
 
-    sendPackage(peer, cmdPackage, ignoreRouteCache, timeout) {
+    sendPackage(toPeer, cmdPackage, ignoreRouteCache, timeout) {
         let localPeer = this.m_bucket.localPeer;
         let peerStruct = localPeer.toStructForPackage();
+        // toPeer可能不是在本地路由表中记录的PEER对象；
+        // 在发送时需要更新路由表中PEER对象的一些统计信息，
+        // 所以这里要从路由表中重新查找一下
+        let peer = this.m_bucket.findPeer(toPeer.peerid) || toPeer;
         if (!peer.hash) {
             peer.hash = HashDistance.hash(peer.peerid);
         }
@@ -68,15 +72,20 @@ class PackageSender extends EventEmitter {
         }
         
         cmdPackage.__isTooLarge = false;
-        let eplist = peer.eplist;
-        if (!eplist || eplist.length === 0) {
-            if (peer.address) {
-                eplist = [EndPoint.toString(peer.address)];
+
+        // 合并peer和toPeer两个对象的eplist+address
+        let eplist = peer.eplist || [];
+        let addr = peer.address;
+        if (addr) {
+            eplist = Peer.Peer.unionEplist(eplist, [EndPoint.toString(addr)]);
+        }
+        if (toPeer !== peer) {
+            if (toPeer.eplist) {
+                eplist = Peer.Peer.unionEplist(eplist, toPeer.eplist);
             }
-        } else {
-            let addr = peer.address;
-            if (addr && addr.protocol === EndPoint.PROTOCOL.tcp) {
-                eplist.push(EndPoint.toString(addr));
+            addr = toPeer.address;
+            if (addr) {
+                eplist = Peer.Peer.unionEplist(eplist, [EndPoint.toString(addr)]);
             }
         }
 

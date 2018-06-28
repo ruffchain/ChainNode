@@ -2,8 +2,10 @@
 
 const Base = require('../../base/base.js');
 const {Result: DHTResult, Config} = require('../util.js');
-const {BroadcastNodeTask} = require('./task_touch_node_recursion.js');
+const Task = require('./task.js');
 const DHTPackage = require('../packages/package.js');
+const {ResendControlor} = require('../package_sender.js');
+const {Peer} = require('../peer.js');
 const DHTCommandType = DHTPackage.CommandType;
 
 const LOG_TRACE = Base.BX_TRACE;
@@ -15,15 +17,20 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 const SaveValueConfig = Config.SaveValue;
-const TaskConfig = Config.Task;
+const BroadcastConfig = Config.Broadcast;
 
-class BroadcastEventTask extends BroadcastNodeTask {
-    constructor(owner, eventName, params, arrivePeerCount, sourcePeerid, {ttl = 0, isForward = false, timeout = TaskConfig.TimeoutMS, excludePeerids = null} = {}) {
-        super(owner, arrivePeerCount, {ttl, isForward, timeout, excludePeerids});
+class BroadcastEventTask extends Task {
+    constructor(owner, eventName, params, sourcePeer, taskid, {timeout = BroadcastConfig.TimeoutMS, passPeerid = null} = {}) {
+        super(owner, {timeout});
 
+        this.m_id = (taskid || Task.genGlobalTaskID(this.bucket.localPeer.peerid, this.m_id));
         this.m_eventName = eventName;
         this.m_params = params;
-        this.m_sourcePeerid = sourcePeerid;
+        this.m_sourcePeer = sourcePeer;
+        this.m_package = null;
+        this.m_passPeerid = passPeerid;
+
+        this.m_pendingPeerMap = new Map();
     }
 
     _processImpl(response, remotePeer) {
@@ -39,10 +46,40 @@ class BroadcastEventTask extends BroadcastNodeTask {
             super._processImpl(response, remotePeer);
         }
     }
+    
+    _startImpl() {
+        this.m_package = this._createPackage();
 
+        this.bucket.forEachPeer(peer => {
+            if (peer.peerid === this.m_sourcePeer.peerid ||
+                (this.m_passPeerid && peer.peerid === this.m_passPeerid)) {
+                return;
+            }
+            let resender = new ResendControlor(peer,
+                this.m_package,
+                this.packageSender,
+                Peer.retryInterval(this.bucket.localPeer, peer),
+                Config.Package.RetryTimes,
+                false);
+
+            this.m_pendingPeerMap.set(peer.peerid, resender);
+        });
+
+        this._sendPackage();
+    }
+
+    _processImpl(response, remotePeer) {
+        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed BroadcastEventTask(${this.m_id})`);
+        this.m_pendingPeerMap.delete(remotePeer.peerid);
+        // 即使全部广播到位也不完成，因为可能收到其他PEER转发过来的广播通知，任务留下来防止重复广播
+        this._sendPackage();
+    }
+
+    _retryImpl() {
+        this._sendPackage();
+    }
+        
     _onCompleteImpl(result) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) broadcast event(${this.m_eventName}:${this.m_params}), arrived ${this.m_arrivePeeridSet.size} peers`);
-        this._callback(result, this.m_arrivePeeridSet);
     }
 
     _createPackage() {
@@ -51,7 +88,8 @@ class BroadcastEventTask extends BroadcastNodeTask {
         cmdPackage.body = {
             taskid: this.m_id,
             event: this.m_eventName,
-            source: this.m_sourcePeerid,
+            source: {peerid: this.m_sourcePeer.peerid, eplist: this.m_sourcePeer.eplist},
+            timeout: (this.deadline - Date.now()),
         };
 
         if (this.m_params !== undefined && this.m_params !== null) {
@@ -61,6 +99,27 @@ class BroadcastEventTask extends BroadcastNodeTask {
     }
 
     _stopImpl() {
+    }
+
+    _sendPackage() {
+        this.m_package.body.timeout = this.deadline - Date.now();
+
+        let sendCount = 0;
+        let timeoutPeerids = [];
+        for (let [peerid, resender] of this.m_pendingPeerMap) {
+            let tryTimes = resender.tryTimes;
+            resender.send();
+            if (resender.tryTimes !== tryTimes) {
+                sendCount++;
+            }
+            if (resender.isTimeout()) {
+                timeoutPeerids.push(peerid);
+            }
+            if (sendCount >= Config.Broadcast.LimitPeerCountOnce) {
+                break;
+            }
+        }
+        timeoutPeerids.forEach(peerid => this.m_pendingPeerMap.delete(peerid));
     }
 }
 

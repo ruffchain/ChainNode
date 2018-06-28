@@ -476,18 +476,20 @@ class LocalPeer extends Peer {
         // 就需要做NAT转换
         let additionalEPList = [];
         if (!isReuseListener) {
-            this.m_eplist.forEach((info, ep) => {
-                // 不是初始声明的endpoint, 而且也不是复用连接的endpoint
-                if (!info.isInitEP && !info.isReuseListener) {
-                    return
-                }
-
-                const outerAddress = BaseUtil.EndPoint.toAddress(eplist[0]);
-                const [isOk, newEp] = BaseUtil.EndPoint.conjectureEndPoint(ep, outerAddress);
-                if ( isOk ) {
-                    additionalEPList.push(newEp);
-                }
-            });
+            const outerAddress = BaseUtil.EndPoint.toAddress(eplist[0]);
+            if (outerAddress) {
+                this.m_eplist.forEach((info, ep) => {
+                    // 不是初始声明的endpoint, 而且也不是复用连接的endpoint
+                    if (!info.isInitEP && !info.isReuseListener) {
+                        return
+                    }
+    
+                    const [isOk, newEp] = BaseUtil.EndPoint.conjectureEndPoint(ep, outerAddress);
+                    if ( isOk ) {
+                        additionalEPList.push(newEp);
+                    }
+                });
+            }
         }
 
         _unionEPList(eplist, isReuseListener, false);

@@ -18,10 +18,7 @@ if (require.main === module) {
                 return;
             }
             let address = addressFromPublicKey((value as BlockHeader).pubkey);
-            //console.log(`${index}:${address}`);
-            if (value.number === 100) {
-                console.log(`height 100 storageHash: ${value.storageHash}, creator: ${address}`);
-            }
+            console.log(`height ${value.number} hash: ${value.hash}, creator: ${address}`);
             if (coinbases.has(address)) {
                 coinbases.set(address, coinbases.get(address)+1);
             } else {

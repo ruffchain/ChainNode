@@ -17,10 +17,7 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 const TaskConfig = Config.Task;
-
-function handshakeTaskID(srcPeerid, taskid) {
-    return `@src:${srcPeerid}@taskid:${taskid}`;
-}
+const HandshakeConfig = Config.Handshake;
 
 function isEmptyEPList(eplist) {
     return !eplist || eplist.length == 0;
@@ -30,9 +27,9 @@ function isEmptyEPList(eplist) {
 // passive = true表示优先通过中介让对方反向接入，一段时间后才主动向对方发起握手，可用于在实时性要求不高时检测本地网络是否能被新peer主动连接
 class HandshakeSourceTask extends Task {
     constructor(owner, targetPeer, agencyPeer, isHoleImmediately, passive) {
-        super(owner, {timeout: TaskConfig.HandshakeTimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
+        super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
-        this.m_id = handshakeTaskID(this.bucket.localPeer.peerid, this.m_id);
+        this.m_id = Task.genGlobalTaskID(this.bucket.localPeer.peerid, this.m_id);
         this.m_handshakePackage = null;
         this.m_handshakeResender = null;
         this.m_targetPeer = targetPeer;
@@ -188,7 +185,7 @@ class HandshakeSourceTask extends Task {
 
 class HandshakeAgencyTask extends Task {
     constructor(owner, srcPeer, targetPeer, taskid) {
-        super(owner, {timeout: TaskConfig.HandshakeTimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
+        super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
         this.m_id = taskid;
         this.m_holePackage = null;
@@ -248,7 +245,7 @@ class HandshakeAgencyTask extends Task {
 
 class HandshakeTargetTask extends Task {
     constructor(owner, srcPeer, taskid) {
-        super(owner, {timeout: TaskConfig.HandshakeTimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
+        super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
         this.m_id = taskid;
         this.m_handshakePackage = null;
