@@ -18,6 +18,14 @@ export class HostClient {
         return JSON.parse(cr.resp!);
     }
 
+    async getTransactionReceipt(params: {tx: string}): Promise<{err: ErrorCode, block?: any, tx?: any, receipt?: any}> {
+        let cr = await this.m_client.callAsync('getTransactionReceipt', params);
+        if (cr.ret !== 200) {
+            return {err: ErrorCode.RESULT_FAILED};
+        }
+        return JSON.parse(cr.resp!);
+    }
+
     async getNonce(params: {address: string}): Promise<{err: ErrorCode, nonce?: number}> {
         let cr = await this.m_client.callAsync('getNonce', params);
         if (cr.ret !== 200) {

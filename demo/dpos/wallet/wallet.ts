@@ -31,20 +31,47 @@ function main() {
         port: port
     });
 
+    let watchingTx: string[] = [];
+    chainClient.on('tipBlock', async (tipBlock)=>{
+        console.log(`client onTipBlock, height ${tipBlock.number}`);
+        for (let tx of watchingTx.slice()) {
+            let {err, block, receipt} = await chainClient.getTransactionReceipt({tx});
+            if (!err) {
+                if (receipt.returnCode !== 0) {
+                    console.error(`tx:${tx} failed for ${receipt.returnCode}`);
+                    watchingTx.splice(watchingTx.indexOf(tx), 1);
+                } else {
+                    let confirm = tipBlock.number - block.number + 1;
+                    if (confirm < 6) {
+                        console.log(`tx:${tx} ${confirm} confirm`);
+                    } else {
+                        console.log(`tx:${tx} confirmed`);
+                        watchingTx.splice(watchingTx.indexOf(tx), 1);
+                    }
+                }
+            }
+        }
+    });
+
+    chainClient._beginWatchTipBlock();
+
     let runEnv = {
         getAddress: () => {
             console.log(address);
         }, 
-        getBalance: async () => {
+        getBalance: async (_address: string) => {
+            if (!_address) {
+                _address = address;
+            }
             let ret = await chainClient.view({
                 method: 'getBalance',
-                params: {address}
+                params: {address: _address}
             });
             if (ret.err) {
                 console.error(`get balance failed for ${ret.err};`);
                 return ;
             }
-            console.log(`${ret.value!}`);
+            console.log(`${_address}\`s Balance: ${ret.value!}`);
         },
         transferTo: async (to: string, amount: string, fee: string)=> {
             let tx = new Transaction();
@@ -65,6 +92,7 @@ function main() {
                 return ;
             }
             console.log(`send transferTo tx: ${tx.hash}`);
+            watchingTx.push(tx.hash);
         },
 
         vote: async (candidates: string[], fee: string) => {
@@ -85,6 +113,7 @@ function main() {
                 return ;
             }
             console.log(`send vote tx: ${tx.hash}`);
+            watchingTx.push(tx.hash);
         },
 
         mortgage: async (amount: string, fee: string) => {
@@ -105,6 +134,7 @@ function main() {
                 return ;
             }
             console.log(`send mortgage tx: ${tx.hash}`);
+            watchingTx.push(tx.hash);
         },
 
         unmortgage: async (amount: string, fee: string) => {
@@ -125,6 +155,7 @@ function main() {
                 return ;
             }
             console.log(`send unmortgage tx: ${tx.hash}`);
+            watchingTx.push(tx.hash);
         },
 
         getVote: async () => {

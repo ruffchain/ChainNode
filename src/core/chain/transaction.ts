@@ -116,6 +116,15 @@ export class Transaction extends SerializableWithHash {
         this.m_input = JSON.parse(reader.readVarString());
         return ErrorCode.RESULT_OK;
     }
+
+    stringify(): any {
+        let obj = super.stringify();
+        obj.method = this.method;
+        obj.input = this.input;
+        obj.nonce = this.nonce;
+        obj.caller = this.address;
+        return obj;
+    }
 }
 
 export class EventLog implements Serializable {
@@ -134,11 +143,12 @@ export class EventLog implements Serializable {
     }
 
     set param(p: any) {
-        this.m_params = p;
+        this.m_params = stringify(p);
     }
 
     get param(): any {
-        return this.m_params;
+        const param = this.m_params;
+        return param;
     }
 
     public encode(writer: BufferWriter): BufferWriter {
@@ -156,16 +166,21 @@ export class EventLog implements Serializable {
         this.m_params = JSON.parse(reader.readVarString());
         return ErrorCode.RESULT_OK;
     }
+
+    stringify(): any {
+        let obj = Object.create(null);
+        obj.name = this.name;
+        obj.param = this.param;
+        return obj;
+    }
 }
 
 export class Receipt implements Serializable {
     private m_transactionHash: string;
-    private m_sysEventName: string;
     private m_returnCode: number;
     private m_eventLogs: EventLog[];
     constructor() {
         this.m_transactionHash = '';
-        this.m_sysEventName = '';
         this.m_returnCode = 0;
         this.m_eventLogs = new Array<EventLog>();
     }
@@ -175,14 +190,6 @@ export class Receipt implements Serializable {
     }
     get transactionHash(): string {
         return this.m_transactionHash;
-    }
-
-    set sysEventName(n: string) {
-        this.m_sysEventName = n;
-    }
-
-    get sysEventName(): string {
-        return this.m_sysEventName;
     }
 
     set returnCode(n: number) {
@@ -204,7 +211,6 @@ export class Receipt implements Serializable {
 
     public encode(writer: BufferWriter): BufferWriter {
         writer.writeVarString(this.m_transactionHash);
-        writer.writeVarString(this.m_sysEventName);
         writer.writeI32(this.m_returnCode);
         writer.writeU16(this.m_eventLogs.length);
         for (let log of this.m_eventLogs) {
@@ -216,7 +222,6 @@ export class Receipt implements Serializable {
 
     public decode(reader: BufferReader): ErrorCode {
         this.m_transactionHash = reader.readVarString();
-        this.m_sysEventName = reader.readVarString();
         this.m_returnCode = reader.readI32();
         let nCount: number = reader.readU16();
         for(let i=0; i < nCount; i++) {
@@ -226,5 +231,16 @@ export class Receipt implements Serializable {
         }
 
         return ErrorCode.RESULT_OK;
+    }
+
+    stringify(): any {
+        let obj = Object.create(null);
+        obj.transactionHash = this.m_transactionHash;
+        obj.returnCode = this.m_returnCode;
+        obj.logs = [];
+        for (let l of this.eventLogs) {
+            obj.logs.push(l.stringify());
+        }
+        return obj;
     }
 }

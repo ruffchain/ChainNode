@@ -1,4 +1,3 @@
 node ./dist/demo/dpos/wallet/wallet.js ^
---secret 21a744ac011e0457d67327f0361237e73181d4d21e25b1ca99a0a05e84533359 ^
---host localhost --port 18089 ^
---run "chain.getBalance()"
+--secret 64d8284297f40dc7475b4e53eb72bc052b41bef62fecbd3d12c5e99b623cfc11 ^
+--host localhost --port 18089 --run %*

@@ -287,7 +287,6 @@ export class Chain extends EventEmitter {
     }
 
     protected async _updateTip(tip: BlockHeader): Promise<ErrorCode> {
-        // TODO: 必须同步完成， 或者加上同步，或者去掉tipStorage，否则可能出现tipBlock和tipStorage 不一致的问题
         this.m_tip = tip;
         let err = await this.m_pending!.updateTipBlock(tip);
         if (err) {
@@ -935,7 +934,7 @@ export class Chain extends EventEmitter {
         return await this.m_pending!.getStorageNonce(s);
     }
 
-    public async getTransaction(s: string): Promise<{err: ErrorCode, tx?: {blocknumber: Number, blockhash: string, nonce: number}}> {
+    public async getTransactionReceipt(s: string): Promise<{err: ErrorCode, block?: BlockHeader, tx?: Transaction, receipt?: Receipt}>  {
         let ret = await this.m_headerStorage!.txview.get(s);
         if (ret.err !== ErrorCode.RESULT_OK) {
             return { err: ret.err };
@@ -945,29 +944,10 @@ export class Chain extends EventEmitter {
         if (!block) {
             return { err: ErrorCode.RESULT_NOT_FOUND };
         }
-
         let tx: Transaction | null = block.content.getTransaction(s);
-        if (tx) {
-            return { err: ErrorCode.RESULT_OK, tx: { blocknumber: block.header.number, blockhash: block.header.hash, nonce: tx.nonce } };
-        }
-        
-        return {err: ErrorCode.RESULT_NOT_FOUND};
-    }
-
-    public async getTransactionReceipt(s: string): Promise<{err: ErrorCode, receipt?: Receipt}>  {
-        let ret = await this.m_headerStorage!.txview.get(s);
-        if (ret.err !== ErrorCode.RESULT_OK) {
-            return { err: ret.err };
-        }
-
-        let block = this.getBlock(ret.blockhash!);
-        if (!block) {
-            return { err: ErrorCode.RESULT_NOT_FOUND };
-        }
-
         let receipt: Receipt | undefined = block.content.getReceipt(s);
-        if (receipt) {
-            return { err: ErrorCode.RESULT_OK, receipt: receipt };
+        if (tx && receipt) {
+            return { err: ErrorCode.RESULT_OK, block: block.header, tx, receipt };
         }
 
         return { err: ErrorCode.RESULT_NOT_FOUND };

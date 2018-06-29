@@ -42,4 +42,11 @@ export class Transaction extends BaseTransaction.Transaction {
 
         return ErrorCode.RESULT_OK;
     }
+
+    stringify(): any {
+        let obj = super.stringify();
+        obj.value = this.value.toString();
+        obj.fee = this.value.toString();
+        return obj;
+    }
 }

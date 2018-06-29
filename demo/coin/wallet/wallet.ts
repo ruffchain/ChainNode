@@ -17,7 +17,7 @@ function main() {
         process.exit();
         return ;
     }
-    let userAddress = addressFromSecretKey(secret)!;
+    let address = addressFromSecretKey(secret)!;
     let host = command.options.get('host');
     let port = command.options.get('port');
     if (!host || !port) {
@@ -31,14 +31,39 @@ function main() {
         port: port
     });
 
+
+    let watchingTx: string[] = [];
+    chainClient.on('tipBlock', async (tipBlock)=>{
+        for (let tx of watchingTx.slice()) {
+            let {err, block, receipt} = await chainClient.getTransactionReceipt({tx});
+            if (!err) {
+                if (receipt.returnCode !== 0) {
+                    console.error(`tx:${tx} failed for ${receipt.returnCode}`);
+                    watchingTx.splice(watchingTx.indexOf(tx), 1);
+                } else {
+                    let confirm = block.number - tipBlock.number + 1;
+                    if (confirm < 6) {
+                        console.log(`tx:${tx} ${confirm} confirm`);
+                    } else {
+                        console.log(`tx:${tx} confirmed`);
+                        watchingTx.splice(watchingTx.indexOf(tx), 1);
+                    }
+                }
+            }
+        }
+    });
+
     let runEnv = {
         getAddress: () => {
-            console.log(userAddress);
-        },
-        getBalance: async (address?: string) => {
+            console.log(address);
+        }, 
+        getBalance: async (_address: string) => {
+            if (!_address) {
+                _address = address;
+            }
             let ret = await chainClient.view({
                 method: 'getBalance',
-                params: {address: address || userAddress}
+                params: {address: _address}
             });
             if (ret.err) {
                 console.error(`get balance failed for ${ret.err};`);
@@ -52,7 +77,7 @@ function main() {
             tx.value = new BigNumber(amount);
             tx.fee = new BigNumber(fee);
             tx.input = {to};
-            let {err, nonce} = await chainClient.getNonce({address:userAddress});
+            let {err, nonce} = await chainClient.getNonce({address});
             if (err) {
                 console.error(`transferTo failed for ${err}`);
                 return ;
@@ -64,6 +89,7 @@ function main() {
                 console.error(`transferTo failed for ${err}`);
                 return ;
             }
+            watchingTx.push(tx.hash);
             console.log(`send transferTo tx: ${tx.hash}`);
         },
     };
@@ -76,7 +102,7 @@ function main() {
             console.error(e.message);
         }
     }
-
+    
     let cmd = command.options.get('run');
     if (cmd) {
         runCmd(cmd);

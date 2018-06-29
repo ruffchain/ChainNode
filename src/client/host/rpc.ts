@@ -56,12 +56,19 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getTransaction', ()=>{
-            
-        });
-
-        this.m_server!.on('getTransactionReceipt', ()=>{
-
+        this.m_server!.on('getTransactionReceipt', async (params: {tx: string}, resp)=>{
+            let cr = await this.m_chain.getTransactionReceipt(params.tx);
+            if (cr.err) {
+                await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
+            } else {
+                await promisify(resp.write.bind(resp)(JSON.stringify({
+                    err: ErrorCode.RESULT_OK,
+                    block: cr.block!.stringify(),
+                    tx: cr.tx!.stringify(),
+                    receipt: cr.receipt!.stringify()
+                })));
+            }
+            await promisify(resp.end.bind(resp)());
         });
 
         this.m_server!.on('getNonce', async (params: {address: string}, resp)=>{
@@ -97,7 +104,6 @@ export class ChainServer {
                 
                 } else {
                     await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
-                    return ;
                 }
             }
             await promisify(resp.end.bind(resp))();
