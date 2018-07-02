@@ -15,6 +15,10 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
         console.error('invalid bdt port');
         return ;
     }
+    let peerid = commandOptions.get('peerid');
+    if (!peerid) {
+        peerid = `${host}:${port}`
+    }
     let snPeers = commandOptions.get('sn');
     if (!snPeers) {
         console.error('no sn');
@@ -31,5 +35,5 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
             `4@${snconfig[1]}@${snconfig[3]}@u`
         ]
     }
-    return new Node({host: host, port: port, snPeer: snPeer});
+    return new Node({host: host, port: port, peerid: peerid, snPeer: snPeer});
 });

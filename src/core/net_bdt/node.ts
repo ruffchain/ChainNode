@@ -16,11 +16,21 @@ export class Node extends INode {
     private m_bdtStack: any;
     private m_dht: any;
     private m_snPeerid: any;
+    private m_host:any;
+    private m_listen_port:any;
+    // vport 只是提供给bdt connect的一个抽象，可以不用在调用时传入
+    // 先定死， bdt connect 和 listen都先用这个
+    private m_vport:number = 3000;
 
+    // 初始化传入的 port 当作listen时的tcp port使用
+    // udp 在这个基础上 + 10
+    constructor(options: {host: string, port: number, peerid: string, snPeer: any}) {
+        // const peerid = `${options.host}:${options.port}`;
+        super({peerid: options.peerid});
+        
+        this.m_listen_port = options.port
+        this.m_host = options.host;
 
-    constructor(options: {host: string, port: number, snPeer: any}) {
-        const peerid = `${options.host}:${options.port}`
-        super({peerid: peerid});
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
     }
@@ -31,31 +41,31 @@ export class Node extends INode {
     }
 
     protected async createBDTStack() {
-        let randomPort = DHTUtil.RandomGenerator.integer(65525, 2048);
-        let ips = NetHelper.getLocalIPV4()
+        // let randomPort = DHTUtil.RandomGenerator.integer(65525, 2048);
 
         // bdt 里0.0.0.0 只能找到公网ip, 这样会导致单机多进程或单机单进程的节点找不到对方
         // 为了方便测试， 补充加入本机的内网192 IP
-        let addrList = [this.m_options.host, ...ips]
+        let ips = NetHelper.getLocalIPV4().filter((ip:string) => ip.match(/^192.168.\d+.\d+/));
+        let addrList = [this.m_host, ...ips];
 
         let {result, p2p, bdtStack} = await P2P.create4BDTStack({
             peerid: this.m_peerid,
-            udp: {
-                addrList, 
-                initPort: randomPort,
-                maxPortOffset: 0,
-            },
             tcp: {
                 addrList, 
-                initPort: randomPort + 10,
+                initPort: this.m_listen_port,
+                maxPortOffset: 0,
+            },
+            udp: {
+                addrList, 
+                initPort: this.m_listen_port + 10,
                 maxPortOffset: 0,
             },
             dhtEntry: [this.m_options.snPeer]
         });
-        this.m_snPeerid = this.m_options.snPeer.peerid
+        this.m_snPeerid = this.m_options.snPeer.peerid;
 
-        this.m_dht = p2p.m_dht
-        this.m_bdtStack = bdtStack
+        this.m_dht = p2p.m_dht;
+        this.m_bdtStack = bdtStack;
     }
 
     // 通过发现自身， 来找到一些peers, 然后尝试每个握手一下
@@ -108,7 +118,7 @@ export class Node extends INode {
 
     protected _connectTo(peerid: string): Promise<{err: ErrorCode, conn?: NodeConnection}> {
         // console.log('_connectTo', peerid)
-        let [ ,vport ] = peerid.split(':');
+        let vport = this.m_vport
         let connection = this.m_bdtStack.newConnection();
         connection.bind(null)
 
@@ -139,7 +149,7 @@ export class Node extends INode {
     public listen(): Promise<ErrorCode> {
         return new Promise((resolve, reject)=>{
             const acceptor = this.m_bdtStack.newAcceptor({
-                vport: this.m_options.port,
+                vport: this.m_vport,
             });
             acceptor.listen();
             acceptor.on(P2P.Acceptor.EVENT.close, () => {
