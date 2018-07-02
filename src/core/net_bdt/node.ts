@@ -17,7 +17,7 @@ export class Node extends INode {
     private m_dht: any;
     private m_snPeerid: any;
     private m_host:any;
-    private m_listen_port:any;
+    private m_listen_port:number;
     // vport 只是提供给bdt connect的一个抽象，可以不用在调用时传入
     // 先定死， bdt connect 和 listen都先用这个
     private m_vport:number = 3000;
@@ -51,19 +51,24 @@ export class Node extends INode {
         let {result, p2p, bdtStack} = await P2P.create4BDTStack({
             peerid: this.m_peerid,
             tcp: {
-                addrList, 
+                addrList,
                 initPort: this.m_listen_port,
                 maxPortOffset: 0,
             },
             udp: {
-                addrList, 
+                addrList,
                 initPort: this.m_listen_port + 10,
                 maxPortOffset: 0,
             },
             dhtEntry: [this.m_options.snPeer]
         });
-        this.m_snPeerid = this.m_options.snPeer.peerid;
 
+        // 检查是否创建成功
+        if ( result != 0 ) {
+            throw Error('init p2p peer error. please check the params')
+        }
+
+        this.m_snPeerid = this.m_options.snPeer.peerid;
         this.m_dht = p2p.m_dht;
         this.m_bdtStack = bdtStack;
     }

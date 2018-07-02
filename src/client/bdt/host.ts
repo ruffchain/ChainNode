@@ -10,8 +10,8 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
         console.error('invalid bdt host');
         return ;
     }
-    let port = commandOptions.get('port');
-    if (!port) {
+    let port = parseInt(commandOptions.get('port'));
+    if (!port || port === NaN) {
         console.error('invalid bdt port');
         return ;
     }
