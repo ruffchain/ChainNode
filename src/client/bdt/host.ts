@@ -10,11 +10,27 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
         console.error('invalid bdt host');
         return ;
     }
-    let port = parseInt(commandOptions.get('port'));
-    if (!port || port === NaN) {
+    let port = commandOptions.get('port');
+    if (!port) {
+        console.error('no bdt port');
+        return ;
+    }
+
+    port = (<string>port).split('|');
+    let udpport = 0;
+    let tcpport = parseInt(port[0]);
+
+    if (port.length === 1) {
+        udpport = tcpport + 10;
+    } else {
+        udpport = parseInt(port[1]);
+    }
+
+    if (tcpport === NaN||udpport === NaN) {
         console.error('invalid bdt port');
         return ;
     }
+
     let peerid = commandOptions.get('peerid');
     if (!peerid) {
         peerid = `${host}:${port}`
@@ -35,5 +51,6 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
             `4@${snconfig[1]}@${snconfig[3]}@u`
         ]
     }
-    return new Node({host: host, port: port, peerid: peerid, snPeer: snPeer});
+    let bdtDebug = commandOptions.has('bdtdebug')
+    return new Node({host: host, tcpport: tcpport, udpport: udpport, peerid: peerid, snPeer: snPeer, debug: bdtDebug});
 });

@@ -5,11 +5,7 @@ import {IConnection} from '../net/connection';
 import {Connection} from './connection';
 
 const P2P = require('../../../../bdt/p2p/p2p');
-const DHTUtil = require('../../../../bdt/dht/util.js');
 const {NetHelper} = require('../../../../bdt/base/util.js');
-
-// 关闭 bdt 输出的logs
-P2P.debug(false)
 
 export class Node extends INode {
     private m_options: any;
@@ -17,22 +13,25 @@ export class Node extends INode {
     private m_dht: any;
     private m_snPeerid: any;
     private m_host:any;
-    private m_listen_port:number;
+    private m_tcpListenPort:number;
+    private m_udpListenPort:number;
     // vport 只是提供给bdt connect的一个抽象，可以不用在调用时传入
     // 先定死， bdt connect 和 listen都先用这个
     private m_vport:number = 3000;
 
-    // 初始化传入的 port 当作listen时的tcp port使用
-    // udp 在这个基础上 + 10
-    constructor(options: {host: string, port: number, peerid: string, snPeer: any}) {
+    // 初始化传入tcp port和udp port，传入0就不监听对应协议
+    constructor(options: {host: string, tcpport: number, udpport: number, peerid: string, snPeer: any, debug: boolean}) {
         // const peerid = `${options.host}:${options.port}`;
         super({peerid: options.peerid});
         
-        this.m_listen_port = options.port
+        this.m_tcpListenPort = options.tcpport
+        this.m_udpListenPort = options.udpport;
         this.m_host = options.host;
 
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
+        //决定是否开启P2P调试log
+        P2P.debug(options.debug)
     }
 
     public async init() {
@@ -47,21 +46,25 @@ export class Node extends INode {
         // 为了方便测试， 补充加入本机的内网192 IP
         let ips = NetHelper.getLocalIPV4().filter((ip:string) => ip.match(/^192.168.\d+.\d+/));
         let addrList = [this.m_host, ...ips];
+        let bdtInitParams: any = {};
+        bdtInitParams['peerid'] = this.m_peerid;
+        bdtInitParams['dhtEntry'] = [this.m_options.snPeer];
+        if (this.m_tcpListenPort !== 0) {
+            bdtInitParams['tcp'] = {
+                addrList,
+                initPort: this.m_tcpListenPort,
+                maxPortOffset: 0,
+            }
+        }
+        if (this.m_udpListenPort !== 0) {
+            bdtInitParams['udp'] = {
+                addrList,
+                initPort: this.m_udpListenPort,
+                maxPortOffset: 0,
+            }
+        }
 
-        let {result, p2p, bdtStack} = await P2P.create4BDTStack({
-            peerid: this.m_peerid,
-            tcp: {
-                addrList,
-                initPort: this.m_listen_port,
-                maxPortOffset: 0,
-            },
-            udp: {
-                addrList,
-                initPort: this.m_listen_port + 10,
-                maxPortOffset: 0,
-            },
-            dhtEntry: [this.m_options.snPeer]
-        });
+        let {result, p2p, bdtStack} = await P2P.create4BDTStack(bdtInitParams);
 
         // 检查是否创建成功
         if ( result != 0 ) {

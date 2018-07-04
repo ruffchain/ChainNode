@@ -36,7 +36,7 @@ export class Version {
     }
 
     public decode(reader: BufferReader): ErrorCode {
-        this.m_timestamp =  reader.readU32();
+        this.m_timestamp =  reader.readU64();
         this.m_peerid = reader.readVarString();
         this.m_mainVersion = reader.readVarString();
 
@@ -44,7 +44,7 @@ export class Version {
     }
 
     public encode(writer: BufferWriter): BufferWriter {
-        writer.writeU32(this.m_timestamp);
+        writer.writeU64(this.m_timestamp);
         writer.writeVarString(this.m_peerid);
         writer.writeVarString(this.m_mainVersion);
         return writer;
