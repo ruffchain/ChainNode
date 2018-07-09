@@ -11,6 +11,7 @@ const baseModule = require('../base/base');
 const blog = baseModule.blog;
 const BaseUtil = require('../base/util.js');
 const EndPoint = BaseUtil.EndPoint;
+const SequenceU32 = BaseUtil.SequenceU32;
 const {TCPConnectionMgr} = require('./tcp_connection_helper.js');
 
 class BDTConnection extends EventEmitter {
@@ -54,8 +55,11 @@ class BDTConnection extends EventEmitter {
         this.m_peerFinder = null;
 
 //<<<<<<<<<统计诊断
+        // <TODO> DEBUG
         this.queryRemote = {
             ep: '', // 对方发包地址，如果跟从SN和DHT返回eplist不同，基本可以确定对方是对称NAT
+            syn: 0, // 对方syn时间
+            synConsum: 0, // 发出syn到收到synAck耗时
             sn: {
                 start: 0, // 开始查询SN的时间
                 finishsn: 0, // 查询到SN的时间
@@ -225,7 +229,7 @@ class BDTConnection extends EventEmitter {
 
     _nextSeq(length) {
         let seq = this.m_nextSeq;
-        this.m_nextSeq += length;
+        this.m_nextSeq = SequenceU32.add(this.m_nextSeq, length);
         if (length !== 0) {
             blog.debug(`[BDT]: connection update seq to ${this.m_nextSeq}`);
         }
@@ -271,12 +275,12 @@ class BDTConnection extends EventEmitter {
                 });
                 if (this.m_state !== BDTConnection.STATE.init) {
                     blog.warn(`[BDT]: connection try to connect in state ${BDTConnection.STATE.toString(this.m_state)}`);
-                    this.emit(BDTConnection.EVENT.error, BDT_ERROR.invalidState);
+                    setImmediate(() => this.emit(BDTConnection.EVENT.error, BDT_ERROR.invalidState));
                     return ;
                 }
                 if (!this.m_vport) {
                     blog.warn(`[BDT]: connection try to connect before bind to vport`);
-                    this.emit(BDTConnection.EVENT.error, BDT_ERROR.conflict);
+                    setImmediate(() => this.emit(BDTConnection.EVENT.error, BDT_ERROR.conflict));
                     return ;
                 }
 
@@ -466,17 +470,20 @@ class BDTConnection extends EventEmitter {
             if (this.queryRemote.sn.respEP1 === 0) {
                 this.queryRemote.sn.respEP1 = now;
             }
-            if (decoder.body.eplist.length > 0) {
+            if (decoder.body.eplist && decoder.body.eplist.length > 0) {
                 this.queryRemote.sn.getEP = this.queryRemote.sn.getEP || now;
+                this.queryRemote.sn.eplist = [... new Set([...this.queryRemote.sn.eplist, ...decoder.body.eplist])];
             }
             this.queryRemote.sn.respEP2 = now;
-            this.queryRemote.sn.eplist = [... new Set([...this.queryRemote.sn.eplist, ...decoder.body.eplist])];
             // console.log(`snEP:${remoteEP},eplist:${decoder.body.eplist},time:${decoder.body.time},now:${now}`);
             // >>>>>>
             if (this.m_state === BDTConnection.STATE.waitAck) {
-                if (decoder.body.eplist.length) {
+                if (decoder.body.eplist && decoder.body.eplist.length) {
                     this._addRemoteEP(decoder.body.eplist);
                     blog.debug(`[BDT]: connection update connecting remote address to ${decoder.body.eplist}`);
+                }
+                if (decoder.body.nearSN && this.m_snCall) {
+                    this.m_snCall.onSNFound([decoder.body.nearSN]);
                 }
             }
         }
@@ -514,12 +521,19 @@ class BDTConnection extends EventEmitter {
                     this._addRemoteEP(remoteSender.remoteEPList);
                     let ack = this.m_respPackages[BDTPackage.CMD_TYPE.synAck];
                     if (ack) {
+                        // <TODO> DEBUG
+                        ack.body.reqTime = decoder.body.sendTime || 0;
+                        ack.body.sendTime = Date.now();
+
                         remoteSender.postPackage(ack);
                     }
                 }
             }
         } else if (decoder.header.cmdType === BDTPackage.CMD_TYPE.synAck) {
-            this.queryRemote.ep = remoteEP;
+            let now = Date.now();
+            this.queryRemote.ep = this.queryRemote.ep || remoteEP;
+            this.queryRemote.syn = this.queryRemote.syn || now;
+            this.queryRemote.synConsum = this.queryRemote.synConsum || now - decoder.body.reqTime;
             // console.log(`synAck: remoteEP:${remoteEP}`);
             if (this.m_state === BDTConnection.STATE.waitAck) {
                 // 可确定是否用tcp
@@ -535,16 +549,27 @@ class BDTConnection extends EventEmitter {
                 if (!this.m_useTCP) {
                     this.m_respPackages[synAckAck.header.cmdType] = synAckAck;
                 }
+
+                // <TODO> DEBUG
+                synAckAck.body.reqTime = decoder.body.sendTime || 0;
+                synAckAck.body.sendTime = Date.now();
+                
                 this.m_remote.sender.postPackage(synAckAck);
                 this._changeState(BDTConnection.STATE.establish);
             } else if (!this.m_useTCP) {
                 // 任何时候收到ack 也应该回复ackack， 防止ackack丢失
                 let synAckAck = this.m_respPackages[BDTPackage.CMD_TYPE.synAckAck];
                 assert(synAckAck);
+
+                // <TODO> DEBUG
+                synAckAck.body.reqTime = decoder.body.sendTime || 0;
+                synAckAck.body.sendTime = Date.now();
+
                 remoteSender.postPackage(synAckAck);
             }
         } else if (decoder.header.cmdType === BDTPackage.CMD_TYPE.synAckAck) {
-            this.queryRemote.ep = remoteEP;
+            this.queryRemote.ep = this.queryRemote.ep || remoteEP;
+            this.queryRemote.syn = this.queryRemote.syn || Date.now();
             if (this.m_state === BDTConnection.STATE.waitAckAck) {
                 // 可确定是否用tcp
                 this.m_useTCP = decoder.header.useTCP;
@@ -560,7 +585,8 @@ class BDTConnection extends EventEmitter {
                 if (!this.m_useTCP) {
                     let prePkg = null;
                     this.m_pendingDataPackages.forEach(pkg => {
-                        assert(!prePkg || pkg.header.seq > prePkg.seq);
+                        assert(!prePkg || SequenceU32.compare(pkg.header.seq, prePkg.header.seq) > 0);
+                        prePkg = pkg;
                         this.m_transfer._onPackage(pkg);
                     });
                 }
@@ -574,10 +600,12 @@ class BDTConnection extends EventEmitter {
                 this.m_transfer._onPackage(decoder, remoteSender);
             } else if (this.m_state === BDTConnection.STATE.waitAckAck) {
                 let pendingCount = this.m_pendingDataPackages.length;
-                if (pendingCount === 0 || this.m_pendingDataPackages[pendingCount - 1].header.seq < decoder.header.seq) {
+                if (pendingCount === 0 || SequenceU32.compare(this.m_pendingDataPackages[pendingCount - 1].header.seq, decoder.header.seq) < 0) {
                     this.m_pendingDataPackages.push(decoder);
                 } else {
-                    let [pos, insertPos] = BaseUtil.algorithm.binarySearch(decoder, this.m_pendingDataPackages, (target, cursor) => target.header.seq - cursor.header.seq);
+                    let [pos, insertPos] = BaseUtil.algorithm.binarySearch(decoder,
+                        this.m_pendingDataPackages,
+                        (target, cursor) => SequenceU32.compare(target.header.seq, cursor.header.seq));
                     if (pos < 0) {
                         this.m_pendingDataPackages.splice(insertPos, 0, decoder);
                     }
@@ -585,9 +613,7 @@ class BDTConnection extends EventEmitter {
             }
         } else if (decoder.header.cmdType === BDTPackage.CMD_TYPE.heartbeat) {
             this.queryRemote.ep = remoteEP;
-            if (this.m_state === BDTConnection.STATE.establish) {
-                this._postPackage(this._createHeartbeatRespPackage());
-            }
+            remoteSender.postPackage(this._createHeartbeatRespPackage());
         } else if (decoder.header.cmdType === BDTPackage.CMD_TYPE.heartbeatResp) {
             this.queryRemote.ep = remoteEP;
             // do nothing
@@ -605,17 +631,31 @@ class BDTConnection extends EventEmitter {
         //>>>>>>
 
         this.m_snCall = {
-            timer: null
+            recallTimer: null,
+            snPeers: [],
+            tryFindSNInterval: this.m_stack._getOptions().tryFindSNInterval,
+            onSNFound: null,
         };
 
-        let snPeerListAll = [];
         let resendTimes = 0;
         const tryCallInterval = this.m_stack._getOptions().tryConnectInterval;
         
-        let postCallPackage = snPeer => {
+        let callPackage = this._createCallPackage(seq);
+        let postCallPackage = snPeers => {
             let now = Date.now();
-            let resendInterval = Math.max(3, snPeerListAll.length);
-            for (let peer of snPeer) {
+
+            // if (resendTimes > 1) {
+            //     let calledSN = [];
+            //     for (let sn of this.m_snCall.snPeers) {
+            //         calledSN.push(sn.hash || BDTPackage.hashPeerid(sn.peerid));
+            //     }
+            //     callPackage.body.called = calledSN;
+            //     callPackage.body.entrust = [this.m_snCall.snPeers[0].hash];
+            // }
+
+            callPackage.eplist = this.m_stack.eplist;
+            let resendInterval = Math.max(3, this.m_snCall.snPeers.length);
+            for (let peer of snPeers) {
                 if (peer.nextCallTime > now && peer.nextCallTime < now + peer.callInterval) {
                     continue;
                 }
@@ -623,7 +663,6 @@ class BDTConnection extends EventEmitter {
                 peer.callInterval *= 2;
 
                 peer.sender.isResend = (resendTimes === peer.nextResendTime);
-                let callPackage = this._createCallPackage(seq);
                 peer.sender.postPackage(callPackage);
                 if (peer.sender.isResend) {
                     peer.sender.isResend = false;
@@ -640,27 +679,94 @@ class BDTConnection extends EventEmitter {
                 this._startPeerFinder();
             }
             // 试着通过DHT穿透一下
-            if (resendTimes >= 2 && resendTimes <= snPeerListAll.length) {
-                this.m_stack._findSN(snPeerListAll[resendTimes - 1].peerid);
+            if (resendTimes >= 2 && resendTimes <= this.m_snCall.snPeers.length) {
+                let sn = this.m_snCall.snPeers[resendTimes - 1];
+                if (!sn.isResponsed) {
+                    this.m_stack._findSN(sn.peerid);
+                }
             }
-            postCallPackage(snPeerListAll);
+            postCallPackage(this.m_snCall.snPeers);
             resendTimes++;
-            this.m_snCall.timer = setTimeout(startCall2SN, tryCallInterval);
+            this.m_snCall.recallTimer = setTimeout(startCall2SN, tryCallInterval);
         }
 
-        let startSNFinder = () => {
-            let finder = this.m_stack._findSN(this.m_remote.peerid);
+        let onSNFound = foundSNList => {
+            if (!foundSNList || foundSNList.length === 0) {
+                return;
+            }
+            // <<<<<<统计诊断
+            this.queryRemote.sn.finishsn = this.queryRemote.sn.finishsn || Date.now();
+            foundSNList.forEach(p => {
+                for (let sn of this.queryRemote.sn.snList) {
+                    if (sn.pid === p.peerid) {
+                        return;
+                    }
+                }
+                this.queryRemote.sn.snList.push({pid: p.peerid, eplist: p.eplist});
+            });
+            //>>>>>>
+
+            // 追加到SN列表
+            let nextResendTime = resendTimes + 3;
+            let newSNList = [];
+            foundSNList.forEach(peer => {
+                for (let existSN of this.m_snCall.snPeers) {
+                    if (existSN.peerid === peer.peerid) {
+                        return;
+                    }
+                }
+                let sender = BDTPackage.createSender(this.m_stack.mixSocket, null, peer.eplist);
+                sender.isResend = false;
+                let snInfo = {
+                    peerid: peer.peerid,
+                    sender: sender,
+                    nextCallTime: 0,
+                    callInterval: tryCallInterval,
+                    nextResendTime,
+                    isResponsed: false,
+                };
+                this.m_snCall.snPeers.push(snInfo);
+                newSNList.push(snInfo);
+                nextResendTime++;
+            });
+
+            if (newSNList.length > 0) {
+                blog.debug(`[BDT]: connection find new sn: ${JSON.stringify(newSNList.map(sn => sn.peerid))}`);
+            }
+
+            if (newSNList.length === this.m_snCall.snPeers.length) {
+                // 第一次查到SN
+                startCall2SN();
+            } else if (newSNList.length > 0) {
+                // 立即对新发现SN发起一次call
+                postCallPackage(newSNList);
+            }
+        }
+
+        this.m_snCall.onSNFound = onSNFound;
+
+        let startSNFinder = (fromCache, once) => {
+            let finder = this.m_stack._findSN(this.m_remote.peerid, fromCache, ([err, peerlist]) => {
+                if (this.m_snCall) {
+                    onSNFound(peerlist);
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+
             finder.then(([err, peerlist]) => {
                 // 准备下一轮查找SN
                 if (this.m_snCall) {
-                    let tryFindSNInterval = this.m_snCall.tryFindSNInterval || this.m_stack._getOptions().tryFindSNInterval;
-                    setTimeout(() => {
-                        if (this.m_snCall) {
-                            startSNFinder();
-                            this._startPeerFinder();
-                            this.m_snCall.tryFindSNInterval = tryFindSNInterval * 2;
-                        }
-                    }, tryFindSNInterval);
+                    if (!once) {
+                        setTimeout(() => {
+                            if (this.m_snCall) {
+                                startSNFinder(false, false);
+                                this._startPeerFinder();
+                                this.m_snCall.tryFindSNInterval *= 2;
+                            }
+                        }, this.m_snCall.tryFindSNInterval);
+                    }
                 } else {
                     return;
                 }
@@ -670,62 +776,44 @@ class BDTConnection extends EventEmitter {
                     return ;
                 }
 
-                // <<<<<<统计诊断
-                this.queryRemote.sn.finishsn = this.queryRemote.sn.finishsn || Date.now();
-                peerlist.forEach(p => {
-                    for (let sn of this.queryRemote.sn.snList) {
-                        if (sn.pid === p.peerid) {
-                            return;
-                        }
-                    }
-                    this.queryRemote.sn.snList.push({pid: p.peerid, eplist: p.eplist});
-                });
-                //>>>>>>
-
-                // 追加到SN列表
-                let nextResendTime = resendTimes + 3;
-                let newSNList = [];
-                peerlist.forEach(peer => {
-                    for (let existSN of snPeerListAll) {
-                        if (existSN.peerid === peer.peerid) {
-                            return;
-                        }
-                    }
-                    let sender = BDTPackage.createSender(this.m_stack.mixSocket, null, peer.eplist);
-                    sender.isResend = false;
-                    let snInfo = {
-                        peerid: peer.peerid,
-                        sender: sender,
-                        nextCallTime: 0,
-                        callInterval: tryCallInterval,
-                        nextResendTime,
-                    };
-                    snPeerListAll.push(snInfo);
-                    newSNList.push(snInfo);
-                    nextResendTime++;
-                });
-
-                if (newSNList.length === snPeerListAll.length) {
-                    // 第一次查到SN
-                    startCall2SN();
-                } else if (newSNList.length > 0) {
-                    // 立即对新发现SN发起一次call
-                    postCallPackage(newSNList);
-                }
+                onSNFound(peerlist);
             });
         }
 
-        startSNFinder();
+        startSNFinder(true, false);
+        setTimeout(() => {
+            // 防御snFinder返回时间太长，等它返回后出现异常就来不及了
+            if (this.m_snCall) {
+                if (this.m_snCall.snPeers.length === 0) {
+                    startSNFinder(false, true);
+                }
+                this._startPeerFinder();
+            }
+        }, this.m_stack._getOptions().tryFindSNInterval);
+    }
+
+    _onSNResponsed(peerid) {
+        if (this.m_snCall) {
+            for (let sn of this.m_snCall.snPeers) {
+                if (sn.peerid === peerid) {
+                    sn.isResponsed = true;
+                    break;
+                }
+            }
+        }
     }
 
     _stopSNCall() {
         if (this.m_snCall) {
-            clearTimeout(this.m_snCall.timer);
+            if (this.m_snCall.recallTimer) {
+                clearTimeout(this.m_snCall.recallTimer);
+            }
             this.m_snCall = null;
         }
     }
 
     _startPeerFinder() {
+        return; // <TODO> 暂时关闭，测试分布式SN
         if (this.m_peerFinder) {
             return ;
         }
@@ -807,7 +895,7 @@ class BDTConnection extends EventEmitter {
             }
             let tryTime = now - this.m_tryConnect.startTime;
             if (tryTime > opt.connectTimeout) {
-                this.emit(BDTConnection.EVENT.error, BDT_ERROR.timeout);
+                setImmediate(() => this.emit(BDTConnection.EVENT.error, BDT_ERROR.timeout));
                 this._changeState(BDTConnection.STATE.closed);
                 return;
             }
@@ -829,6 +917,10 @@ class BDTConnection extends EventEmitter {
                         sender = BDTPackage.createSender(this.m_stack.mixSocket, null, udpEPList);
                     }
                 }
+
+                // <TODO> DEBUG
+                connectPackage.body.reqTime = 0;
+                connectPackage.body.sendTime = Date.now();
                 
                 sender.postPackage(connectPackage);
             }
@@ -867,7 +959,13 @@ class BDTConnection extends EventEmitter {
             return ;
         }
         
+        blog.debug(`[BDT]: connection change state from ${BDTConnection.STATE.toString(this.m_state)} to ${BDTConnection.STATE.toString(newState)}`);
+        this.m_state = newState;
+        
         if (newState === BDTConnection.STATE.establish) {
+            assert(curState === BDTConnection.STATE.waitAck ||
+                curState === BDTConnection.STATE.waitAckAck, `curState:${curState}`);
+
             this._stopTryConnect();
             this._startHeartbeat();
             let onLastAck = () => {
@@ -896,7 +994,12 @@ class BDTConnection extends EventEmitter {
             }
         } else if (newState === BDTConnection.STATE.finWait1
                 || newState === BDTConnection.STATE.lastAck) {
-            this.m_transfer.sendFin(() => setImmediate(() => {
+
+            assert((newState === BDTConnection.STATE.finWait1 && curState === BDTConnection.STATE.establish) ||
+                (newState === BDTConnection.STATE.lastAck && curState === BDTConnection.STATE.closeWait)
+                , `curState:${curState},newState:${newState}`);
+
+            this.m_transfer.sendFin(() => {
                 if (this.m_state === BDTConnection.STATE.lastAck) {
                     this._changeState(BDTConnection.STATE.closed);
                 } else if (this.m_state === BDTConnection.STATE.finWait1) {
@@ -904,16 +1007,28 @@ class BDTConnection extends EventEmitter {
                 } else if (this.m_state === BDTConnection.STATE.closing) {
                     this._changeState(BDTConnection.STATE.timeWait);
                 }
-            }));
+            });
         } else if (newState === BDTConnection.STATE.timeWait) {
+            assert(curState === BDTConnection.STATE.finWait2 ||
+                curState === BDTConnection.STATE.closing, `curState:${curState}`);
+
             setTimeout(()=>{
                 this._changeState(BDTConnection.STATE.closed);
             }, 2*this.m_stack._getOptions().msl);
         } else if (newState === BDTConnection.STATE.break) {
+            assert(curState >= BDTConnection.STATE.establish, `curState:${curState}`);
+
             let errorCode = params;
             setImmediate(()=>{this.emit(BDTConnection.EVENT.error, errorCode);});
             this._changeState(BDTConnection.STATE.closed);
         } else if (newState === BDTConnection.STATE.closed) {
+            assert(curState === BDTConnection.STATE.waitAck ||
+                curState === BDTConnection.STATE.waitAckAck ||
+                curState === BDTConnection.STATE.timeWait ||
+                curState === BDTConnection.STATE.break ||
+                curState === BDTConnection.STATE.lastAck
+                , `curState:${curState}`);
+
             this.m_respPackages = {};
             this._stopTryConnect();
             this._stopHeartbeat();
@@ -942,10 +1057,9 @@ class BDTConnection extends EventEmitter {
                 this.removeAllListeners(BDTConnection.EVENT.end);
                 this.removeAllListeners(BDTConnection.EVENT.close);
             });
+        } else if (newState === BDTConnection.STATE.closeWait) {
+            assert(curState === BDTConnection.STATE.establish, `curState:${curState}`);
         }
-        
-        blog.debug(`[BDT]: connection change state from ${BDTConnection.STATE.toString(this.m_state)} to ${BDTConnection.STATE.toString(newState)}`);
-        this.m_state = newState;
 
         if (curState === BDTConnection.STATE.init) {
             if (newState === BDTConnection.STATE.waitAck) {

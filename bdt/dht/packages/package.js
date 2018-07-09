@@ -165,7 +165,7 @@ class DHTPackage {
             LOG_ASSERT(this.m_common.dest.peerid && typeof this.m_common.dest.peerid === 'string',
                 `Package(${CommandType.toString(this.m_common.cmdType)}) field(dest.peerid:string) not filled.`);
             if (CommandType.isResp(this.m_common.cmdType)) {
-                LOG_ASSERT(typeof this.m_common.ackSeq === 'number' && this.m_common.ackSeq > 0,
+                LOG_ASSERT(typeof this.m_common.ackSeq === 'number' && this.m_common.ackSeq >= 0 && this.m_common.ackSeq <= 0xFFFFFFFF,
                     `Package(${CommandType.toString(this.m_common.cmdType)}) field(ackSeq:number) not filled.`);
             }
 

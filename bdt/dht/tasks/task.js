@@ -47,6 +47,10 @@ class Task {
         return this.m_startTime + this.m_timeout;
     }
 
+    get consum() {
+        return Math.min(Math.max(Date.now() - this.m_startTime, 0), this.m_timeout);
+    }
+
     start() {
         this._startImpl();
     }
@@ -117,6 +121,7 @@ class Task {
         this.m_isComplete = true;
         this.m_owner.onTaskComplete(this);
         this._onCompleteImpl(result);
+        setImmediate(() => this.m_callbackList = []);
     }
 
     _callback(...args) {

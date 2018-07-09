@@ -8,6 +8,7 @@ const BDTPackage = packageModule.BDTPackage;
 const BDT_ERROR = packageModule.BDT_ERROR;
 const BDTSendBuffer = require('./send_buffer');
 const assert = require('assert');
+const SequenceU32 = BaseUtil.SequenceU32;
 
 const AckType = {
     ack: 1,
@@ -29,7 +30,7 @@ class BDTSendQueue {
     }
 
     get sentSeq() {
-        return this.m_connection._nextSeq(0) - 1;
+        return SequenceU32.sub(this.m_connection._nextSeq(0), 1);
     }
 
     get ackSeq() {
@@ -38,7 +39,7 @@ class BDTSendQueue {
 
     get flightSize() {
         if (this.m_waitAck.length > 0) {
-            return this.m_waitAck[this.m_waitAck.length - 1].package.nextSeq - 1 - this.m_ackSeq;
+            return SequenceU32.delta(this.maxWaitAckSeq, this.m_ackSeq);
         }
         return 0;
     }
@@ -48,7 +49,7 @@ class BDTSendQueue {
     }
 
     get maxWaitAckSeq() {
-        return this.m_waitAck[this.m_waitAck.length - 1].package.nextSeq - 1;
+        return SequenceU32.sub(this.m_waitAck[this.m_waitAck.length - 1].package.nextSeq, 1);
     }
 
     allocDataPackage(buffers, fin=false) {
@@ -79,20 +80,20 @@ class BDTSendQueue {
     }
 
     onAckPackage(ackSeq, ackType) {
-        assert(this.m_waitAck.length === 0 || this.m_waitAck[0].package.header.seq >= this.m_ackSeq + 1, 
+        assert(this.m_waitAck.length === 0 || SequenceU32.compare(this.m_waitAck[0].package.header.seq, SequenceU32.add(this.m_ackSeq, 1)) >= 0, 
             `waitAck.seq:${this.m_waitAck.length? this.m_waitAck[0].package.header.seq : 0},ackSeq:${this.m_ackSeq}`);
-        assert(this.m_waitResend.length === 0 || this.m_waitResend[0].package.header.seq > this.m_waitAck[0].package.header.seq, 
+        assert(this.m_waitResend.length === 0 || SequenceU32.compare(this.m_waitResend[0].package.header.seq, this.m_waitAck[0].package.header.seq) > 0, 
             `waitAck.seq:${this.m_waitAck.length? this.m_waitAck[0].package.header.seq : 0},waitResend.seq:${this.m_waitResend.length? this.m_waitResend[0].package.header.seq : 0}`);
-        if (ackSeq > this.m_ackSeq) {
+        if (SequenceU32.compare(ackSeq, this.m_ackSeq) > 0) {
             // 比上一个收到的小时 不更新cwnd
             this.m_dumpAckCounter = 1;
             let stubIndex = null;
             for (let index = 0; index < this.m_pending.length; ++index) {
                 let stub = this.m_pending[index];
-                if (stub.package.ackSeq === ackSeq) {
+                if (SequenceU32.compare(stub.package.ackSeq, ackSeq) === 0) {
                     stubIndex = index;
                     break;
-                } else if (ackSeq < stub.package.ackSeq) {
+                } else if (SequenceU32.compare(ackSeq, stub.package.ackSeq) < 0) {
                     break;
                 }
             }
@@ -100,10 +101,10 @@ class BDTSendQueue {
                 // 不存在这个seq
                 return [0, null];
             }
-            let acked = (ackSeq - this.m_ackSeq);
+            let acked = SequenceU32.delta(ackSeq, this.m_ackSeq);
             this.m_ackSeq = ackSeq;
             let stubs = this.m_pending.splice(0, stubIndex + 1);
-            if (ackSeq > this.m_maxAckSeq) {
+            if (SequenceU32.compare(ackSeq, this.m_maxAckSeq) > 0) {
                 this.m_maxAckSeq = ackSeq;
             }
 
@@ -111,15 +112,15 @@ class BDTSendQueue {
                 if (unackedQueue.length === 0) {
                     return;
                 }
-                if (unackedQueue[unackedQueue.length - 1].package.ackSeq <= ackSeq) {
+                if (SequenceU32.compare(unackedQueue[unackedQueue.length - 1].package.ackSeq, ackSeq) <= 0) {
                     unackedQueue.splice(0, unackedQueue.length);
                     return;
                 }
                 for (let i = 0; i < unackedQueue.length; i++) {
-                    if (unackedQueue[i].package.ackSeq > ackSeq) {
+                    if (SequenceU32.compare(unackedQueue[i].package.ackSeq, ackSeq) > 0) {
                         unackedQueue.splice(0, i);
                         break;
-                    } else if (unackedQueue[i].package.ackSeq === ackSeq) {
+                    } else if (SequenceU32.compare(unackedQueue[i].package.ackSeq, ackSeq) === 0) {
                         unackedQueue.splice(0, i + 1);
                         break;
                     }
@@ -129,7 +130,7 @@ class BDTSendQueue {
             removeFromUnackedQueue(this.m_waitAck);
             removeFromUnackedQueue(this.m_waitResend);
             return [acked, stubs[stubs.length - 1]];
-        } else if (ackSeq === this.m_ackSeq) {
+        } else if (SequenceU32.compare(ackSeq, this.m_ackSeq) === 0) {
             if (this.m_pending.length) {
                 // 连续收到3个相同的专用ack包，进入快速重传状态，这里需要计数
                 if (ackType === AckType.ack) {
@@ -145,7 +146,6 @@ class BDTSendQueue {
                 return [-1, null];
             }
         } else {
-            this.m_dumpAckCounter = 1;
             return [-1, null];
         }
     }
@@ -165,15 +165,17 @@ class BDTSendQueue {
                 toSeq = sack.readUInt32LE(offset + 4);
                 offset += 8;
 
-                if (toSeq - 1 > this.m_maxAckSeq) {
-                    this.m_maxAckSeq = toSeq - 1;
+                let toAckSeq = SequenceU32.sub(toSeq, 1);
+                if (SequenceU32.compare(toAckSeq, this.m_maxAckSeq) > 0) {
+                    this.m_maxAckSeq = toAckSeq;
                 }
 
                 let ackCount = 0;
                 while (sendPkgIndex < unackedQueue.length) {
                     let stub = unackedQueue[sendPkgIndex];
                     // toSeq本身不被ack
-                    if (stub.package.header.seq >= fromSeq && stub.package.header.seq < toSeq) {
+                    if (SequenceU32.compare(stub.package.header.seq, fromSeq) >= 0 &&
+                        SequenceU32.compare(stub.package.header.seq, toSeq) < 0) {
                         unackedQueue.splice(sendPkgIndex, 1);
                         stub.sack = true;
                         ackCount++;
@@ -185,7 +187,7 @@ class BDTSendQueue {
                 // 更新乱序ack的数量
                 for (let i = 0; i < sendPkgIndex; i++) {
                     let stub = unackedQueue[i];
-                    if (stub.limitAckSeq < toSeq - 1) {
+                    if (SequenceU32.compare(stub.limitAckSeq, toAckSeq) < 0) {
                         stub.sackCount += ackCount;
                     }
                 }
@@ -250,7 +252,7 @@ class BDTSendQueue {
             let newResend = this.m_waitAck.splice(firstResendIndex, this.m_waitAck.length - firstResendIndex);
             if (this.m_waitResend.length === 0) {
                 this.m_waitResend = newResend;
-            } else if (newResend[newResend.length - 1].package.ackSeq < this.m_waitResend[0].package.ackSeq){
+            } else if (SequenceU32.compare(newResend[newResend.length - 1].package.ackSeq, this.m_waitResend[0].package.ackSeq) < 0){
                 this.m_waitResend.unshift(...newResend);
             } else {
                 this.m_waitResend.push(...newResend);
@@ -297,7 +299,7 @@ class BDTSendQueue {
             stub.package.header.isResend = true;
             stub.lastSentTime = stub.sentTime;
             stub.sendTime = Date.now();
-            stub.limitAckSeq = this.maxWaitAckSeq + 1;
+            stub.limitAckSeq = SequenceU32.add(this.maxWaitAckSeq, 1);
             stub.sackCount = 0;
             this.m_transfer._postPackage(stub.package);
         }
@@ -316,7 +318,7 @@ class BDTSendQueue {
             if (stub.sackCount < 3) {
                 break;
             }
-            if (stub.limitAckSeq < this.m_maxAckSeq && stub.sackCount === 3) {
+            if (SequenceU32.compare(stub.limitAckSeq, this.m_maxAckSeq) < 0 && stub.sackCount === 3) {
                 _send(stub);
                 sentCount++;
             }
@@ -341,11 +343,11 @@ class BDTRecvQueue {
     }
 
     get ackSeq() {
-        return this.nextSeq - 1;
+        return SequenceU32.sub(this.nextSeq, 1);
     }
 
     get waitAckSize() {
-        return this.m_connection._getNextRemoteSeq() - this.m_lastAckSeq;
+        return SequenceU32.delta(this.m_connection._getNextRemoteSeq(), this.m_lastAckSeq);
     }
 
     get isQuickAck() {
@@ -389,11 +391,23 @@ class BDTRecvQueue {
         let header = decoder.header;
         let pending = this.m_pending;
         this._updateAto();
-        if (header.seq === this.nextSeq) {
+
+        let assertSeq = (queue, beginSeq) => {
+            if (queue.length === 0) {
+                return;
+            }
+            let nextSeq = beginSeq || queue[0].header.seq;
+            queue.forEach(pkg => {
+                assert(SequenceU32.compare(pkg.header.seq, nextSeq) === 0, `nextSeq:${nextSeq},pkg.seq:${pkg.header.seq}`);
+                nextSeq = pkg.nextSeq;
+            });
+        }
+
+        if (SequenceU32.compare(header.seq, this.nextSeq) === 0) {
             let unpend = null; 
             if (pending.length) {
                 let stub = pending[0];
-                if (stub.seq === decoder.nextSeq) {
+                if (SequenceU32.compare(stub.seq, decoder.nextSeq) === 0) {
                     pending.splice(0, 1);
                     stub.packages.unshift(decoder);
                     unpend = stub.packages;
@@ -403,13 +417,15 @@ class BDTRecvQueue {
             } else {
                 unpend = [decoder];
             }
+
+            assertSeq(unpend, this.nextSeq);
             this.m_connection._setNextRemoteSeq(unpend[unpend.length - 1].nextSeq);
             return unpend;
-        } else {
+        } else if (SequenceU32.compare(header.seq, this.nextSeq) > 0) {
             let isCached = false;
             for (let index = 0; index < pending.length; ++index) {
                 let stub = pending[index];
-                if (stub.seq > decoder.nextSeq) {
+                if (SequenceU32.compare(stub.seq, decoder.nextSeq) > 0) {
                     pending.splice(index, 0, {
                         seq: header.seq,
                         nextSeq: decoder.nextSeq,
@@ -419,37 +435,41 @@ class BDTRecvQueue {
                     break;    
                 }
                 
-                if (stub.seq === decoder.nextSeq) {
+                if (SequenceU32.compare(stub.seq, decoder.nextSeq) === 0) {
                     stub.seq = header.seq;
                     stub.packages.unshift(decoder);
                     isCached = true;
+                    assertSeq(stub.packages);
                     if (index > 0) {
                         let preStub = pending[index - 1];
-                        if (preStub.nextSeq === stub.seq) {
+                        if (SequenceU32.compare(preStub.nextSeq, stub.seq) === 0) {
                             preStub.nextSeq = stub.nextSeq;
                             preStub.packages = preStub.packages.concat(stub.packages);
                             pending.splice(index, 1);
+                            assertSeq(preStub.packages);
                         }
                     }
                     break;
                 }
 
-                if (stub.nextSeq === header.seq) {
+                if (SequenceU32.compare(stub.nextSeq, header.seq) === 0) {
                     stub.nextSeq = decoder.nextSeq;
                     stub.packages.push(decoder);
                     isCached = true;
+                    assertSeq(stub.packages);
                     if (index < pending.length - 1) {
                         let nextStub = pending[index + 1];
-                        if (stub.nextSeq === nextStub.seq) {
+                        if (SequenceU32.compare(stub.nextSeq, nextStub.seq) === 0) {
                             stub.nextSeq = nextStub.nextSeq;
                             stub.packages = stub.packages.concat(nextStub.packages);
                             pending.splice(index + 1, 1);
+                            assertSeq(stub.packages);
                         }
                     }
                     break;
                 }
 
-                if (header.seq >= stub.seq && decoder.nextSeq <= stub.nextSeq) {
+                if (SequenceU32.compare(header.seq, stub.seq) >= 0 && SequenceU32.compare(decoder.nextSeq, stub.nextSeq) <= 0) {
                     isCached = true;
                     break;
                 }
@@ -462,9 +482,9 @@ class BDTRecvQueue {
                     packages: [decoder]
                 });
             }
-
-            return null;
         }
+
+        return null;
     }
 
     _updateAto() {
@@ -580,7 +600,7 @@ class Reno {
                 blog.debug(`[BDT]: bdt transfer increase cwnd with ${inc}`);
             } else if (this.m_state === Reno.STATE.fastRecover) {
                 // 发生fastRecover时窗口中的所有包都被ack才恢复到拥塞避免
-                if (sendQueue.ackSeq < this.m_frSeq) {
+                if (SequenceU32.compare(sendQueue.ackSeq, this.m_frSeq) < 0) {
                     if (sendQueue.resendNext() === 0) {
                         this.m_cwnd = sendQueue.flightSize + this.m_mms;
                     }
@@ -641,7 +661,7 @@ class BDTTransfer {
         // 发送缓存
         this.m_sendBuffer = new BDTSendBuffer(opt.defaultSendBufferSize, opt.drainFreeBufferSize);
         this.m_sendBuffer.on('drain', ()=>{
-            this.m_connection.emit('drain');
+            setImmediate(() => this.m_connection.emit('drain'));
         });
         // 发送队列
         this.m_sendQueue = new BDTSendQueue(this);
@@ -672,7 +692,7 @@ class BDTTransfer {
                     this.m_cc.onOvertime();
                 }
     
-                resendSize += stub.package.nextSeq - stub.package.header.seq;
+                resendSize += SequenceU32.delta(stub.package.nextSeq, stub.package.header.seq);
                 if (resendSize > this.m_cc.cwnd) {
                     return true; // 一次最多重发窗口大小
                 }
@@ -681,6 +701,7 @@ class BDTTransfer {
 
         // send fin的callback，在收到fin ack 时触发
         this.m_finAckCallback = null;
+        this.m_finSent = false;
         // 第一次回复了fin的ack时触发
         this.m_lastAckCallback = lastAckCallback;
 
@@ -705,6 +726,7 @@ class BDTTransfer {
         }
         let allocFin = ()=>{
             let encoder = this.m_sendQueue.allocDataPackage(null, true);
+            this.m_finSent = true;
             if (encoder) {
                 this._postPackage(encoder);
             }
@@ -746,7 +768,7 @@ class BDTTransfer {
 
             const header = decoder.header;
             let ackSeq = header.ackSeq;
-            if (ackSeq > this.m_sendQueue.sentSeq) {
+            if (SequenceU32.compare(ackSeq, this.m_sendQueue.sentSeq) > 0) {
                 // 比已经发出去的大
                 return ;
             }
@@ -759,10 +781,11 @@ class BDTTransfer {
                 } else {
                     if (!decoder.data || decoder.header.sack) {
                         ackType = AckType.ack;
-                        if (decoder.header.sack) {
-                            sack = decoder.data;
-                        }
                     }
+                }
+                
+                if (decoder.header.sack) {
+                    sack = decoder.data;
                 }
             }
 
@@ -784,7 +807,7 @@ class BDTTransfer {
             if (acked >= 0) {
                 this.m_nrwnd = decoder.header.windowSize;
                 this._onWndGrow();
-                if (!this.m_sendQueue.flightSize) {
+                if (!this.m_sendQueue.flightSize && this.m_finSent) {
                     if (this.m_finAckCallback) {
                         let finAckCallback = this.m_finAckCallback;
                         finAckCallback();
@@ -799,12 +822,12 @@ class BDTTransfer {
             this.m_finalAck.onData();
 
             let recvQueue = this.m_recvQueue;
-            if (header.seq < recvQueue.nextSeq) {
+            if (SequenceU32.compare(header.seq, recvQueue.nextSeq) < 0) {
                 // 收到已经ack的重发包
                 _doAck(false);
                 return ;
             }
-            if (header.seq - recvQueue.nextSeq > this.m_rwnd) {
+            if (SequenceU32.delta(header.seq, recvQueue.nextSeq) > this.m_rwnd) {
                 // 收到接收窗口之外的包
                 _doAck(true);
                 return ;
@@ -822,14 +845,15 @@ class BDTTransfer {
                     setImmediate(() => this.m_connection.emit('data', recv));
                 }
                 if (unpend[unpend.length - 1].header.cmdType === BDTPackage.CMD_TYPE.fin) {
-                    setImmediate(() => {
-                        // C++的异步tcp模式，通知一个空包
-                        this.m_connection.emit('data', [Buffer.allocUnsafe(0)]);
-                        // node.js模式，通知'end'
-                        this.m_connection.emit('end');
-                    });
                     if (this.m_lastAckCallback) {
+                        setImmediate(() => {
+                            // C++的异步tcp模式，通知一个空包
+                            this.m_connection.emit('data', [Buffer.allocUnsafe(0)]);
+                            // node.js模式，通知'end'
+                            this.m_connection.emit('end');
+                        });
                         this.m_lastAckCallback();
+                        this.m_lastAckCallback = null;
                     }
                 }
             } else {
@@ -977,7 +1001,7 @@ class BDTTransfer {
     }
 
     _postPackage(pkg) {
-        if (pkg.header.ackSeq !== this.m_recvQueue.ackSeq) {
+        if (SequenceU32.compare(pkg.header.ackSeq, this.m_recvQueue.ackSeq) !== 0) {
             this.m_recvQueue.fillAckPackage(pkg, this.m_rwnd);
             pkg.change();
         }
@@ -991,4 +1015,5 @@ class BDTTransfer {
     }
 }
 
+BDTTransfer.version = 'v2';
 module.exports = BDTTransfer;

@@ -108,7 +108,19 @@ export class Miner extends EventEmitter{
             return kvr.err;
         }
         kvr = await storage.createKeyValue(Chain.kvNonce);
-        return kvr.err;
+        if (kvr.err) {
+            return kvr.err;
+        }
+        kvr = await storage.createKeyValue(Chain.kvConfig);
+        if (kvr.err) {
+            return kvr.err;
+        }
+
+        assert(options!.txlivetime && options!.consensusname, 'options must have txlivetime');
+        await kvr.kv!.set('txlivetime', options!.txlivetime);
+        await kvr.kv!.set('consensus', options!.consensusname);
+
+        return ErrorCode.RESULT_OK;
     }
 
     protected async _createBlock(header: BlockHeader): Promise<ErrorCode> {

@@ -158,6 +158,27 @@ function main() {
             watchingTx.push(tx.hash);
         },
 
+        register: async (fee: string) => {
+            let tx = new Transaction();
+            tx.method = 'register';
+            tx.fee = new BigNumber(fee);
+            tx.input = '';
+            let {err, nonce} = await chainClient.getNonce({address});
+            if (err) {
+                console.error(`register failed for ${err}`);
+                return ;
+            }
+            tx.nonce = nonce! + 1;
+            tx.sign(secret);
+            err = await chainClient.sendTrasaction({tx});
+            if (err) {
+                console.error(`register failed for ${err}`);
+                return ;
+            }
+            console.log(`send register tx: ${tx.hash}`);
+            watchingTx.push(tx.hash);
+        },
+
         getVote: async () => {
             let ret = await chainClient.view({
                 method: 'getVote',

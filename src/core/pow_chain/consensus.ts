@@ -3,21 +3,22 @@ import { BlockHeader } from './block';
 import { Chain } from '../chain/chain';
 import * as assert from 'assert';
 import { ErrorCode } from '../error_code';
+import GlobalConfig = require('../chain/globalConfig');
 
 //我们测试时保证1分钟一块，每10块调整一次难度
 
-//每次重新计算难度的间隔块，BTC为2016, 
-export const retargetInterval = 10;
+// //每次重新计算难度的间隔块，BTC为2016, 
+// export const retargetInterval = 10;
 
-//每个难度的理想持续时间，BTC为14 * 24 * 60 * 60, 单位和timestamp单位相同，seconds
-export const targetTimespan = 1 * 60;
+// //每个难度的理想持续时间，BTC为14 * 24 * 60 * 60, 单位和timestamp单位相同，seconds
+// export const targetTimespan = 1 * 60;
 
-//初始bits,BTC为486604799， 对应的hash值为'00000000ffff0000000000000000000000000000000000000000000000000000'
-//我们设定为'0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
-export const basicBits = 520159231;
+// //初始bits,BTC为486604799， 对应的hash值为'00000000ffff0000000000000000000000000000000000000000000000000000'
+// //我们设定为'0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+// export const basicBits = 520159231;
 
-//最小难度
-export const limit = new BN('0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 'hex');
+// //最小难度
+// export const limit = new BN('0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 'hex');
 
 /**
  * Convert a compact number to a big number.
@@ -105,19 +106,19 @@ export function verifyPOW(hash: Buffer, bits: number): boolean {
 export function retarget(prevbits: number, actualTimespan: number): number {
     let target = fromCompact(prevbits);
 
-    if (actualTimespan < (targetTimespan / 4 | 0)) {
-        actualTimespan = targetTimespan / 4 | 0;
+    if (actualTimespan < (GlobalConfig.getConfig('targetTimespan') / 4 | 0)) {
+        actualTimespan = GlobalConfig.getConfig('targetTimespan') / 4 | 0;
     }
 
-    if (actualTimespan > targetTimespan * 4) {
-        actualTimespan = targetTimespan * 4;
+    if (actualTimespan > GlobalConfig.getConfig('targetTimespan') * 4) {
+        actualTimespan = GlobalConfig.getConfig('targetTimespan') * 4;
     }
 
     target.imuln(actualTimespan);
-    target.idivn(targetTimespan);
+    target.idivn(GlobalConfig.getConfig('targetTimespan'));
 
-    if (target.gt(limit))
-        return basicBits;
+    if (target.gt(GlobalConfig.getConfig('limit')))
+        return GlobalConfig.getConfig('basicBits');
 
     return toCompact(target);
 }
@@ -125,7 +126,7 @@ export function retarget(prevbits: number, actualTimespan: number): number {
 export async function getTarget(header: BlockHeader, chain: Chain): Promise<{err: ErrorCode, target?: number}> {
     // Genesis
     if (header.number === 0) {
-        return {err: ErrorCode.RESULT_OK, target: basicBits};
+        return {err: ErrorCode.RESULT_OK, target: GlobalConfig.getConfig('basicBits')};
     }
     let prevRet = await chain.getHeader(header.preBlockHash);
     // Genesis
@@ -134,12 +135,12 @@ export async function getTarget(header: BlockHeader, chain: Chain): Promise<{err
     }
 
     // Do not retarget
-    if ((header.number + 1) % retargetInterval !== 0) {
+    if ((header.number + 1) % GlobalConfig.getConfig('retargetInterval') !== 0) {
         return {err: ErrorCode.RESULT_OK, target: (<BlockHeader>prevRet.header).bits};
     }
 
     // Back 2 weeks
-    const height = header.number - (retargetInterval - 1);
+    const height = header.number - (GlobalConfig.getConfig('retargetInterval') - 1);
     assert(height >= 0);
 
     let hr = await chain.getHeader(height);
@@ -148,7 +149,7 @@ export async function getTarget(header: BlockHeader, chain: Chain): Promise<{err
         assert(hr.header);
         retargetFrom = <BlockHeader>hr.header;
     } else if (hr.err === ErrorCode.RESULT_NOT_FOUND) {
-        let ghr = await chain.getHeader(header, -(retargetInterval - 1));
+        let ghr = await chain.getHeader(header, -(GlobalConfig.getConfig('retargetInterval') - 1));
         if (ghr.err) {
             return {err: ghr.err};
         }

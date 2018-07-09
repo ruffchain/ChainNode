@@ -25,5 +25,16 @@
 		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ",
 		"1LuwjNj8wkqo237N7Gh8nZSSvUa6TZ5ds4",
 		"13CS9dBwmaboedj2hPWx6Dgzt4cowWWoNZ"
-	]
+    ],
+    "consensus": {
+        "minCreateor": 2,
+        "maxCreateor": 21,
+        "reSelectionBlocks": 10,
+        "blockInterval": 10,
+        "timeOffsetToLastBlock": 122400,
+        "timeBan": 2592000,
+        "unbanBlocks": 100,
+        "dposVoteMaxProducers": 30,
+        "maxBlockIntervalOffset": 1
+    }
 }

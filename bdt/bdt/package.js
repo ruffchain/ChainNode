@@ -2,7 +2,7 @@
 const msgpack = require('msgpack-lite');
 const baseModule = require('../base/base');
 const blog = baseModule.blog;
-const {EndPoint, HashDistance} = require('../base/util');
+const {EndPoint, HashDistance, SequenceU32} = require('../base/util');
 const assert = require('assert');
 
 const EMPTY_BUFFER = Buffer.allocUnsafe(0);
@@ -112,15 +112,15 @@ class BDTPackageDecoder {
     }
 
     get ackSeq() {
-        if (this.m_data) {
-            return this.m_header.seq + this.m_data.length;
+        if (this.m_data && !this.m_header.sack) {
+            return  SequenceU32.add(this.m_header.seq, this.m_data.length);
         } else {
             return this.m_header.seq;
         }
     }
 
     get nextSeq() {
-        return this.ackSeq + 1;
+        return SequenceU32.add(this.ackSeq, 1);
     }
 
     get header() {
@@ -188,9 +188,9 @@ class BDTPackageEncoder {
             offset = headerBuf.writeUInt16LE(header.dest == null || header.dest.vport == null ? 0 : header.dest.vport, offset);
             offset = headerBuf.writeUInt16LE(header.src == null || header.src.peeridHash == null ? 0 : header.src.peeridHash, offset);
             offset = headerBuf.writeUInt16LE(header.dest == null || header.dest.peeridHash == null ? 0 : header.dest.peeridHash, offset);
-            offset = headerBuf.writeUInt32LE(header.seq == null ? 0 : header.seq, offset);
-            offset = headerBuf.writeUInt32LE(header.ackSeq == null ? 0 : header.ackSeq, offset);
-            offset = headerBuf.writeUInt16LE(header.windowSize == null ? 0 : header.windowSize, offset);
+            offset = headerBuf.writeUInt32LE(header.seq || 0, offset);
+            offset = headerBuf.writeUInt32LE(header.ackSeq || 0, offset);
+            offset = headerBuf.writeUInt16LE(header.windowSize || 0, offset);
             offset = headerBuf.writeUInt32LE(header.sessionid, offset);
             this.m_buffer = Buffer.concat([headerBuf, bodyBuf, ...this.m_data]);
             assert(header.magic === BDTPackage.MAGIC && header.version === BDTPackage.VERSION && header.totalLength === this.m_buffer.length,
@@ -226,11 +226,15 @@ class BDTPackageEncoder {
     }
 
     get ackSeq() {
-        return this.m_header.seq + this.m_dataLength;
+        if (this.m_dataLength && !this.m_header.sack) {
+            return  SequenceU32.add(this.m_header.seq, this.m_dataLength);
+        } else {
+            return this.m_header.seq;
+        }
     }
 
     get nextSeq() {
-        return this.ackSeq + 1;
+        return  SequenceU32.add(this.ackSeq, 1);
     }
 
     change() {

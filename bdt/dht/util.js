@@ -10,6 +10,7 @@ const Result = {
     TIMEOUT: 4,
     INVALID_ARGS: 5,
     INVALID_PACKAGE: 6,
+    ABORT: 7,
 };
 
 const MAX_SAFE_INTEGER = 0xFFFFFFFFFFFFF;
@@ -39,9 +40,13 @@ const Config = {
         TableCount: 16,
         TableSize: 8,
         TotalValueCount: 128,
-        ValueTimeoutMS: 3600000,
+        ValueTimeoutMS: 1500000,
         ValueUpdateIntervalMS: 600000,
         FindCloseKeyCount: 5,
+    },
+
+    FindPeer: {
+        StepTimeout: 500, // 在一段时间内没有节点响应FindPeer，就通知一次Step
     },
 
     SaveValue: {
@@ -53,7 +58,7 @@ const Config = {
 
     Broadcast: {
         TimeoutMS: 600000,
-        LimitPeerCountOnce: 32, // 一次同时通知peer数
+        LimitPeerCountOnce: 8, // 一次同时通知peer数
     },
 
     Package: {

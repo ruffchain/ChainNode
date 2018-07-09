@@ -116,6 +116,19 @@ export class Miner extends ValueMiner.Miner {
         if (err) {
             return err;
         }
+
+        let kvr = await storage.getReadWritableKeyValue(Chain.kvConfig);
+        if (kvr.err) {
+            return kvr.err;
+        }
+
+        assert(options.consensus, 'options must have consensus');
+
+        await kvr.kv!.set('retargetInterval', options!.consensus.retargetInterval);
+        await kvr.kv!.set('targetTimespan', options!.consensus.targetTimespan);
+        await kvr.kv!.set('basicBits', options!.consensus.basicBits);
+        await kvr.kv!.set('limit', options!.consensus.limit);
+
         (<BlockHeader>block.header).bits = 520159231;
         block.header.updateHash();
         return ErrorCode.RESULT_OK;

@@ -36,9 +36,9 @@ export class SnapshotManager implements IStorageSnapshotManager {
     private m_snapshots: Map<string, {ref: number}> = new Map();
     private m_recycleHandler: (blockHash: string) => Promise<{err: ErrorCode, recycle?: boolean}>;
 
-    protected _checkRecycle() {
-        for (let blockHash of this.m_snapshots.keys()) {
-            let stub = this.m_snapshots.get(blockHash)!;
+    public recycle() {
+        let recycledMap = new Map(this.m_snapshots);
+        for (let [blockHash, stub] of recycledMap.entries()) {
             if (!stub.ref) {
                 this.m_recycleHandler(blockHash).then((rhr: {err: ErrorCode, recycle?: boolean}) => {
                     if (!rhr.err && !stub!.ref && rhr.recycle) {
@@ -59,7 +59,7 @@ export class SnapshotManager implements IStorageSnapshotManager {
         for (let ss of snapshots) {
             this.m_snapshots.set(ss.blockHash, {ref: 0});
         }
-        this._checkRecycle();
+        //this._checkRecycle();
         return ErrorCode.RESULT_OK;
     }
 
@@ -76,8 +76,9 @@ export class SnapshotManager implements IStorageSnapshotManager {
             logger.encode(writer);
             fs.writeFileSync(this.getLogPath(blockHash), writer.render());
         }
+        //先删除不需要的snapshot，再set
+        //this._checkRecycle();
         this.m_snapshots.set(blockHash, {ref: 0});
-        this._checkRecycle();
         return csr;
         
     }
@@ -107,17 +108,18 @@ export class SnapshotManager implements IStorageSnapshotManager {
         let err = ErrorCode.RESULT_NOT_FOUND;
         let nearestSnapshot: StorageDumpSnapshot;
         do {
-            let hr = await this.m_headerStorage.loadHeader(header.preBlockHash);
-            if (hr.err) {
-                err = ErrorCode.RESULT_INVALID_BLOCK;
-                break;
-            }
             let ssr = await this.m_dumpManager.getSnapshot(header.hash);
             if (!ssr.err) {
                 nearestSnapshot = ssr.snapshot!;
+                err = ssr.err;
                 break;
             } else if (ssr.err !== ErrorCode.RESULT_NOT_FOUND) {
                 err = ssr.err;
+                break;
+            }
+            let hr = await this.m_headerStorage.loadHeader(header.preBlockHash);
+            if (hr.err) {
+                err = ErrorCode.RESULT_INVALID_BLOCK;
                 break;
             }
             header = hr.header!;

@@ -11,7 +11,7 @@ class PeerFinder extends EventEmitter {
         this.EVENT = PeerFinder.EVENT;
     }
 
-    findSN(peerid) {
+    findSN(peerid, fromCache, onStep) {
         return Promise.reject('Function PeerFinder.findSN should be overrided.');
     }
 
@@ -30,7 +30,7 @@ class SimpleSNFinder extends PeerFinder {
         this.m_snPeers = snPeers;
     }
 
-    findSN(peerid) {
+    findSN(peerid, fromCache, onStep) {
         if (this.m_snPeers && this.m_snPeers.length) {
             return Promise.resolve([packageModule.BDT_ERROR.success, this.m_snPeers]);
         } else {

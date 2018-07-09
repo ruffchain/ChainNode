@@ -35,7 +35,11 @@ class HandshakeSourceTask extends Task {
         this.m_targetPeer = targetPeer;
         this.m_holePackage = null;
         this.m_holeResender = null;
-        this.m_agencyPeer = agencyPeer;
+        if ( agencyPeer == null ) {
+            this.m_agencyPeer = null
+        } else {
+            this.m_agencyPeer = this.bucket.findPeer(agencyPeer.peerid) || agencyPeer;
+        }
         this.m_isHoleImmediately = isHoleImmediately;
         this.m_isPassive = passive;
         this.m_isIncoming = false;
@@ -59,10 +63,13 @@ class HandshakeSourceTask extends Task {
             this.m_handshakePackage,
             this.packageSender,
             Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer),
-            Config.Package.RetryTimes);
+            Config.Package.RetryTimes - 1);
 
         if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) && !this.m_isPassive) {
-            this.m_handshakeResender.send();
+            this.packageSender.sendPackage(this.m_targetPeer,
+                this.m_handshakePackage,
+                false,
+                Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer));
         }
         
         // 本地有监听地址时才可能被反向穿透
@@ -98,34 +105,22 @@ class HandshakeSourceTask extends Task {
         }
 
         if (response.cmdType === DHTPackage.CommandType.HOLE_CALL_RESP) {
-            this.m_agencyPeer = null; // 打洞中介已经收到包，停止重发
             if (response.body.target) {
                 if (response.body.target.peerid === this.m_targetPeer.peerid) {
                     let epCount = this.m_targetPeer.eplist? this.m_targetPeer.eplist.length : 0;
                     this.m_targetPeer.eplist = Peer.unionEplist(this.m_targetPeer.eplist, response.body.target.eplist);
-                    if (epCount !== this.m_targetPeer.eplist.length) {
-                        if (!this.m_handshakePackage) {
-                            this.m_handshakePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HANDSHAKE_REQ);
-                            this.m_handshakePackage.body = {taskid: this.id};
-                        }
 
-                        if (this.m_handshakeResender) {
-                            this.m_handshakeResender.abort();
-                            this.m_handshakeResender = null;
-                        }
-                        this.m_handshakeResender = new ResendControlor(this.m_targetPeer,
-                            this.m_handshakePackage,
-                            this.packageSender,
-                            Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer),
-                            Config.Package.RetryTimes);
-
+                    let maxPassiveDelay = Math.max(Peer.retryInterval(this.bucket.localPeer, this.m_agencyPeer),
+                        Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer));
+        
+                    if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) &&
+                        (!this.m_isPassive || this.consum >= maxPassiveDelay)) {
+            
                         this.m_handshakeResender.send();
                     }
-               } 
-            } else {
-                let epSet = new Set(this.m_targetPeer.eplist);
-                assert(this.m_targetPeer.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u')));
+                } 
             }
+            this.m_agencyPeer = null; // 打洞中介已经收到包，停止重发
         }
     }
 
@@ -140,7 +135,7 @@ class HandshakeSourceTask extends Task {
         if (localEPlist && localEPlist.length > 0) {
             if ((this.m_isHoleImmediately ||
                 this.m_isPassive ||
-                (this.m_handshakeResender && this.m_handshakeResender.tryTimes >= 2)) && this.m_agencyPeer) {
+                this.consum >= Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer)) && this.m_agencyPeer) {
 
                 if (!this.m_holePackage) {
                     this.m_holePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HOLE_CALL_REQ);
@@ -158,8 +153,11 @@ class HandshakeSourceTask extends Task {
             }
         }
 
+        let maxPassiveDelay = Math.max(Peer.retryInterval(this.bucket.localPeer, this.m_agencyPeer),
+            Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer));
+
         if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) &&
-            (!this.m_isPassive || (this.m_holeResender && this.m_holeResender.tryTimes >= 2))) {
+            (!this.m_isPassive || this.consum >= maxPassiveDelay)) {
 
             this.m_handshakeResender.send();
         }
@@ -168,6 +166,12 @@ class HandshakeSourceTask extends Task {
     _onCompleteImpl(result) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeSourceTask(to:${this.m_targetPeer.peerid}) complete.`);
         this._callback(result, this.m_targetPeer, this.m_isIncoming);
+        if (this.m_holeResender) {
+            this.m_holeResender.finish();
+        }
+        if (this.m_handshakeResender) {
+            this.m_handshakeResender.finish();
+        }
     }
 
     _connectedPeer() {
@@ -237,6 +241,7 @@ class HandshakeAgencyTask extends Task {
 
     _onCompleteImpl(result) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeAgencyTask(${this.m_srcPeer.peerid}=>${this.m_targetPeer.peerid}) complete.`);
+        this.m_holeResender.finish();
     }
 
     _stopImpl() {
@@ -299,6 +304,7 @@ class HandshakeTargetTask extends Task {
 
     _onCompleteImpl(result) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) HandshakeTargetTask(to:${this.m_srcPeer.peerid}) complete.`);
+        this.m_handshakeResender.finish();
     }
 
     _stopImpl() {

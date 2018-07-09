@@ -13,6 +13,10 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
 
     protected m_path: string;
 
+    public recycle() {
+
+    }
+
     public async init(): Promise<ErrorCode> {
         fs.ensureDirSync(this.m_path);
         return ErrorCode.RESULT_OK;

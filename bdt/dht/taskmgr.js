@@ -30,12 +30,14 @@ class TaskExecutor {
         this.m_servicePath = '';
     }
 
-    findPeer(peerid, isImmediately, callback = null) {
+    findPeer(peerid, isImmediately, callback = null, onStep = null) {
         for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
             if (task.type === 'FindPeerTask'
                 && task.peerid === peerid
                 && task.servicePath == this.m_servicePath
                 && !task.isComplete) {
+                    // onStep不可忽略空
+                    task.addStepListener(onStep);
                     if (callback) {
                         task.addCallback(callback);
                     }
@@ -44,6 +46,7 @@ class TaskExecutor {
         }
 
         let newTask = new FindPeerTask(this, peerid, isImmediately);
+        newTask.addStepListener(onStep);
         if (callback) {
             newTask.addCallback(callback);
         }
@@ -94,22 +97,22 @@ class TaskExecutor {
         this.m_taskMgr._run(newTask);
     }
 
-    emitBroadcastEvent(eventName, params, sourcePeer, taskid, {timeout = BroadcastConfig.TimeoutMS, passPeerid = null} = {}, callback) {
+    emitBroadcastEvent(eventName, params, sourcePeer, taskid, {timeout = BroadcastConfig.TimeoutMS} = {}, callback) {
         // LOG_INFO(`BROADCAST: servicePath: ${this.servicePath}: eventName: ${eventName}`);
         let task = this.m_taskMgr.m_taskMap.get(taskid);
         if (task) {
             if (callback) {
                 task.addCallback(callback);
             }
-            return false;
+            return [task, false];
         }
 
-        task = new BroadcastEventTask(this, eventName, params, sourcePeer, taskid, {timeout, passPeerid});
+        task = new BroadcastEventTask(this, eventName, params, sourcePeer, taskid, {timeout});
         if (callback) {
             task.addCallback(callback);
         }
         this.m_taskMgr._run(task);
-        return true;
+        return [task, true];
     }
 
     splitPackage(cmdPackage, peer) {

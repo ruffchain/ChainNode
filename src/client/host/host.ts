@@ -8,7 +8,7 @@ import '../bdt/host';
 import '../pow/host';
 import '../dpos/host';
 
-
+Error.stackTraceLimit = 1000;
 
 async function main() {
     let command = parseCommand();

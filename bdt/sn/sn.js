@@ -8,6 +8,7 @@ const PackageModule = require('../bdt/package.js');
 const ResendQueue = require('./resend_queue.js');
 const PeerInfoCache = require('./peerinfo_cache.js');
 const SNDHT = require('./sn_dht.js');
+const SequenceU32 = BaseUtil.SequenceU32;
 
 const LOG_INFO = Base.BX_INFO;
 const LOG_WARN = Base.BX_WARN;
@@ -44,8 +45,7 @@ const Result = {
 
 class PackageHelper {
     constructor() {
-        // [1, PackageHelper.MAX_SEQ]
-        this.m_nextSeq = Math.round(Math.random() * (PackageHelper.MAX_SEQ - 1)) + 1;
+        this.m_nextSeq = SequenceU32.random();
     }
 
     createPackage(cmdType) {
@@ -85,15 +85,11 @@ class PackageHelper {
     }
 
     _genSeq() {
-        let seq = this.m_nextSeq++;
-        if (this.m_nextSeq > PackageHelper.MAX_SEQ) {
-            this.m_nextSeq = 1;
-        }
+        let seq = this.m_nextSeq;
+        this.m_nextSeq = SequenceU32.add(this.m_nextSeq, 1);
         return seq;
     }
 }
-PackageHelper.MAX_SEQ = 0x7FFFFFFF;
-
 
 class SN extends EventEmitter {
     constructor(peerid, mixSocket, options) {
@@ -169,9 +165,9 @@ class SN extends EventEmitter {
     signinDHT(dht, isSeed) {
         if (!this.m_snDHT) {
             let options = {
-                MINI_ONLINE_TIME_MS: this.m_options.minOnlineTime2JoinDHT,
-                RECENT_SN_CACHE_TIME: this.m_options.recentSNCacheTime,
-                REFRESH_SN_DHT_INTERVAL: this.m_options.refreshSNDHTInterval,
+                minOnlineTime2JoinDHT: this.m_options.minOnlineTime2JoinDHT,
+                recentSNCacheTime: this.m_options.recentSNCacheTime,
+                refreshSNDHTInterval: this.m_options.refreshSNDHTInterval,
             };
             this.m_snDHT = new SNDHT(dht, options);
         }
@@ -267,7 +263,7 @@ class SN extends EventEmitter {
                 if (!this.m_snDHT.isJoinedDHT) {
                     respBody.offline = true;
                 } else {
-                    let nearSN = this.m_snDHT.getRecentNearSN(reqBody.peerid);
+                    let nearSN = this.m_snDHT.getNearSN(reqBody.peerid).peerid;
                     if (nearSN && nearSN !== this.m_peerid) {
                         respBody.nearSN = nearSN;
                     }
@@ -319,6 +315,10 @@ class SN extends EventEmitter {
         calledHeader.dest.peeridHash = callReq.header.dest.peeridHash;
         calledHeader.sessionid = callReq.header.sessionid;
     
+        if (callReq.body.eplist) {
+            let srcEPSet = new Set([...srcPeerEplist, ...callReq.body.eplist]);
+            srcPeerEplist = [...srcEPSet];
+        }
         let calledBody = {
             src: srcPeerid,
             dest: destPeerid,
@@ -359,9 +359,16 @@ class SN extends EventEmitter {
                     'src': reqBody.dest,
                     'dest': reqBody.src,
                     'result': result,
-                    'eplist': eplist? Array.from(eplist) : [],
-                    'time': lastUpdateTime || 0,
                 };
+            if (eplist) {
+                respBody.eplist = Array.from(eplist);
+                respBody.time = lastUpdateTime || 0;
+            }
+
+            let nearSN = this.m_snDHT.getNearSN(destPeerid, true);
+            if (nearSN && nearSN.peerid !== this.m_peerid && nearSN.eplist && nearSN.eplist.length > 0) {
+                respBody.nearSN = {peerid: nearSN.peerid, eplist: nearSN.eplist};
+            }
             callResp.body = respBody;
             this._sendPackage(socket, callResp, remote);
         };

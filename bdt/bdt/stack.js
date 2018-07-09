@@ -5,7 +5,7 @@ const {BDT_ERROR, BDTPackage} = require('./package');
 const {PingClient, MultiSNPingClient} = require('./pingclient');
 const baseModule = require('../base/base');
 const blog = baseModule.blog;
-const {EndPoint} = require('../base/util');
+const {EndPoint, SequenceU32} = require('../base/util');
 
 class BDTStack extends EventEmitter {
     constructor(peerid, eplist, mixSocket, peerFinder, options) {
@@ -97,10 +97,16 @@ class BDTStack extends EventEmitter {
             pingTimeout: 12*25*1000,
             // ping包可延迟时间
             pingDelay: 500,
+            // 初始搜索上线SN时间间隔，SN为空
+            searchSNIntervalInit: 10000,
+            // 连接过程搜索上线SN时间间隔，SN不为空，但都还没上线
+            searchSNIntervalConnecting: 30000,
+            // 搜索上线SN时间间隔
+            searchSNInterval: 600000,
             // 测试下线SN的时间间隔
-            tryOfflineSNInterval: 120000,
-            // 查找SN失败后再次尝试间隔
-            tryFindSNInterval: 3000,
+            tryOfflineSNInterval: 30000,
+            // 查找对方SN失败后再次尝试间隔
+            tryFindSNInterval: 1000,
             // 超时误差，用于检测系统时间更新，避免过长或过短超时
             timeoutDeviation: 500,
         };
@@ -126,6 +132,13 @@ class BDTStack extends EventEmitter {
     }
 
     get eplist() {
+        if (this.m_pingClient) {
+            return this.m_pingClient.localEPList;
+        }
+        return this.m_eplist;
+    }
+
+    get listenEPList() {
         return this.m_eplist;
     }
 
@@ -190,7 +203,7 @@ class BDTStack extends EventEmitter {
     }
 
     initSeq() {
-        return Math.floor(((Date.now() + Math.random() * 10000000) % 65535) * 32768);
+        return SequenceU32.random();
     }
 
     _create() {
@@ -408,8 +421,8 @@ class BDTStack extends EventEmitter {
         return opt;
     }
 
-    _findSN(peerid) {
-        return this.m_peerFinder.findSN(peerid);
+    _findSN(peerid, fromCache, onStep) {
+        return this.m_peerFinder.findSN(peerid, fromCache, onStep);
     }
 
     _findPeer(peerid) {

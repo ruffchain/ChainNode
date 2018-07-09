@@ -4,34 +4,38 @@ import {IReadableStorage, IReadWritableStorage} from '../storage/storage';
 import {Chain} from '../value_chain/chain';
 import {BigNumber} from 'bignumber.js';
 import * as assert from 'assert';
+import GlobalConfig = require('../chain/globalConfig');
 
 //DPOS的节点会定时出块，如果时间间隔已到，指定节点还未出块的话，就跳过这个节点，下一个节点出块
 //出块间隔时间必须远小于创建并广播块到所有DPOS出块节点的时间
 //所有time单位均为seconds
-export const blockInterval = 10    //先定一分钟一个块
 
-export const maxBlockIntervalOffset = 1
+// 出块间隔时间
+// export const blockInterval = 10    
 
-//重新选举的块时间，暂时设定成每10块选举一次
-export const reSelectionBlocks = 10
+// 出块间隔允许的最大误差
+// export const maxBlockIntervalOffset = 1
 
-//最大出块者总数，先定成21
-export const maxCreator = 21;
+// //重新选举的块时间，暂时设定成每10块选举一次
+// export const reSelectionBlocks = 10
 
-//最小出块者总数，先定成2
-export const minCreator = 2;
+// //最大出块者总数，先定成21
+// export const maxCreator = 21;
 
-//每个节点最多可以投的producer数量
-export const dposVoteMaxProducers = 30;
+// //最小出块者总数，先定成2
+// export const minCreator = 2;
 
-//超过该时间不出块就将被封禁
-export const timeOffsetToLastBlock = 60 * 60 * 24; 
+// //每个节点最多可以投的producer数量
+// export const dposVoteMaxProducers = 30;
 
-//封禁时长
-export const timeBan = 30 * timeOffsetToLastBlock;
+// //超过该时间不出块就将被封禁
+// export const timeOffsetToLastBlock = 60 * 60 * 24;
 
-//每unbanBlocks个块后进行一次解禁计算
-export const unbanBlocks = reSelectionBlocks * 2;
+// //封禁时长
+// export const timeBan = 30 * timeOffsetToLastBlock;
+
+// //每unbanBlocks个块后进行一次解禁计算
+// export const unbanBlocks = reSelectionBlocks * 2;
 
 export class ViewContext {
     public static kvDPOS: string = 'dpos';
@@ -51,7 +55,7 @@ export class ViewContext {
         if (_number === 0) {
             return 0;
         }
-        return Math.floor((_number - 1) / reSelectionBlocks) * reSelectionBlocks;
+        return Math.floor((_number - 1) / GlobalConfig.getConfig('reSelectionBlocks')) * GlobalConfig.getConfig('reSelectionBlocks');
     }
 
 
@@ -113,7 +117,44 @@ export class ViewContext {
         return {err: ErrorCode.RESULT_OK, vote};
     }
 
-    async getValidCandidates(curStorage: IReadableStorage): Promise<{err: ErrorCode, candidates?: string[]}> {
+    async getCandidates(curStorage: IReadableStorage): Promise<{err: ErrorCode, candidates?: string[]}> {
+        let kvDPos = (await curStorage.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let gr = await this.getValidCandidates(curStorage);
+        if (gr.err) {
+            return {err: gr.err};
+        }
+
+        let gv = await kvDPos.hgetall(ViewContext.keyVote);
+        if (gv.err) {
+            return {err: gv.err};
+        }
+        let vote = new Map<string, BigNumber>();
+        for (let v of gv.value!) {
+            vote.set(v.key, new BigNumber(v.value));
+        }
+        gr.candidates!.sort((a: string, b: string): number => {
+            if (vote.has(a) && vote.has(b)) {
+                if (vote.get(a)!.eq(vote.get(b)!)) {
+                    return 0;
+                }
+                return vote.get(a)!.gt(vote.get(b)!) ? -1 : 1
+            }
+
+            if (!vote.has(a) && !vote.has(b)) {
+                return 0;
+            }
+
+            if (vote.has(a)) {
+                return -1;
+            }
+
+            return 1;
+        });
+
+        return {err: ErrorCode.RESULT_OK, candidates: gr.candidates!};
+    }
+    
+    protected async getValidCandidates(curStorage: IReadableStorage): Promise<{err: ErrorCode, candidates?: string[]}> {
         let kvDPos = (await curStorage.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let gr = await kvDPos.hgetall(ViewContext.keyCandidate);
         if (gr.err) {
@@ -179,7 +220,7 @@ export class Context extends ViewContext {
                 return (l.vote.gt(r.vote) ? -1 : 1);
             }
         });
-        let creators = election.slice(0, maxCreator).map((x) => {
+        let creators = election.slice(0, GlobalConfig.getConfig('maxCreator')).map((x) => {
             return x.address;
         });
 
@@ -187,7 +228,7 @@ export class Context extends ViewContext {
             return {err: ErrorCode.RESULT_OK};
         }
 
-        if (creators.length < minCreator) {
+        if (creators.length < GlobalConfig.getConfig('minCreator')) {
             //这种情况下不需要更换出块序列,但是有可能有的出块者被禁止了，检查是否能补充进去
             let minersInfo = await this.getNextMiners(curStorage);
             assert(minersInfo.err === ErrorCode.RESULT_OK, 'miners must exist');
@@ -197,10 +238,10 @@ export class Context extends ViewContext {
                     currMiners.push(m);
                 }
             }
-            if (currMiners.length < minCreator) {
+            if (currMiners.length < GlobalConfig.getConfig('minCreator')) {
                 //这个时候就需要从外面补充了
                 let currLen = currMiners.length;
-                while (creators.length > 0 && currMiners.length < minCreator) {
+                while (creators.length > 0 && currMiners.length < GlobalConfig.getConfig('minCreator')) {
                     let m = creators.shift();
                     let i = 0;
                     for (i = 0; i < currLen; i++) {
@@ -213,7 +254,7 @@ export class Context extends ViewContext {
                     }
                 }
             }
-            if (currMiners.length < minCreator) {
+            if (currMiners.length < GlobalConfig.getConfig('minCreator')) {
                 //补充起来后，数量都还小于最小出块人数，这种情况是不是不应该存在啊，先报错吧
                 //throw new Error();
                 creators = minersInfo.creators!;
@@ -317,7 +358,7 @@ export class Context extends ViewContext {
     }
 
     async vote(curStorage: IReadWritableStorage, from: string, candidates: string[]): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
-        assert(candidates.length > 0 && candidates.length <= dposVoteMaxProducers, 'candidates.length must right');
+        assert(candidates.length > 0 && candidates.length <= GlobalConfig.getConfig('dposVoteMaxProducers'), 'candidates.length must right');
         
         let cans = await this.getValidCandidates(curStorage);
         if (cans.err) {
@@ -376,6 +417,16 @@ export class Context extends ViewContext {
         return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
     }
 
+    async registerToCandidate(curStorage: IReadWritableStorage, candidate: string): Promise<{err: ErrorCode, returnCode?: ErrorCode}>  {
+        let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        if ((await kvDPos.hexists(ViewContext.keyCandidate, candidate))) {
+            return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
+        }
+
+        await kvDPos.hset(ViewContext.keyCandidate, candidate, 0);
+        return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
+    }
+
     async unbanProducer(curStorage: IReadWritableStorage, timestamp: number) {
         let kvDPos = (await curStorage.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
 
@@ -396,8 +447,8 @@ export class Context extends ViewContext {
         for (let m of minersInfo.creators!) {
             for (let i = 0; i < allTimeInfo.value.length; i++) {
                 if (m === allTimeInfo.value[i].key) {
-                    if (timestamp - (allTimeInfo.value[i].value as number) >= timeOffsetToLastBlock) {
-                        await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + timeBan);
+                    if (timestamp - (allTimeInfo.value[i].value as number) >= GlobalConfig.getConfig('timeOffsetToLastBlock')) {
+                        await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + GlobalConfig.getConfig('timeBan'));
                     }
                     break;
                 }

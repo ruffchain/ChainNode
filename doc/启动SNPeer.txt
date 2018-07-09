@@ -3,6 +3,16 @@ SNPeer必须运行在有外网IP的服务器上，给BDT网络中的节点提供
 启动SNPeer:
 在根目录运行以下命令
 node bdt/snPeer.js peerid=<SNPeerID> out_host=<服务器IP> tcpPort=<tcp监听端口> udpPort=<udp监听端口>
+
+SN日志：
+sn 日志默认在bdt/log目录下
+sn 日志相关的命令参数
+node bdt/snPeer.js peerid=<SNPeerID> out_host=<服务器IP> tcpPort=<tcp监听端口> udpPort=<udp监听端口> log_level=<日志等级> log_file_dir=<日志目录> log_file_name=<日志前缀名字>
+
+log_level     默认值 'all'    可选输入值 [all, trace, debug, info, warn, error, off]
+log_file_dir  默认值 './log'
+log_file_name 默认值 'bdt'
+
 启动SNPeer时，服务器IP必须填写有效的公网IP, 否则会导致客户端无法连接！
 
 推荐使用pm2等进程管理工具启动SNPeer，以便出错重启。SNPeer如果下线，会对它所在的P2P网络产生整体影响！！

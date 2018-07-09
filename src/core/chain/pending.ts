@@ -1,16 +1,12 @@
-import {Transaction,Receipt} from './transaction';
-import {Chain, ChainOptions} from './chain';
-import {BlockContent, BlockHeader, Block} from './block';
+import {Transaction} from './transaction';
+import {Chain} from './chain';
+import {BlockHeader} from './block';
 import {ErrorCode} from '../error_code';
-import * as assert from 'assert';
 import {LoggerInstance} from '../lib/logger_util';
-import {StorageDumpSnapshot, StorageManager, IReadableStorage} from '../storage/storage_manager';
+import {StorageManager, IReadableStorage} from '../storage/storage_manager';
 import {Lock} from '../lib/Lock';
+import GlobalConfig = require('./globalConfig');
 
-enum TransactionStatus {
-    InChain = 1,
-    Pending = 2,
-}
 export type TransactionWithTime = {tx: Transaction, ct: number};
 
 export class PendingTransactions {
@@ -21,7 +17,7 @@ export class PendingTransactions {
     protected m_storageManager: StorageManager;
     protected m_storageView?: IReadableStorage;
     protected m_curHeader?: BlockHeader;
-    protected m_txLiveTime: number = 60*60*1000;
+    protected m_txLiveTime: number;
     protected m_pendingLock: Lock;
     constructor(options: {storageManager: StorageManager, logger: LoggerInstance, txlivetime?: number}) {
         this.m_transactions = [];
@@ -31,6 +27,8 @@ export class PendingTransactions {
         this.m_storageManager = options.storageManager;
         if (options.txlivetime) {
             this.m_txLiveTime = options.txlivetime;
+        } else {
+            this.m_txLiveTime = GlobalConfig.getConfig('txlivetime', 60*60);
         }
         this.m_pendingLock = new Lock();
     }
@@ -267,7 +265,7 @@ export class PendingTransactions {
     }
 
     protected isTimeout(txTime: TransactionWithTime): boolean {
-        return Date.now() >= txTime.ct + this.m_txLiveTime;
+        return Date.now() >= txTime.ct + this.m_txLiveTime * 1000;
     }
 
     protected addToQueue(txTime: TransactionWithTime) {

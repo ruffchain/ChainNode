@@ -72,6 +72,7 @@ export class ChainNode extends EventEmitter {
         headerStorage: HeaderStorage, 
         logger: LoggerInstance}) {
         super();
+        // net/node
         this.m_node = options.node;
         this.m_blockStorage = options.blockStorage;
         this.m_headerStorage = options.headerStorage;
@@ -84,6 +85,13 @@ export class ChainNode extends EventEmitter {
         this.m_node.on('error', (conn: NodeConnection, err: ErrorCode) => {
             this._onConnectionError(conn.getRemote());
         });
+
+        // 收到net/node的ban事件, 调用 ChainNode的banConnection方法做封禁处理
+        // 日期先设置为按天
+        this.m_node.on('ban', (remote:string) => {
+            this.banConnection(remote, BAN_LEVEL.day)
+        })
+
         this.m_blockTimeout = options.blockTimeout ? options.blockTimeout : 10000;
         this.m_headersTimeout = options.headersTimeout ? options.headersTimeout : 30000;
         this.m_reqTimeoutTimer = setInterval(()=>{
@@ -126,6 +134,11 @@ export class ChainNode extends EventEmitter {
     }   
 
     public async init() {
+        // 读取创始块的hash值， 并将其传入 net/node
+        const result = await this.getHeader(0);
+        const genesis_hash:string = result.header!.hash;
+        this.m_node.genesis_hash = genesis_hash
+
         await this.m_node.init();
     }
 
@@ -385,12 +398,10 @@ export class ChainNode extends EventEmitter {
                 }
                 let block = this.newBlock();
                 if (block.decode(blockReader) !== ErrorCode.RESULT_OK) {
-                    // TODO: 发坏的peer咋处理
                     this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                     return;
                 }
                 if (!block.verify()) {
-                    // TODO: 发坏的peer咋处理 
                     this.banConnection(conn.getRemote(), BAN_LEVEL.day); //可能分叉？
                     return;
                 }

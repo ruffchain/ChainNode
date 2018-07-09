@@ -25,14 +25,14 @@ class SplitPackageTask extends Task {
         this.m_cmdPackage = cmdPackage;
         this.m_peer = peer;
         this.m_address = null;
-        this.m_sendingPieces = [];
+        this.m_sendingPieces = new Map();
         this.m_owner = owner;
     }
 
     _startImpl() {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) start SplitPackage(seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) to ${this.m_sendingPieces.length} pieces.`);
         this._genPieces();
-        for (let pkg of this.m_sendingPieces) {
+        for (let [no, pkg] of this.m_sendingPieces) {
             pkg.resender.send();
         }
     }
@@ -42,26 +42,24 @@ class SplitPackageTask extends Task {
 
     _processImpl(response, remotePeer) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) response (${response.common.ackSeq}:${response.body.taskid}:${response.body.no}).`);
-        for (let i = 0; i < this.m_sendingPieces.length; i++) {
-            if (this.m_sendingPieces[i].body.no === response.body.no) {
-                this.m_sendingPieces.splice(i, 1);
-                break;
-            }
+        let arrivedPkg = this.m_sendingPieces.get(response.body.no);
+        if (arrivedPkg) {
+            this.m_sendingPieces.delete(response.body.no);
+            arrivedPkg.resender.finish();
         }
 
-        if (this.m_sendingPieces.length === 0) {
+        if (this.m_sendingPieces.size === 0) {
             LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SplitPackage (seq:${this.m_cmdPackage.common.seq},type:${this.m_cmdPackage.cmdType},taskid:${this.id}) done.`);
             this._onComplete(DHTResult.SUCCESS);
         }
     }
 
     _retryImpl() {
-        for (let pkg of this.m_sendingPieces) {
-            pkg.resender.send();
-        }
+        this.m_sendingPieces.forEach(pkg => pkg.resender.send());
     }
 
     _onCompleteImpl(result) {
+        this.m_sendingPieces.forEach(pkg => pkg.resender.finish());
     }
 
     _genPieces() {
@@ -94,7 +92,7 @@ class SplitPackageTask extends Task {
                 Peer.retryInterval(this.bucket.localPeer, this.m_peer),
                 Config.Package.RetryTimes,
                 true);
-            this.m_sendingPieces.push(piecePkg);
+            this.m_sendingPieces.set(pkgNo, piecePkg);
         }
     }
 

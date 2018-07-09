@@ -41,7 +41,6 @@ class BlockHeaderEntry {
     }
 }
 
-// TODO: 在db之上需要一级LRU缓存提高性能
 export class HeaderStorage {
     private m_db: sqlite.Database;
     private m_blockHeaderType: new () => BlockHeader;
@@ -220,7 +219,7 @@ export class HeaderStorage {
     public async getNextHeader(hash: string): Promise<{err: ErrorCode, results?: {header: BlockHeader, verified: VERIFY_STATE}[]}> {
         let query: any;
         try {
-            query = await this.m_db.all(getByPreBlockSql);
+            query = await this.m_db.all(getByPreBlockSql, {$pre:hash});
         } catch (e) {
             this.m_logger.error(`getNextHeader ${hash} failed, ${e}`);
             return {err: ErrorCode.RESULT_EXCEPTION};

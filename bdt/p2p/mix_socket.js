@@ -9,6 +9,21 @@ const baseModule = require('../base/base');
 const blog = baseModule.blog;
 const PaceSender = require('./pace_sender.js');
 
+// <TODO> 丢包测试
+function lostPackage() {
+    return false;
+    return Math.round(Math.random() * 5) === 0;
+}
+
+// 对0.0.0.0地址替换为回环地址
+function mapZeroIP(remoteAddr) {
+    let result = remoteAddr.address;
+    if (!result || EndPoint.isZero(remoteAddr)) {
+        result = EndPoint.loopback(remoteAddr.protocol);
+    }
+    return result;
+}
+
 // 多地址混合socket
 class MixSocket extends EventEmitter {
     /**
@@ -326,6 +341,9 @@ class MixSocket extends EventEmitter {
             }
 
             if (protocol === MixSocket.PROTOCOL.udp) {
+                if (lostPackage()) {
+                    return;
+                }
                 let {connection} = this._updateRouteTable(sendingSocket, remoteAddr, protocol, false);
                 let buffer = getSendingBuffer();
                 if (!buffer) {
@@ -338,7 +356,7 @@ class MixSocket extends EventEmitter {
                 blog.info(`send udp: (${buffer.length}|${sendCount}),total:(${this.m_stat.udp.send.bytes}|${this.m_stat.udp.send.pkgs})`);
                 sendCount++;
                 // 用系统默认地址（localhost）替换'0.0.0.0'
-                sendingSocket.send(buffer, remoteAddr.port, EndPoint.isZero(remoteAddr)? undefined : remoteAddr.address,
+                sendingSocket.send(buffer, remoteAddr.port, mapZeroIP(remoteAddr),
                     err => {
                         if (err) {
                             blog.error(`Send package error: ${err.message}`);
@@ -568,6 +586,10 @@ class MixSocket extends EventEmitter {
     }
 
     _udpMessage(connection, msg, remoteAddr, localAddr) {
+        if (lostPackage()) {
+            return;
+        }
+
         if (msg && msg.length && this.m_udpListeners.process) {
             remoteAddr.protocol = MixSocket.PROTOCOL.udp;
             if (!EndPoint.isNAT(remoteAddr)) {
@@ -638,12 +660,12 @@ class MixSocket extends EventEmitter {
 
             let tryBindNextPort = () => {
                 let localAddr = {
-                    family: net.isIPv4(ip)? 'IPv4': 'IPv6',
+                    family: net.isIPv4(ip)? EndPoint.FAMILY.IPv4: EndPoint.FAMILY.IPv6,
                     address: ip,
                     port: curPort,
                     protocol: MixSocket.PROTOCOL.udp,
                 }
-                const socket = dgram.createSocket({type: localAddr.family === 'IPv4' ? 'udp4': 'udp6', reuseAddr: true});
+                const socket = dgram.createSocket({type: localAddr.family === EndPoint.FAMILY.IPv4 ? 'udp4': 'udp6', reuseAddr: true});
                 socket.once('listening', () => {
                     socket.on('message', (msg, rinfo) => {
                         let remoteAddr = rinfo;
@@ -664,7 +686,7 @@ class MixSocket extends EventEmitter {
                 ));
 
                 socket.on('error', error => {
-                    blog.debug(`[mixsock]: socket bind udp ${ip}:${curPort} failed`);
+                    blog.debug(`[mixsock]: socket bind udp ${ip}:${curPort} failed, error:${error}.`);
                     setImmediate(() => this._onSocketError(error, socket, localAddr, null, MixSocket.PROTOCOL.udp));
                     socket.close();
                     if (bindSucc || this.m_asyncCloseOp) {
@@ -693,7 +715,7 @@ class MixSocket extends EventEmitter {
             
             let tryBindNextPort = () => {
                 let localAddr = {
-                    family: net.isIPv4(ip)? 'IPv4': 'IPv6',
+                    family: net.isIPv4(ip)? EndPoint.FAMILY.IPv4 : EndPoint.FAMILY.IPv6,
                     address: ip,
                     port: curPort,
                     protocol: MixSocket.PROTOCOL.tcp,
@@ -730,7 +752,7 @@ class MixSocket extends EventEmitter {
                 ));
 
                 server.on('error', error => {
-                    blog.debug(`[mixsock]: socket bind tcp ${ip}:${curPort} failed`);
+                    blog.debug(`[mixsock]: socket bind tcp ${ip}:${curPort} failed, error:${error}.`);
                     setImmediate(() => this._onSocketError(error, server, localAddr, null, MixSocket.PROTOCOL.tcp));
                     server.close();
                     if (bindSucc || this.m_asyncCloseOp) {
@@ -955,11 +977,9 @@ class MixSocket extends EventEmitter {
                 port: remoteAddr.port,
             };
             // '0.0.0.0'启用默认的localhost地址
-            if (!EndPoint.isZero(remoteAddr)) {
-                opt.host = remoteAddr.address;
-            }
+            opt.host = mapZeroIP(remoteAddr);
             if (localAddr) {
-                if (localAddr.address) {
+                if (localAddr.address && !EndPoint.isZero(localAddr)) {
                     opt.localAddress = localAddr.address;
                 }
                 if (localAddr.port) {

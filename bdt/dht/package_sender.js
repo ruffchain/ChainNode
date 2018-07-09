@@ -63,8 +63,8 @@ class PackageSender extends EventEmitter {
             if (closePeerList && closePeerList.length > 0) {
                 for (let closePeer of closePeerList) {
                     if (closePeer.isOnline(this.m_bucket.TIMEOUT_MS) &&
-                        closePeer.peerid != peer.peerid &&
-                        closePeer.peerid != peerStruct.peerid) {
+                        closePeer.peerid !== peer.peerid &&
+                        closePeer.peerid !== peerStruct.peerid) {
                         recommandNodes.push({id: closePeer.peerid, eplist: closePeer.eplist});
                     }
                 }
@@ -93,10 +93,7 @@ class PackageSender extends EventEmitter {
             return;
         }
 
-        let epSet = new Set(eplist);
         LOG_INFO(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
-        assert((peer.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u'))),
-            `from:${localPeer.peerid},to:${peer.peerid},pkg.src.peerid:${cmdPackage.src.peerid},pkg.dest.peerid:${cmdPackage.dest.peerid}`);
 
         let options = {
             ignoreCache: ignoreRouteCache,
@@ -122,8 +119,6 @@ class PackageSender extends EventEmitter {
         
         cmdPackage.dest.ep = EndPoint.toString(remoteAddr);
         LOG_INFO(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
-        assert(cmdPackage.dest.peerid === peer.peerid && cmdPackage.src.peerid === this.m_bucket.localPeer.peerid && (peer.peerid === 'SEED_DHT_PEER_10000' || (cmdPackage.dest.ep !== '4@106.75.175.123@10010@t' && cmdPackage.dest.ep !== '4@106.75.175.123@10000@u')),
-            `from:${this.m_bucket.localPeer.peerid},to:${peer.peerid},pkg.src.peerid:${cmdPackage.src.peerid},pkg.dest.peerid:${cmdPackage.dest.peerid}`);
         
         let encoder = DHTPackageFactory.createEncoder(cmdPackage);
         let buffer = encoder.encode();
@@ -157,35 +152,33 @@ PackageSender.Events = {
     localPackage: 'localPackage',
 }
 
-let g_resenderQueue = [];
+let RESENDER_ID = 1;
+let g_resenderMap = new Map();
 function removeTimeoutResender() {
     let now = Date.now();
-    if (g_resenderQueue.length > 1024) {
-        let i = 0;
-        while (i < g_resenderQueue.length) {
-            let resender = g_resenderQueue[i];
-            // 先把超时包去掉
-            if (resender.isTimeout() || now - resender.lastSendTime > 600000) {
-                resender.m_timesLimitForce = 0;
-                g_resenderQueue.splice(i, 1);
-            } else {
-                i++;
-            }
-        }
-    }
+    if (g_resenderMap.size > 1024) {
+        // 先把超时包去掉
+        let timeoutResenders = [];
+        g_resenderMap.forEach((resender, id) => {
+            if (resender.isTimeout() || 
+                resender.isFinish() || 
+                now - resender.lastSendTime > 600000) {
 
-    if (g_resenderQueue.length > 1024) {
-        let i = 0;
-        while (i < g_resenderQueue.length) {
-            let resender = g_resenderQueue[i];
-            // 重发包太多时候，限制最多重发两次
-            if (resender.tryTimes > 2) {
-                resender.m_timesLimitForce = 0;
-                g_resenderQueue.splice(i, 1);
-            } else {
-                i++;
+                resender.abort();
+                timeoutResenders.push(id);
             }
+        });
+
+        if (g_resenderMap.size > 1024) {
+            g_resenderMap.forEach((resender, id) => {
+                if (resender.tryTimes > 2) {
+                    resender.abort();
+                    timeoutResenders.push(id);
+                }
+            });
         }
+
+        timeoutResenders.forEach(id => g_resenderMap.delete(id));
     }
 }
 
@@ -204,8 +197,10 @@ class ResendControlor {
         this.m_timesLimitForce = timesLimit;
         this.m_lastSendTime = 0;
         this.m_isImmediately = isImmediately;
+        this.m_isFinish = false;
+        this.m_id = RESENDER_ID++;
 
-        g_resenderQueue.push(this);
+        g_resenderMap.set(this.m_id, this);
         removeTimeoutResender();
     }
 
@@ -217,6 +212,9 @@ class ResendControlor {
         this.onSend();
         let delay = (this.m_isImmediately && this.m_tryTimes === 1)? 0 : (this.m_interval >> 1);
         this.m_sender.sendPackage(this.m_peer, this.m_pkg, (this.m_tryTimes % 2 === 0), delay);
+        if (this.isTimeout()) {
+            g_resenderMap.delete(this.m_id);
+        }
     }
 
     onSend() {
@@ -237,6 +235,16 @@ class ResendControlor {
 
     abort() {
         this.m_timesLimitForce = 0;
+        g_resenderMap.delete(this.m_id);
+    }
+
+    finish() {
+        this.m_isFinish = true;
+        g_resenderMap.delete(this.m_id);
+    }
+
+    isFinish() {
+        return this.m_isFinish;
     }
 
     get tryTimes() {
@@ -245,6 +253,10 @@ class ResendControlor {
     
     get lastSendTime() {
         return this.m_lastSendTime;
+    }
+
+    get peer() {
+        return this.m_peer;
     }
 }
 

@@ -142,4 +142,8 @@ export class StorageManager {
             }
         }
     }
+
+    public recycleSnapShot() {
+        return this.m_snapshotManager.recycle();
+    }
 }

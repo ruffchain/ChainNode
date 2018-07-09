@@ -51,6 +51,10 @@ chainHost.registerNet('bdt', (commandOptions: CommandOptions): any=>{
             `4@${snconfig[1]}@${snconfig[3]}@u`
         ]
     }
-    let bdtDebug = commandOptions.has('bdtdebug')
-    return new Node({host: host, tcpport: tcpport, udpport: udpport, peerid: peerid, snPeer: snPeer, debug: bdtDebug});
+    let bdt_logger = {
+        level: commandOptions.get('bdt_log_level'),
+        //设置log目录
+        file_dir: commandOptions.get('dataDir') + '/log',
+    }
+    return new Node({host: host, tcpport: tcpport, udpport: udpport, peerid: peerid, snPeer: snPeer, logger: bdt_logger});
 });

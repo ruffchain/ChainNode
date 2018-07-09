@@ -66,7 +66,11 @@ export class PackageStreamReader extends EventEmitter {
                     offset += 2;
                     if (header.magic !== Package.magic) {
                         stateInfo.state = READER_STATE.error;
-                        setImmediate(() => {this.emit('error', ErrorCode.RESULT_PARSE_ERROR); });
+                        setImmediate(() => this.emit(
+                            'error',
+                            ErrorCode.RESULT_PARSE_ERROR,
+                            'magic'   // 标记一下触发error的字段
+                        ));
                     }
                     header.version = headerBuffer.readUInt16BE(offset);
                     offset += 2;

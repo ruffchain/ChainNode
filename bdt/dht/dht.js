@@ -93,7 +93,8 @@ class DHTBase extends EventEmitter {
     }
 
     // callback({result, peerlist})
-    findPeer(peerid, callback) {
+    // onStep({result, peerlist}): 阶段性返回找到的peer，部分应用更需要响应的及时性，返回true将中断本次搜索，callback返回result=ABORT(7)
+    findPeer(peerid, callback, onStep) {
         let appendLocalHost = (peers) => {
             if (peerid === this.m_bucket.localPeer.peerid) {
                 let serviceDescriptor = this.m_bucket.localPeer.findService(this.servicePath);
@@ -114,8 +115,7 @@ class DHTBase extends EventEmitter {
                     this.m_packageSender.mixSocket.eplist.forEach(ep => {
                         let addr = EndPoint.toAddress(ep);
                         if (EndPoint.isZero(addr)) {
-                            addr.address = '127.0.0.1';
-                            addr.family = 'IPv4';
+                            addr.address = EndPoint.loopback(addr.family);
                             ep = EndPoint.toString(addr);
                         }
                         eplist.push(ep);
@@ -127,23 +127,26 @@ class DHTBase extends EventEmitter {
         }
 
         const generateCallback = (handler) => (result, peers = [], n_nodes = []) => {
+            if (!handler) {
+                return;
+            }
             if (peerid === this.m_bucket.localPeer.peerid) {
                 result = 0;
                 appendLocalHost(peers);
             }
-            handler({result, peerlist: peers, n_nodes});
+            return handler({result, peerlist: peers, n_nodes});
         }
 
         if (callback) {
-            this._findPeer(peerid, generateCallback(callback));
+            this._findPeer(peerid, generateCallback(callback), generateCallback(onStep));
         } else {
             return new Promise(resolve => {
-                this._findPeer(peerid, generateCallback(resolve))
+                this._findPeer(peerid, generateCallback(resolve), generateCallback(onStep));
             });
         }
     }
 
-    _findPeer(peerid, callback) {
+    _findPeer(peerid, callback, onStep) {
         if (!Peer.isValidPeerid(peerid)) {
             if (callback) {
                 callback(DHTResult.INVALID_ARGS, []);
@@ -161,7 +164,7 @@ class DHTBase extends EventEmitter {
         */
         LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) findPeer peerid(${peerid}).`);
 
-        this.m_taskExecutor.findPeer(peerid, true, callback);
+        this.m_taskExecutor.findPeer(peerid, true, callback, onStep);
         return DHTResult.PENDING;
     }
 
@@ -227,7 +230,7 @@ class DHTBase extends EventEmitter {
             }
             */
 
-            const getValueCallback = (result, values, arrivedPeerids, n_nodes) => {
+            const getValueCallback = (result, values, arrivedPeerids) => {
                 let localValues = this.m_localValueMgr.getValue(tableName, keyName);
                 if (localValues && localValues.size > 0) {
                     if (!values) {
@@ -240,7 +243,7 @@ class DHTBase extends EventEmitter {
                     if (values && values.size > 0) {
                         result = DHTResult.SUCCESS;
                     }
-                    callback(result, values, n_nodes);
+                    callback({result, values});
                 }
             }
 
@@ -273,7 +276,7 @@ class DHTBase extends EventEmitter {
         }
     }
 
-    // listener(eventName, params, sourcePeerid)
+    // listener(eventName, params, sourcePeer)
     attachBroadcastEventListener(eventName, listener) {
         LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) attachBroadcastEventListener(${eventName})`);
         if (typeof eventName === 'string' && typeof listener === 'function') {
@@ -697,7 +700,7 @@ class DHT extends DHTBase {
 
         if (cmdPackage.nodes) {
             cmdPackage.nodes.forEach(node => {
-                assert(node.id && node.id.length, `${JSON.stringify(cmdPackage.body)}`);
+                assert(typeof node.id === 'string' && node.id.length > 0, `nodes:${cmdPackage.nodes},type:${cmdPackage.cmdType}`);
                 if (this.m_bucket.isExpandable(node.id)) {
                     this.m_taskExecutor.handshakeSource({peerid: node.id, eplist: node.eplist}, remotePeer, false, true);
                 }
@@ -725,14 +728,17 @@ class DHT extends DHTBase {
         return DHTResult.SUCCESS;
     }
 
-    ping(remotePeerInfo) {
+    ping(remotePeerInfo, immediate) {
         LOG_ASSERT(Peer.isValidPeerid(remotePeerInfo.peerid), `ActivePeer peerid is invalid:${remotePeerInfo.peerid}.`);
         if (!Peer.isValidPeerid(remotePeerInfo.peerid)) {
             return DHTResult.INVALID_ARGS;
         }
-        this.m_routeTable.ping(remotePeerInfo);
-    }
 
+        if (immediate || this.m_bucket.isExpandable(remotePeerInfo.peerid)) {
+            this.m_routeTable.ping(remotePeerInfo);
+        }
+        return DHTResult.SUCCESS;
+    }
 
     // 对某个节点发起主动握手
     handshake(remotePeer, agencyPeer, callback) {

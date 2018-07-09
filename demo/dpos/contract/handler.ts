@@ -34,3 +34,7 @@ handler.addTX('mortgage', async (context: TransactionContext, params: any): Prom
 handler.addTX('unmortgage', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
     return await context.unmortgage(context.caller, new BigNumber(params));
 });
+
+handler.addTX('register', async (context: TransactionContext, params: any): Promise<ErrorCode> => {
+    return await context.register(context.caller);
+});

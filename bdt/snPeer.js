@@ -7,6 +7,7 @@ const {
     BLOG_LEVEL_OFF,
 } = require('./base/base');
 const P2P = require('./p2p/p2p');
+const path = require('path');
 
 
 
@@ -16,7 +17,10 @@ const defaultParams = {
     peerid: 'SN_PEER',
     tcpPort: 10000,
     udpPort: 10010,
-    logger: false,
+    debug: true,
+    log_level: 'all',
+    log_file_dir: path.resolve('./log'),
+    log_file_name: 'bdt'
 }
 
 let params = process.argv.slice(2)
@@ -31,10 +35,11 @@ let params = process.argv.slice(2)
 params = Object.assign(defaultParams, params)
 console.log(params)
 
-
-if ( !params.logger ) {
-    BX_SetLogLevel(BLOG_LEVEL_OFF);
-}
+P2P.debug({
+    level: params.log_level,
+    file_dir: params.log_file_dir,
+    file_name: params.log_file_name,
+})
 
 async function start() {
     const OUT_HOST = params.out_host

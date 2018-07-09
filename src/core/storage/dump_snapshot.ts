@@ -58,4 +58,5 @@ export interface IStorageSnapshotManager {
     createSnapshot(from: Storage, blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}>;
     getSnapshot(blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}>;
     releaseSnapshot(blockHash: string): void;
+    recycle(): void;
 }

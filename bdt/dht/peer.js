@@ -20,7 +20,7 @@ class Peer {
         let now = Date.now();
         this.m_peerid = peerid;
         this.m_eplist = new Set(eplist || []);
-        assert(peerid === 'SEED_DHT_PEER_10000' || (!this.m_eplist.has('4@106.75.175.123@10010@t') && !this.m_eplist.has('4@106.75.175.123@10000@u')));
+        assert(typeof peerid === 'string' && peerid.length > 0, `${peerid}`);
         
         this._eraseZeroEP();
         this.m_additionalInfo = null;
@@ -60,7 +60,6 @@ class Peer {
     set eplist(newValue) {
         if (newValue !== this.m_eplist) {
             this.m_eplist = new Set(newValue);
-            assert(this.peerid === 'SEED_DHT_PEER_10000' || (!this.m_eplist.has('4@106.75.175.123@10010@t') && !this.m_eplist.has('4@106.75.175.123@10000@u')));
             this._eraseZeroEP();
         }
     }
@@ -107,7 +106,6 @@ class Peer {
                     this.m_eplist.add(ep);
                 }
             }
-            assert(this.peerid === 'SEED_DHT_PEER_10000' || (!this.m_eplist.has('4@106.75.175.123@10010@t') && !this.m_eplist.has('4@106.75.175.123@10000@u')));
         }
     }
 
@@ -117,7 +115,6 @@ class Peer {
             hash: this.m_hash,
             eplist: [...this.eplist],
         };
-        assert(this.peerid === 'SEED_DHT_PEER_10000' || (!this.m_eplist.has('4@106.75.175.123@10010@t') && !this.m_eplist.has('4@106.75.175.123@10000@u')));
         
         return obj;
     }
@@ -297,12 +294,14 @@ class Peer {
     }
 
     static retryInterval(peer1, peer2) {
+        peer1 = peer1 || {};
+        peer2 = peer2 || {};
         let rtt = Math.max(peer1.RTT || 0, peer2.RTT || 0);
         let interval = rtt;
         if (rtt < Config.Package.RetryInterval) {
             interval = Math.max(rtt * 2, Config.Package.RetryInterval);
         } else {
-            interval = rtt * 1.2;
+            interval = Math.max(Config.Package.RetryInterval * 2, rtt * 1.2);
         }
         return Math.floor(interval);
     }
@@ -351,7 +350,6 @@ class LocalPeer extends Peer {
             if (eplist) {
                 for (let ep of eplist) {
                     this.m_eplist.set(ep, {isInitEP: true});
-                    assert(peerid === 'SEED_DHT_PEER_10000' || (ep !== '4@106.75.175.123@10010@t' && ep !== '4@106.75.175.123@10000@u'));
                 }
                 this._eraseZeroEP();
             }
@@ -359,8 +357,6 @@ class LocalPeer extends Peer {
         } else {
             this.m_initEPCount = 0;
             _eplistWithUpdateState.forEach((attr, ep) => {
-                assert(peerid === 'SEED_DHT_PEER_10000' || (ep !== '4@106.75.175.123@10010@t' && ep !== '4@106.75.175.123@10000@u'));
-                
                 if (attr.isInitEP) {
                     this.m_initEPCount++;
                     this.m_eplist.set(ep, {isInitEP: true});
@@ -494,8 +490,6 @@ class LocalPeer extends Peer {
 
         _unionEPList(eplist, isReuseListener, false);
         _unionEPList(additionalEPList, true, true);
-
-        assert(this.peerid === 'SEED_DHT_PEER_10000' || (!this.m_eplist.has('4@106.75.175.123@10010@t') && !this.m_eplist.has('4@106.75.175.123@10000@u')), `${JSON.stringify(eplist)}`);
         
         this._knockOut();
     }
@@ -578,9 +572,6 @@ class LocalPeer extends Peer {
         });
 
         let obj = this.toStruct(listenEPList);
-        
-        let epSet = new Set(listenEPList);
-        assert(this.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u')));
         return obj;
     }
 

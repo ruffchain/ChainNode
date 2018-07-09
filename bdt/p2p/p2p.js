@@ -1,6 +1,7 @@
 'use strict';
 
 const EventEmitter = require('events');
+const path = require('path');
 const dgram = require('dgram');
 const assert = require('assert');
 const baseModule = require('../base/base');
@@ -94,7 +95,7 @@ class P2P extends EventEmitter {
                 return;
             }
 
-            this.m_listenerEPList = params.listenerEPList || [];
+            p2p.m_listenerEPList = params.listenerEPList || [];
 
             // create socket
             p2p._createSocket().then(ret => {
@@ -573,9 +574,45 @@ module.exports = {
     ERROR: BDT.ERROR,
 
     // so that caller can close the log of bdt
-    debug: (debug) => {
-        if ( debug == false ) {
-            BX_SetLogLevel(BLOG_LEVEL_OFF);
+    debug: (options = {}) => {
+        let level = null;
+        switch(options.level) {
+            case 'all':
+                level = baseModule.BLOG_LEVEL_ALL;
+                break;
+            case 'trace':
+                level = baseModule.BLOG_LEVEL_TRACE;
+                break;
+            case 'debug':
+                level = baseModule.BLOG_LEVEL_DEBUG;
+                break;
+            case 'info':
+                level = baseModule.BLOG_LEVEL_INFO;
+                break;
+            case 'warn':
+                level = baseModule.BLOG_LEVEL_WARN;
+                break;
+            case 'error':
+                level = baseModule.BLOG_LEVEL_ERROR;
+                break;
+            case 'check':
+                level = baseModule.BLOG_LEVEL_CHECK;
+                break;
+            case 'fatal':
+                level = baseModule.BLOG_LEVEL_FATAL;
+                break;
+            case 'off':
+                level = baseModule.BLOG_LEVEL_OFF;
+                break;
+            default:
+                level = baseModule.BLOG_LEVEL_OFF;
+        }
+
+        BX_SetLogLevel(level);
+
+        if ( typeof options.file_dir == 'string'  && options.file_dir.length >0 ) {
+            baseModule.BX_EnableFileLog(path.resolve(options.file_dir), options.file_name, '.log');
+            baseModule.blog.enableConsoleTarget(false);
         }
     }
 };

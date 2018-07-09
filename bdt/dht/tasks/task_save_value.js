@@ -49,6 +49,7 @@ class SaveValueTask extends TouchNodeConvergenceTask {
     _onCompleteImpl(result) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) SaveValue complete(${this.m_tableName})`);
         this._callback(result, this.m_arrivePeeridSet);
+        super.destroy();
     }
 
     _createPackage() {

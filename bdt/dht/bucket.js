@@ -3,6 +3,7 @@
 const Base = require('../base/base.js');
 const {Config, HashDistance, RandomGenerator, EndPoint} = require('./util.js');
 const Peer = require('./peer.js');
+const assert = require('assert');
 
 const LOG_INFO = Base.BX_INFO;
 const LOG_WARN = Base.BX_WARN;
@@ -176,7 +177,9 @@ class Bucket {
         return subBucket.removePeer(peerid);
     }
 
-    forEachPeer(peerProcessor) {
+    // 先只支持从远到近遍历
+    forEachPeer(peerProcessor, nearFirst) {
+        assert(!nearFirst);
         for (let bucket of this.m_buckets) {
             for (let peer of bucket.peerList) {
                 peerProcessor(peer);

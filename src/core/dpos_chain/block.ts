@@ -12,6 +12,7 @@ import * as ValueBlock from '../value_chain/block';
 
 import { Chain } from './chain';
 import * as Consensus from './consensus';
+import GlobalConfig = require('../chain/globalConfig');
 
 
 /** 出块计算从1开始，假设重新选举周期为100：
@@ -90,12 +91,13 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         // TODO: 可以兼容一些误差?
         let offset = this.timestamp - hr.header!.timestamp;
         if (offset < 0) {
+            chain.logger.error(`error offset ${offset}, timestamp ${this.timestamp}, genesis ${hr.header!.timestamp}`);
             return {err: ErrorCode.RESULT_OK};
         }
         // 不能偏离太远
-        let src = Math.trunc(offset / Consensus.blockInterval);
-        let min = Math.trunc((offset - Consensus.maxBlockIntervalOffset) / Consensus.blockInterval);
-        let max = Math.trunc((offset + Consensus.maxBlockIntervalOffset) / Consensus.blockInterval);
+        let src = Math.trunc(offset / GlobalConfig.getConfig('blockInterval'));
+        let min = Math.trunc((offset - GlobalConfig.getConfig('maxBlockIntervalOffset')) / GlobalConfig.getConfig('blockInterval'));
+        let max = Math.trunc((offset + GlobalConfig.getConfig('maxBlockIntervalOffset')) / GlobalConfig.getConfig('blockInterval'));
         if (src === min && src === max) {
             return {err: ErrorCode.RESULT_OK, index: src};
         } else if (src !== min) {
@@ -137,15 +139,18 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         }
         let tir = await this.getTimeIndex(chain);
         if (tir.err) {
+            chain.logger.error(`getTimeIndex failed, err ${tir.err}`);
             return {err: tir.err};
         }
         if (!tir.index) {
+            chain.logger.error(`getTimeIndex failed, no tir.index`);
             return {err: ErrorCode.RESULT_OK};
         }
         
         let thisIndex = tir.index;
         let gcr = await chain.getMiners(this);
         if (gcr.err) {
+            chain.logger.error(`getMiners failed, err ${gcr.err}`);
             return {err: gcr.err};
         }
         let electionHeader = gcr.header!;
@@ -153,10 +158,10 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         let electionIndex = tir.index!;
         let index = (thisIndex - electionIndex) % gcr.creators!.length;
         if (index < 0) {
+            chain.logger.error(`calcute index failed, thisIndex ${thisIndex}, electionIndex ${electionIndex}, creators length ${gcr.creators!.length}`);
             return {err: ErrorCode.RESULT_OK};
         }
         let creators = gcr.creators!;
         return {err: ErrorCode.RESULT_OK, miner: creators[index]};
     }
-
 }

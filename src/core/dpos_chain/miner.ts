@@ -10,7 +10,7 @@ import * as ValueMiner from '../value_chain/miner';
 import { Chain, ChainOptions } from './chain';
 import * as Consensus from './consensus';
 import { BlockHeader } from './block';
-
+import GlobalConfig = require('../chain/globalConfig');
 
 export type MinerOptions = {minerSecret: Buffer} & ValueMiner.MinerOptions & ChainOptions;
 
@@ -85,6 +85,10 @@ export class Miner extends ValueMiner.Miner {
                 return ;
             }
             this.m_logger.info(`calcuted block ${blockHeader.number} creator: ${dmr.miner}`);
+            if (!dmr.miner) {
+                assert(false, 'calcuted undefined block creator!!');
+                process.exit(1);
+            }
             if (this.m_address === dmr.miner) {
                 await this._createBlock(blockHeader);
             }
@@ -108,12 +112,13 @@ export class Miner extends ValueMiner.Miner {
             return {err: hr.err}
         }
         let now = Date.now() / 1000;
-        let nextTime = (Math.floor((now - hr.header!.timestamp) / Consensus.blockInterval)+1) * Consensus.blockInterval;
+        let blockInterval = GlobalConfig.getConfig('blockInterval');
+        let nextTime = (Math.floor((now - hr.header!.timestamp) / blockInterval)+1) * blockInterval;
 
         return {err: ErrorCode.RESULT_OK, timeout: (nextTime + hr.header!.timestamp - now)*1000};
     }
 
-    protected async _createGenesisBlock(block: Block, storage: Storage, options: CreateOptions): Promise<ErrorCode> {
+    protected async _createGenesisBlock(block: Block, storage: Storage, options: any): Promise<ErrorCode> {
         let err = await super._createGenesisBlock(block, storage, options);
         if (err) {
             return err;
@@ -124,6 +129,26 @@ export class Miner extends ValueMiner.Miner {
 
         let denv = new Consensus.Context();
         let ir = await denv.init(storage,options.candidates, options.miners);
-        return ir.err;
+        if (ir.err) {
+            return ir.err;
+        }
+        let kvr = await storage.getReadWritableKeyValue(Chain.kvConfig);
+        if (kvr.err) {
+            return kvr.err;
+        }
+
+        assert(options.consensus, 'options must have consensus');
+
+        await kvr.kv!.set('minCreateor', options.consensus.minCreateor);
+        await kvr.kv!.set('maxCreateor', options.consensus.maxCreateor);
+        await kvr.kv!.set('reSelectionBlocks', options.consensus.reSelectionBlocks);
+        await kvr.kv!.set('blockInterval', options.consensus.blockInterval);
+        await kvr.kv!.set('timeOffsetToLastBlock', options.consensus.timeOffsetToLastBlock);
+        await kvr.kv!.set('timeBan', options.consensus.timeBan);
+        await kvr.kv!.set('unbanBlocks', options.consensus.unbanBlocks);
+        await kvr.kv!.set('dposVoteMaxProducers', options.consensus.dposVoteMaxProducers);
+        await kvr.kv!.set('maxBlockIntervalOffset', options.consensus.maxBlockIntervalOffset);
+
+        return ErrorCode.RESULT_OK;
     }
 }

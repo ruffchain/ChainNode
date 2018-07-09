@@ -4,7 +4,7 @@ import { BlockHeader,Block } from './block';
 import { LoggerInstance } from 'winston';
 import {BlockStorage} from './block_storage';
 
-const initSql = 'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);';
+const initSql = 'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "address" CHAR(64) NOT NULL, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);';
 
 export class TxStorage {
     private m_db: sqlite.Database;
@@ -40,7 +40,7 @@ export class TxStorage {
 
         try {
             for (let tx of block.content.transactions) { 
-                await this.m_db.run(`insert into txview (txhash, blockheight, blockhash) values ("${tx.hash}", ${block.number}, "${block.hash}")`);
+                await this.m_db.run(`insert into txview (txhash, blockheight, blockhash) values ("${tx.hash}","${tx.address}", ${block.number}, "${block.hash}")`);
             }    
         } catch (e) {
             this.m_logger.error(e);
@@ -72,6 +72,20 @@ export class TxStorage {
         } catch (e) {
             this.m_logger.error(e);
             return {err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+
+    public async getCountByAddress(address: string): Promise<{err: ErrorCode, count?: number}> {
+        try {
+            let result = await this.m_db.get(`select count(*) as value from txview where address="${address}"`);
+            if (!result || result.value === undefined) {
+                return {err: ErrorCode.RESULT_FAILED};
+            }
+
+            return {err: ErrorCode.RESULT_OK, count: result.value as number};
+        } catch (e) {
+            this.m_logger.error(e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
 }

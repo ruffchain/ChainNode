@@ -1,6 +1,6 @@
 'use strict';
 
-const {Config, Result: DHTResult, HashDistance, RandomGenerator} = require('../dht/util.js');
+const {Config, Result: DHTResult, HashDistance} = require('../dht/util.js');
 const EventEmitter = require('events');
 const DHTPeer = require('../dht/peer.js');
 const assert = require('assert');
@@ -22,14 +22,12 @@ const LOG_ERROR = Base.BX_ERROR;
     }
 */
 
-const THIN_SEARCH_SN_INTERVAL_MS = 2000;
-const SEARCH_NEAR_SN_INTERVAL_MS = 600000;
 const SN_PEER_COUNT = 5;
 const SENSIOR_SN_COUNT = 1;
 const DEFAULT_SERVICE_SCOPE = 10;
 
 class SNDHT {
-    constructor(fatherDHT, {MINI_ONLINE_TIME_MS = 24 * 3600000, RECENT_SN_CACHE_TIME = 120000, REFRESH_SN_DHT_INTERVAL = 600000} = {}) {
+    constructor(fatherDHT, {minOnlineTime2JoinDHT = 24 * 3600000, recentSNCacheTime = 120000, refreshSNDHTInterval = 600000} = {}) {
         this.m_fatherDHT = fatherDHT;
         this.m_snDHT = this.m_fatherDHT.prepareServiceDHT([SN_DHT_SERVICE_ID]);
 
@@ -39,27 +37,23 @@ class SNDHT {
             hash: localPeer.hash,
         };
 
-        this.m_nearNormalSNDistance = HashDistance.MAX_HASH;
-        this.m_nearSensiorSNDistance = HashDistance.MAX_HASH;
         this.m_eventEmitter = new EventEmitter();
-        this.m_timer = null;
         this.m_timerJoinService = null;
         this.m_isJoinedDHT = false;
-        this.m_tryRefreshTimes = 0;
 
-        this.MINI_ONLINE_TIME_MS = MINI_ONLINE_TIME_MS;
-        this.RECENT_SN_CACHE_TIME = RECENT_SN_CACHE_TIME;
-        this.REFRESH_SN_DHT_INTERVAL = REFRESH_SN_DHT_INTERVAL;
+        this.MINI_ONLINE_TIME_MS = minOnlineTime2JoinDHT;
+        this.RECENT_SN_CACHE_TIME = recentSNCacheTime;
+        this.REFRESH_SN_DHT_INTERVAL = refreshSNDHTInterval;
 
         this.m_snOnlineListener = null;
         this.m_recentSNMap = new Map(); // 近期上线SN
 
         // <TODO>测试代码
         this.m_snDHT.__joinedDHTTimes = this.m_snDHT.__joinedDHTTimes || 0;
-        this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, (eventName, params, sourcePeerid) => {
-            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeerid,
-                `eventName:${eventName},params:${JSON.stringify(params)},sourcePeerid:${sourcePeerid}`);
-            assert(this.m_snDHT.__joinedDHTTimes > 0, `sourcePeerid:${sourcePeerid},localPeer:${JSON.stringify(this.m_fatherDHT.m_bucket.localPeer.toStructForPackage())}`);            
+        this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, (eventName, params, sourcePeer) => {
+            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeer.peerid,
+                `eventName:${eventName},params:${JSON.stringify(params)},sourcePeer:${JSON.stringify(sourcePeer)}`);
+            assert(this.m_snDHT.__joinedDHTTimes > 0, `sourcePeer:${JSON.stringify(sourcePeer)},localPeer:${JSON.stringify(this.m_fatherDHT.m_bucket.localPeer.toStructForPackage())}`);            
         });
     }
 
@@ -98,14 +92,26 @@ class SNDHT {
         }
     }
 
-    findSN(peerid, callback) {
+    findSN(peerid, fromCache, callback, onStep = undefined) {
         if (callback) {
-            this._findSN(peerid, true, (result, snList) => callback({result, snList: (snList || [])}));
+            this._findSN(peerid,
+                !fromCache,
+                (result, snList) => callback({result, snList: (snList || [])}),
+                (result, snList) => {
+                    if (onStep) {
+                        return onStep({result, snList: (snList || [])});
+                    }
+                });
         } else {
             return new Promise(resolve => {
-                this._findSN(peerid, true, (result, snList) => {
-                    resolve({result, snList: (snList || [])});
-                });
+                this._findSN(peerid,
+                    !fromCache,
+                    (result, snList) => resolve({result, snList: (snList || [])}),
+                    (result, snList) => {
+                        if (onStep) {
+                            return onStep({result, snList: (snList || [])});
+                        }
+                    });
             });
         }
     }
@@ -149,7 +155,7 @@ class SNDHT {
         return this.m_snDHT.emitBroadcastEvent(eventName, params);
     }
 
-    // listener(eventName, params, sourcePeerid)
+    // listener(eventName, params, sourcePeer)
     attachBroadcastEventListener(eventName, listener) {
         return this.m_snDHT.attachBroadcastEventListener(eventName, listener);
     }
@@ -159,46 +165,57 @@ class SNDHT {
         return this.detachBroadcastEventListener(eventName, listener);
     }
 
-    _onStart() {
-        this.m_tryRefreshTimes = 0;
-        if (!this.m_timer) {
-            this._searchNearSN();
+    getNearSN(peerid, onlyRouteTable) {
+        let peeridHash = HashDistance.hash(peerid);
+        let nearestDistance = HashDistance.calcDistanceByHash(peeridHash, this.m_localPeer.hash);
+        let nearestSN = this.m_localPeer;
+
+        let findFromRecentOnline = () => {
+            let timeoutSNs = [];
+            let now = Date.now();
+            this.m_recentSNMap.forEach((snInfo, snPeerid) => {
+                let cacheTime = now - snInfo.onlineTime;
+                if (cacheTime > this.RECENT_SN_CACHE_TIME) {
+                    timeoutSNs.push(snPeerid);
+                    return;
+                } else if (cacheTime < 0) {
+                    snInfo.onlineTime = now;
+                }
+    
+                let distance2SN = HashDistance.calcDistanceByHash(peeridHash, snInfo.hash);
+                if (HashDistance.compareHash(distance2SN, nearestDistance) < 0) {
+                    nearestDistance = distance2SN;
+                    nearestSN = {peerid: snPeerid};
+                }
+            });
+            
+            timeoutSNs.forEach(snPeerid => this.m_recentSNMap.delete(snPeerid));
         }
+
+        let findFromRouteTable = () => {
+            let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), peeridHash);
+            if (snList && snList.length > 0) {
+                let snHash = (snList[0].hash || HashDistance.hash(snList[0].peerid));
+                let distance2SN = HashDistance.calcDistanceByHash(peeridHash, snHash);
+                if (HashDistance.compareHash(distance2SN, nearestDistance) < 0) {
+                    nearestDistance = distance2SN;
+                    nearestSN = snList[0];
+                }
+            }
+        }
+        
+        if (!onlyRouteTable) {
+            findFromRecentOnline();
+        }
+        findFromRouteTable();
+        
+        return nearestSN;
+    }
+
+    _onStart() {
     }
 
     _onStop() {
-        this.m_tryRefreshTimes = 0;
-        if (this.m_timer) {
-            clearTimeout(this.m_timer);
-            this.m_timer = null;
-        }
-    }
-
-    _searchNearSN() {
-        if (this.m_timer) {
-            clearTimeout(this.m_timer);
-            this.m_timer = null;
-        }
-
-        this.m_tryRefreshTimes++;
-        this._findSN(this.m_localPeer.peerid, true, (result, snList) => {
-            if (!this.m_snDHT.isRunning()) {
-                return;
-            }
-
-            this._onSearchNearSN(snList);
-            if (this.m_timer) {
-                return;
-            }
-
-            let nextSearchInterval = THIN_SEARCH_SN_INTERVAL_MS;
-            if (this.m_tryRefreshTimes > 6 || (snList && snList.length >= SN_PEER_COUNT)) {
-                nextSearchInterval = RandomGenerator.integer(SEARCH_NEAR_SN_INTERVAL_MS, SEARCH_NEAR_SN_INTERVAL_MS / 2);
-            } else if (this.m_tryRefreshTimes > 3) {
-                nextSearchInterval = SEARCH_NEAR_SN_INTERVAL_MS / 3;
-            }
-            this.m_timer = setTimeout(() => this._searchNearSN(), nextSearchInterval);
-        });
     }
 
     _getNearSNList(peerlist, targetHash, targetPeerid) {
@@ -238,49 +255,16 @@ class SNDHT {
         return {normal: normalSNList, sensior: sensiorSNList};
     }
 
-    _onSearchNearSN(snList) {
-        if (!snList || snList.length === 0) {
-            return;
-        }
-
-        let normalDistance = HashDistance.calcDistance(snList[0].hash, this.m_localPeer.hash);
-        let sensiorDistance = HashDistance.MAX_HASH;
-        for (let sn of snList) {
-            if (HashDistance.isBitSet(sn.hash, 0)) {
-                sensiorDistance = HashDistance.calcDistance(sn.hash, this.m_localPeer.hash);
-                break;
-            }
-        }
-
-        if (HashDistance.compareHash(normalDistance, this.m_nearNormalSNDistance) != 0
-            || HashDistance.compareHash(sensiorDistance, this.m_nearSensiorSNDistance) != 0) {
-
-                this.m_nearNormalSNDistance = normalDistance;
-                this.m_nearSensiorSNDistance = sensiorDistance;
-                this.m_eventEmitter.emit(SNDHT.Event.NearSNChanged);
-        }
-    }
-
-    _findSN(peerid, forceSearch = false, callback = undefined) {
-        let filterResultSNList = (snList, targetPeerHash) => {
-            let {normal: normalSNList, sensior: sensiorSNList} = this._getNearSNList(snList, targetPeerHash);
-            let sensiorSNCount = Math.min(sensiorSNList.length, SENSIOR_SN_COUNT);
-            let normalSNCount = Math.min(normalSNList.length, SN_PEER_COUNT - sensiorSNCount);
-            normalSNList.splice(normalSNCount,
-                normalSNList.length - normalSNCount,
-                ...sensiorSNList.slice(0, sensiorSNCount));
-            return normalSNList;
-        }
-
+    _findSN(peerid, forceSearch = false, callback = undefined, onStep = undefined) {
         if (peerid === this.m_localPeer.peerid && !forceSearch) {
-            let snList = filterResultSNList(this.m_snDHT.getAllOnlinePeers(), this.m_localPeer.hash);
+            let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), this.m_localPeer.hash);
             if (snList.length >= SN_PEER_COUNT) {
                 callback(DHTResult.SUCCESS, snList);
                 return;
             }
         }
 
-        if (this.m_nearNormalSNDistance === HashDistance.MAX_HASH && this.m_snDHT.getAllOnlinePeers().length === 0) {
+        if (this._getNearSNDistance() === HashDistance.MAX_HASH) {
             this.m_fatherDHT.getValue(SN_DHT_SERVICE_ID, peerid, 0, ({result, values}) => {
                 let snList = [];
                 if (values) {
@@ -290,21 +274,26 @@ class SNDHT {
                         snList.push(peer);
                     });
                 }
-                snList = filterResultSNList(snList, HashDistance.checkHash(peerid));
+                snList = this._filterNearSNList(snList, HashDistance.checkHash(peerid));
                 callback(result, snList);
             });
         } else {
-            this.m_snDHT.findPeer(peerid, ({result, peerlist}) => {
+            let generateCallback = handle => ({result, peerlist}) => {
+                if (!handle) {
+                    return;
+                }                    
                 let targetHash = HashDistance.checkHash(peerid);
                 if (!peerlist) {
                     peerlist = [];
                 }
                 peerlist = peerlist.concat(this.m_snDHT.getAllOnlinePeers());
-                let snList = filterResultSNList(peerlist, targetHash);
+                let snList = this._filterNearSNList(peerlist, targetHash);
 
                 result = snList.length > 0? DHTResult.SUCCESS : DHTResult.FAILED;
-                callback(result, snList);
-            });
+                return handle(result, snList);
+            }
+
+            this.m_snDHT.findPeer(peerid, generateCallback(callback), generateCallback(onStep));
         }
     }
 
@@ -320,9 +309,10 @@ class SNDHT {
         let recentState = [];
         let refreshState = localPeer => {
             let stat = this.m_fatherDHT.stat().udp;
+            let nearDistance = this._getNearSNDistance();
 
             let state = {
-                distanceOk: this.m_nearNormalSNDistance === 0 || HashDistance.compareHash(this.m_nearNormalSNDistance, MAX_DISTANCE_SERVICE_PEER) > 0, // 距离范围内没有其他SN
+                distanceOk: nearDistance === 0 || HashDistance.compareHash(nearDistance, MAX_DISTANCE_SERVICE_PEER) > 0, // 距离范围内没有其他SN
                 sentCount: stat.send.pkgs,
                 recvCount: stat.recv.pkgs,
                 question: localPeer.question,
@@ -345,6 +335,7 @@ class SNDHT {
         }
 
         let canJoinDHT = () => {
+            // return true; // 快速启动SN测试<TODO>
             if (recentState.length < 5) {
                 return false;
             }
@@ -381,8 +372,8 @@ class SNDHT {
                     lastOnlineTime = now;
                 }
                 // 在internet上线足够久，并且附近没有SN上线
-                LOG_INFO(`SN test online:now=${now},lastOnlineTime=${lastOnlineTime}, isJoined=${this.m_isJoinedDHT},nearSNDistance=${this.m_nearNormalSNDistance}`);
-                if (now - lastOnlineTime >= this.MINI_ONLINE_TIME_MS && !this.m_isJoinedDHT && canJoinDHT()) {
+                LOG_INFO(`SN test online:now=${now},lastOnlineTime=${lastOnlineTime}, isJoined=${this.m_isJoinedDHT},nearSNDistance=${this._getNearSNDistance()}`);
+                if (now - lastOnlineTime >= this.MINI_ONLINE_TIME_MS && canJoinDHT()) {
                     // SN上线；
                     this._joinDHT(isSeed);
                 } else if (needUnjoinDHT()) {
@@ -423,9 +414,9 @@ class SNDHT {
         }
         this._onStart();
 
-        this.m_snOnlineListener = (eventName, params, sourcePeerid) => {
-            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeerid,
-                `eventName:${eventName},params:${JSON.stringify(params)},sourcePeerid:${sourcePeerid}`);
+        this.m_snOnlineListener = (eventName, params, sourcePeer) => {
+            assert(eventName === SNDHT.Event.SN.online && params.peerid === sourcePeer.peerid,
+                `eventName:${eventName},params:${JSON.stringify(params)},sourcePeer:${JSON.stringify(sourcePeer)}`);
             
             if (params.peerid === this.m_localPeer.peerid) {
                 return;
@@ -452,35 +443,28 @@ class SNDHT {
         }
     }
 
-    getRecentNearSN(peerid) {
-        let timeoutSNs = [];
-        let now = Date.now();
-        let peeridHash = HashDistance.hash(peerid);
-        let nearestDistance = HashDistance.calcDistanceByHash(peeridHash, this.m_localPeer.hash);
-        let nearestSNPeerid = this.m_localPeer.peerid;
-        this.m_recentSNMap.forEach((snInfo, snPeerid) => {
-            let cacheTime = now - snInfo.onlineTime;
-            if (cacheTime > this.RECENT_SN_CACHE_TIME) {
-                timeoutSNs.push(snPeerid);
-                return;
-            } else if (cacheTime < 0) {
-                snInfo.onlineTime = now;
-            }
+    _filterNearSNList(snList, targetPeerHash) {
+        let {normal: normalSNList, sensior: sensiorSNList} = this._getNearSNList(snList, targetPeerHash);
+        let sensiorSNCount = Math.min(sensiorSNList.length, SENSIOR_SN_COUNT);
+        let normalSNCount = Math.min(normalSNList.length, SN_PEER_COUNT - sensiorSNCount);
+        normalSNList.splice(normalSNCount,
+            normalSNList.length - normalSNCount,
+            ...sensiorSNList.slice(0, sensiorSNCount));
+        return normalSNList;
+    }
 
-            let distance2SN = HashDistance.calcDistanceByHash(peeridHash, snInfo.hash);
-            if (HashDistance.compareHash(distance2SN, nearestDistance) < 0) {
-                nearestDistance = distance2SN;
-                nearestSNPeerid = snPeerid;
-            }
-        });
-        
-        timeoutSNs.forEach(snPeerid => this.m_recentSNMap.delete(snPeerid));
-        return nearestSNPeerid;
+    _getNearSNDistance() {
+        let snList = this._filterNearSNList(this.m_snDHT.getAllOnlinePeers(), this.m_localPeer.hash);
+        if (!snList || snList.length === 0) {
+            return HashDistance.MAX_HASH;
+        }
+
+        let nearHash = snList[0].hash || HashDistance.hash(snList[0].peerid);
+        return HashDistance.calcDistance(nearHash, this.m_localPeer.hash);    
     }
 }
 
 SNDHT.Event = {
-    NearSNChanged: 'NearSNChanged',
     SN: {
         online: 'online', // SN上线
     }

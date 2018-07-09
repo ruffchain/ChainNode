@@ -180,21 +180,13 @@ class PackageProcessor {
         let {event, params, source} = cmdPackage.body;
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got broadcast event(${event}:${params}) from peer(${source})`);
 
-        let response = () => {
-            let respPackage = this.m_packageFactory.createPackage(DHTCommandType.BROADCAST_EVENT_RESP);
-            respPackage.common.packageID = cmdPackage.common.packageID;
-            respPackage.common.ackSeq = cmdPackage.common.seq;
-            respPackage.body = {taskid: cmdPackage.body.taskid};
-            this.m_packageSender.sendPackage(remotePeer, respPackage);
-        }
+        let timeout = cmdPackage.body.timeout - Math.max(this.m_bucket.localPeer.RTT, remotePeer.RTT || 0);
 
-        response();
-
-        let isNewEvent = this.m_taskExecutor.emitBroadcastEvent(event,
+        let [task, isNewEvent] = this.m_taskExecutor.emitBroadcastEvent(event,
                 params,
                 source,
                 cmdPackage.body.taskid,
-                {timeout: cmdPackage.body.timeout, passPeerid: remotePeer.peerid});
+                {timeout});
 
         if (isNewEvent) {
             // 已经退出服务就不再发出事件通知了，但继续协助做完广播操作
@@ -203,6 +195,7 @@ class PackageProcessor {
                 setImmediate(() => this.m_broadcastEventEmitter.emit(event, event, params, source));
             }
         }
+        task.process(cmdPackage, remotePeer);
     }
 
     _fillRecursionRespPackageBody(respPackage, cmdPackage, target, arrivedPeerids = null, eNodes = null, isDone = false) {
@@ -244,9 +237,6 @@ class PackageProcessor {
         if (targetPeer) {
             targetPeerInfo.eplist = Peer.unionEplist(targetPeerInfo.eplist, targetPeer.eplist);
         }
-
-        let epSet = new Set(targetPeerInfo.eplist);
-        assert(targetPeerInfo.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u')));
         
         let respPackage = this.m_packageFactory.createPackage(DHTCommandType.HOLE_CALL_RESP);
         respPackage.common.packageID = cmdPackage.common.packageID;
@@ -264,8 +254,6 @@ class PackageProcessor {
                 targetPeerInfo.eplist = Peer.unionEplist(targetPeerInfo.eplist, [BaseUtil.EndPoint.toString(connectAddress)]);
             }
         }
-        epSet = new Set(targetPeerInfo.eplist);
-        assert(targetPeerInfo.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u')));
 
         // 持有双方监听地址时才可以辅助穿透
         if (targetPeerInfo.eplist.length > 0 && remotePeer.eplist.length > 0) {
@@ -282,8 +270,6 @@ class PackageProcessor {
             srcEPList = Peer.unionEplist(srcEPList, srcPeer.eplist);
         }
         let srcPeerInfo = {peerid: cmdPackage.body.src.peerid, eplist: srcEPList};
-        let epSet = new Set(srcPeerInfo.eplist);
-        assert(srcPeerInfo.peerid === 'SEED_DHT_PEER_10000' || (!epSet.has('4@106.75.175.123@10010@t') && !epSet.has('4@106.75.175.123@10000@u')));
 
         let respPackage = this.m_packageFactory.createPackage(DHTCommandType.HOLE_CALLED_RESP);
         respPackage.common.packageID = cmdPackage.common.packageID;

@@ -10,11 +10,6 @@ export type NodeStorageOptions = {
     logger: LoggerInstance
 }
 
-type NodeInfo = {
-    peerid: string;
-    addtime: number;
-}
-
 type BanInfo = {
     peerid: string;
     endtime: number; //结束禁用的时间

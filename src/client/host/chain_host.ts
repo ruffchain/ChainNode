@@ -11,6 +11,7 @@ import {Node as StandaloneNode} from '../../core/net_standalone/node';
 import handler = require('../handler');
 
 import {ChainServer} from './rpc';
+import GlobalConfig = require('../../core/chain/globalConfig');
 
 type ConsensusInstance = {
     chain: (options: ChainOptions, commandOptions: CommandOptions)=>Chain|undefined;
@@ -59,14 +60,16 @@ class ChainHost {
         this.m_asMiner = true;
         let defaultOptions = Object.create(null);
         defaultOptions.node = new StandaloneNode('');
-        if (commandOptions.has('force')) {
-            fs.emptyDirSync(commandOptions.get('dataDir'));
-        }
+        fs.emptyDirSync(commandOptions.get('dataDir'));
+        
         if (!await this._createChain(commandOptions, defaultOptions)) {
             return false;
         }
         let ci = this.m_consensus.get(commandOptions.get('consensus'));
-        let err = await this.m_miner!.create(ci!.create(commandOptions));
+        let param: any = ci!.create(commandOptions);
+        param.txlivetime = commandOptions.has('txlivetime') ? commandOptions.get('txlivetime') : 60*60 ;
+        
+        let err = await this.m_miner!.create(param);
         console.log(`create genesis finished with error code: ${err}`);
         return !err;
     }
@@ -112,17 +115,26 @@ class ChainHost {
             }
         }
 
+        await GlobalConfig.LoadConfig(dataDir, Chain.kvConfig, Chain.s_dbFile);
+
         chainOptions.loggerOptions = {
             console: true, 
             level: 'debug', 
             file: {root: path.join(dataDir, 'log')}
         };
     
-        if (!commandOptions.get('consensus')) {
+        let consensus = null;
+        if (GlobalConfig.isLoad()) {
+            consensus = GlobalConfig.getConfig('consensus');
+        } else {
+            consensus = commandOptions.get('consensus');
+        }
+        
+        if (!consensus) {
             console.error('no consensus');
             return false;
         }
-        let ci = this.m_consensus.get(commandOptions.get('consensus'));
+        let ci = this.m_consensus.get(consensus);
         if (!ci) {
             console.error('invalid consensus');
             return false;

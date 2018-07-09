@@ -2,7 +2,7 @@
 
 const Base = require('../../base/base.js');
 const {EndPoint} = require('../../base/util.js');
-const {HashDistance, Result: DHTResult} = require('../util.js');
+const {HashDistance, Result: DHTResult, Config} = require('../util.js');
 const Peer = require('../peer.js');
 const {TouchNodeConvergenceTask} = require('./task_touch_node_recursion.js');
 const DHTPackage = require('../packages/package.js');
@@ -23,14 +23,48 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         this.m_peerid = peerid;
 
         this.m_foundPeerList = new Map();
+
+        // 阶段性返回搜索到的节点
+        this.m_lastResponseTime = Date.now();
+        this.m_stepListeners = [];
+        this.m_foundCountLastStep = 0;
+        this.m_stepTimer = setInterval(() => {
+            let now = Date.now();
+            if (now - this.m_lastResponseTime > Config.FindPeer.StepTimeout &&
+                this.m_foundPeerList.size !== this.m_foundCountLastStep) {
+
+                this.m_foundCountLastStep = this.m_foundPeerList.size;
+
+                let foundPeerList = [...this.m_foundPeerList.values()];
+                HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(this.m_peerid)});
+        
+                let abort = true;
+                this.m_stepListeners.forEach(callback => {
+                    if (callback) {
+                        abort = callback(DHTResult.PENDING, foundPeerList, this.n_nodes) && abort;
+                    } else {
+                        abort = false;
+                    }
+                });
+
+                if (abort) {
+                    this._onComplete(DHTResult.ABORT);
+                }
+            }
+        }, Config.Task.MaxIdleTimeMS);
     }
 
     get peerid() {
         return this.m_peerid;
     }
 
+    addStepListener(callback) {
+        this.m_stepListeners.push(callback);
+    }
+
     _processImpl(response, remotePeer) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid})`);
+        this.m_lastResponseTime = Date.now();
         // 合并当前使用的address到eplist，然后恢复response内容
         // 如果address是TCP地址，可能没有记录到eplist，但这个地址可能是唯一可用连接地址
         let srcEPList = response.common.src.eplist;
@@ -69,6 +103,13 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         let foundPeerList = [...this.m_foundPeerList.values()];
         HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(this.m_peerid)});
         this._callback(result, foundPeerList, this.n_nodes);
+
+        setImmediate(() => {
+            this.m_stepListeners = [];
+            clearInterval(this.m_stepTimer);
+            this.m_stepTimer = null;
+            super.destroy();
+        });
     }
 
     _createPackage() {

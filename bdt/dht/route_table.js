@@ -55,7 +55,7 @@ class RouteTable {
             this.m_nextExpandTime = Infinity;
             this.m_peerCountLastExpand = this.m_bucket.peerCount;
             this.m_taskExecutor.findPeer(RouteTable._randomPeerid(), false,
-                () => this.m_nextExpandTime = Date.now() + RandomGenerator.integer(this._maxExpandInterval(), RouteTableConfig.ExpandIntervalMS.Min)
+                () => this.m_nextExpandTime = Date.now() + this._maxExpandInterval()
             );
         }
     }

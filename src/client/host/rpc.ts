@@ -78,7 +78,7 @@ export class ChainServer {
         });
 
         this.m_server!.on('view', async (params: {method: string, params: any, from?: number|string|'latest'}, resp)=>{
-            let cr = await this.m_chain.callGet(isUndefined(params.from) ? 'latest' : params.from , params.method, params.params);
+            let cr = await this.m_chain.view(isUndefined(params.from) ? 'latest' : params.from , params.method, params.params);
             if (cr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
             } else {

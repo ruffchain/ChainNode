@@ -20,7 +20,7 @@ class PeerFinder extends BDT.PeerFinder {
 
     set snPeer(snPeer) {
         this.m_snPeer = snPeer;
-        this.emit(this.EVENT.SNChanged);
+        setImmediate(() => this.emit(this.EVENT.SNChanged));
     }
 
     get dht() {
@@ -36,9 +36,7 @@ class PeerFinder extends BDT.PeerFinder {
             this.m_snDHT = new SNDHT(this.m_dht);
             this.m_snDHT.signinVistor();
             this.m_dht.once(DHT.EVENT.stop, () => this._destroyDHT());
-
-            this.m_nearSNChangedListener = () => this.emit(this.EVENT.SNChanged);
-            this.m_snDHT.attachEvent(SNDHT.Event.NearSNChanged, this.m_nearSNChangedListener);
+            setImmediate(() => this.emit(this.EVENT.SNChanged));
         }
     }
 
@@ -46,18 +44,25 @@ class PeerFinder extends BDT.PeerFinder {
         this._destroyDHT();
     }
 
-    findSN(peerid) {
+    findSN(peerid, fromCache, onStep) {
         if (this.m_snPeer) {
             return Promise.resolve([BDT.ERROR.success, [this.m_snPeer]]);
         } else if (this.m_snDHT) {
             return new Promise(resolve => {
-                this.m_snDHT.findSN(peerid, ({result, snList})=>{
-                    if (result) {
-                        resolve([result]);
-                    } else {
-                        resolve([BDT.ERROR.success, snList]);
-                    }
-                });
+                this.m_snDHT.findSN(peerid,
+                    fromCache,
+                    ({result, snList}) => {
+                            if (result) {
+                                resolve([result]);
+                            } else {
+                                resolve([BDT.ERROR.success, snList]);
+                            }
+                        },
+                    ({result, snList}) => {
+                            if (onStep) {
+                                return onStep([result, snList]);
+                            }
+                        });
             });
         } else {
             return Promise.resolve([BDT.ERROR.invalidState]);
@@ -87,7 +92,6 @@ class PeerFinder extends BDT.PeerFinder {
     _destroyDHT() {
         if (this.m_dht) {
             this.m_snDHT.signoutVistor();
-            this.m_snDHT.detachEvent(SNDHT.Event.NearSNChanged, this.m_nearSNChangedListener);
             this.m_snDHT = null;
             this.findPeer = null;
             this.m_dht = null;

@@ -8,6 +8,7 @@ const SNDHT = require('../sn/sn_dht');
 const blog = baseModule.blog;
 const BaseUtil = require('../base/util.js');
 const assert = require('assert');
+const SequenceU32 = BaseUtil.SequenceU32;
 
 class MultiSNPingClient extends EventEmitter {
     constructor(stack) {
@@ -34,26 +35,58 @@ class MultiSNPingClient extends EventEmitter {
         return snList;
     }
 
+    get localEPList() {
+        let epSet = new Set();
+        for (let [sessionid, pingClient] of Object.entries(this.m_peerMap)) {
+            pingClient.localEPList.forEach(ep => epSet.add(ep));
+        }
+        return [...epSet];
+    }
+
     connect() {
         if (this.m_state === PingClient.STATE.init) {
-            this.m_snChangedListener = () => {
-                this.m_state = PingClient.STATE.connecting;
-                let tryRefreshSNList = () => {
-                    this.m_peerFinder.findSN(this.m_stack.peerid).then(([error, peerlist]) => {
-                            if (error || !peerlist || !peerlist.length) {
-                                return ;
-                            }
-                            if (peerlist.length > 3) {
-                                peerlist = peerlist.slice(0, 3);
-                            }
-                            this._resetConnecting(peerlist);
-                        });
-                };
-                this.m_refreshSNTimer = setInterval(tryRefreshSNList, this.m_stack._getOptions().tryOfflineSNInterval);
-                tryRefreshSNList();
+            this.m_state = PingClient.STATE.connecting;
+
+            let getRefreshInterval = () => {
+                let total = 0;
+                for (let [sessionid, pingClient] of Object.entries(this.m_peerMap)) {
+                    total++;
+                    if (pingClient.state === PingClient.STATE.online) {
+                        return this.m_stack._getOptions().searchSNInterval;
+                    }
+                }
+                
+                return total === 0? this.m_stack._getOptions().searchSNIntervalInit : this.m_stack._getOptions().searchSNIntervalConnecting;
+            }
+
+            let lastInterval = this.m_stack._getOptions().searchSNIntervalInit;
+
+            let tryRefreshSNList = () => {
+                this.m_peerFinder.findSN(this.m_stack.peerid).then(([error, peerlist]) => {
+                        if (error || !peerlist || !peerlist.length) {
+                            return ;
+                        }
+                        if (peerlist.length > 3) {
+                            peerlist = peerlist.slice(0, 3);
+                        }
+
+                        this._resetConnecting(peerlist);
+
+                        let interval = getRefreshInterval();
+                        if (lastInterval !== interval) {
+                            clearInterval(this.m_refreshSNTimer);
+                            this.m_refreshSNTimer = setInterval(tryRefreshSNList, interval);
+                            lastInterval = interval;
+                        }
+                    });
             };
-            this.m_snChangedListener();
-            this.m_peerFinder.on(this.m_peerFinder.EVENT.SNChanged, this.m_snChangedListener);
+
+            this.m_snChangedListener = tryRefreshSNList;
+            
+            tryRefreshSNList();
+
+            this.m_refreshSNTimer = setInterval(tryRefreshSNList, lastInterval);
+            this.m_peerFinder.on(this.m_peerFinder.EVENT.SNChanged, tryRefreshSNList);
         } else {
             return BDT_ERROR.invalidState;
         }
@@ -136,7 +169,7 @@ class MultiSNPingClient extends EventEmitter {
                     if (this.m_peerMap[sessionid] && pingClient.isMain) {
                         if (this.m_state !== PingClient.STATE.online) {
                             this.m_state = PingClient.STATE.online;
-                            setImmediate(()=>{this.emit(PingClient.EVENT.online);});
+                            setImmediate(() => this.emit(PingClient.EVENT.online));
                         }
                     }
                 });
@@ -159,7 +192,7 @@ class MultiSNPingClient extends EventEmitter {
                 pingClient.on(PingClient.EVENT.nearSN, snPeerid => {
                     let newSNPingClient = this._getPingClientByPeerid(snPeerid);
                     if (newSNPingClient) {
-                        if (newSNPingClient.state === PingClient.EVENT.offline) {
+                        if (newSNPingClient.state === PingClient.STATE.offline) {
                             newSNPingClient.close();
                             setBlack(snPeerid);
                             delete this.m_peerMap[newSNPingClient.sessionid];
@@ -228,6 +261,7 @@ class PingClient extends EventEmitter {
         this.m_isMain = false;
         this.m_pingInterval = stack._getOptions().pingInterval;
         this.m_sessionid = sessionid;
+        this.m_localEPList = null;
     }
 
     get sn() {
@@ -257,6 +291,10 @@ class PingClient extends EventEmitter {
 
     get sessionid() {
         return this.m_sessionid;
+    }
+
+    get localEPList() {
+        return this.m_localEPList || [];
     }
 
     connect() {
@@ -294,11 +332,12 @@ class PingClient extends EventEmitter {
         let header = decoder.header;
         assert(header.sessionid === this.m_sessionid, `pkg.sessionid:${header.sessionid},sessionid:${this.m_sessionid}`);
         if (decoder.header.cmdType === BDTPackage.CMD_TYPE.pingResp) {
+            this.m_localEPList = decoder.body.eplist;
             if (this.m_state < PingClient.STATE.connecting) {
                 return ;
             }
             if (header.ackSeq === this.m_seq) {
-                this.m_seq += 1;
+                this.m_seq = SequenceU32.add(this.m_seq, 1);
             }
             let body = decoder.body;
             if (body.forward) {
@@ -306,7 +345,7 @@ class PingClient extends EventEmitter {
             } else if (body.offline) {
                 this._stopPing();
                 this.m_state = PingClient.STATE.offline;
-                this.emit(PingClient.EVENT.offline);
+                setImmediate(() => this.emit(PingClient.EVENT.offline));
                 return ;
             } else {
                 if (this.m_state === PingClient.STATE.connecting) {
@@ -334,7 +373,7 @@ class PingClient extends EventEmitter {
                         if (respInterval > opt.pingTimeout) {
                             this._stopPing();
                             this.m_state = PingClient.STATE.offline;
-                            this.emit(PingClient.EVENT.offline);
+                            setImmediate(() => this.emit(PingClient.EVENT.offline));
                             return ;
                         } else if (respInterval > pingInterval * 3) {
                             this.m_snSender.socket = null;
@@ -367,7 +406,7 @@ class PingClient extends EventEmitter {
                             this.m_ping.lastUDPTime = now;
                         }
                     }, pingInterval);
-                    this.emit(PingClient.EVENT.online);
+                    setImmediate(() => this.emit(PingClient.EVENT.online));
                 } else if (this.m_state === PingClient.STATE.online) {
                     let now = Date.now();
                     if (getProtocol(remoteSender) === BaseUtil.EndPoint.PROTOCOL.udp) {
@@ -401,7 +440,7 @@ class PingClient extends EventEmitter {
             this.m_initSender.tcp.postPackage(encoder, null, true, opt.pingDelay);
         } else {
             this.m_state = PingClient.STATE.offline;
-            this.emit(PingClient.EVENT.offline);
+            setImmediate(() => this.emit(PingClient.EVENT.offline));
             return;
         }
 
@@ -420,17 +459,26 @@ class PingClient extends EventEmitter {
             }
         }
 
+        let pingInterval = opt.pingConnectInterval;
+        let nextPingTime = 0;
         let timeUpdateDetect = BaseUtil.TimeHelper.createTimeUpdateDetector(opt.timeoutDeviation, opt.pingConnectInterval);
         this.m_connecting.timer = setInterval(()=>{
             let [now, timeRevise] = timeUpdateDetect();
             this.m_connecting.startTime += timeRevise;
+            nextPingTime += timeRevise;
             if (now - this.m_connecting.startTime > opt.pingConnectTimeout) {
                 this._stopConnecting();
                 this.m_state = PingClient.STATE.offline;
-                this.emit(PingClient.EVENT.offline);
+                setImmediate(() => this.emit(PingClient.EVENT.offline));
                 return ;
             }
-            ping();
+
+            if (now > nextPingTime) {
+                ping();
+            }
+
+            pingInterval *= 2;
+            nextPingTime = now + pingInterval;
         }, opt.pingConnectInterval);
 
         ping();
@@ -483,7 +531,7 @@ class PingClient extends EventEmitter {
         header.seq = this.m_seq;
         let body = encoder.body;
         body.peerid = this.m_stack.peerid;
-        body.eplist = this.m_stack.eplist;
+        body.eplist = this.m_stack.listenEPList;
         return encoder;
     }
 

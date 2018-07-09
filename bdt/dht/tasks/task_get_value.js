@@ -58,6 +58,7 @@ class GetValueTask extends TouchNodeConvergenceTask {
     _onCompleteImpl(result) {
         LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) complete GetValue(count=${this.m_values? this.m_values.size : 0})`);
         this._callback(result, this.m_values, this.m_arrivePeeridSet);
+        super.destroy();
     }
 
     _createPackage() {

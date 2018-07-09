@@ -20,11 +20,23 @@ const EndPoint = {
         tcp: 't',
     },
 
+    FAMILY: {
+        IPv4: 'IPv4',
+        IPv6: 'IPv6',
+    },
+
+    CONST_IP: {
+        zeroIPv4: ['0.0.0.0'],
+        zeroIPv6: ['::', '0:0:0:0:0:0:0:0'],
+        loopbackIPv4: ['127.0.0.1'],
+        loopbackIPv6: ['::1', '0:0:0:0:0:0:0:1'],
+    },
+
     toString(address, protocol) {
         let ipv = 0;
-        if (address.family === 'IPv6') {
+        if (address.family === EndPoint.FAMILY.IPv6) {
             ipv = 6;
-        } else if (address.family === 'IPv4') {
+        } else if (address.family === EndPoint.FAMILY.IPv4) {
             ipv = 4;
         }
 
@@ -34,26 +46,23 @@ const EndPoint = {
 
     toAddress(epString) {
         let el = epString.split('@');
-        if (el.length >= 3) {
+        if (el.length >= 4) {
             let addr = {};
             if (net.isIPv4(el[1])) {
-                addr.family = 'IPv4';
+                addr.family = EndPoint.FAMILY.IPv4;
             } else if (net.isIPv6(el[1])) {
-                addr.family = 'IPv6';
+                addr.family = EndPoint.FAMILY.IPv6;
             } else {
                 if (el[0] === '4') {
-                    addr.family = 'IPv4';
+                    addr.family = EndPoint.FAMILY.IPv4;
                 } else if (el[0] === '6') {
-                    addr.family = 'IPv6';
+                    addr.family = EndPoint.FAMILY.IPv6;
                 }
             }
             addr.address = el[1];
             addr.port = parseInt(el[2]);
-            assert(el.length === 4);
             addr.protocol = EndPoint.PROTOCOL.udp;
-            if (el.length >= 4) {
-                addr.protocol = el[3];
-            }
+            addr.protocol = el[3];
             return addr;
         } else {
             return null;
@@ -61,48 +70,45 @@ const EndPoint = {
     },
 
     isZero(address) {
-        let host = '';
         if (typeof address === 'string') {
-            let el = address.split('@');
-            host = el[1];
-        } else {
-            host = address.address;
+            address = EndPoint.toAddress(address);
         }
 
-        return host === '0.0.0.0';
+        if (address.family === EndPoint.FAMILY.IPv4) {
+            assert(EndPoint.CONST_IP.zeroIPv4.length === 1);
+            return address.address === EndPoint.CONST_IP.zeroIPv4[0];
+        } else {
+            assert(EndPoint.CONST_IP.zeroIPv6.length === 2);
+            return address.address === EndPoint.CONST_IP.zeroIPv6[0] || 
+                address.address === EndPoint.CONST_IP.zeroIPv6[1];
+        }
     },
 
     isLoopback(address) {
-        let host = '';
         if (typeof address === 'string') {
-            let el = address.split('@');
-            host = el[1];
-        } else {
-            host = address.address;
+            address = EndPoint.toAddress(address);
         }
 
-        return host === '127.0.0.1';
+        if (address.family === EndPoint.FAMILY.IPv4) {
+            assert(EndPoint.CONST_IP.loopbackIPv4.length === 1);
+            return address.address === EndPoint.CONST_IP.loopbackIPv4[0];
+        } else {
+            assert(EndPoint.CONST_IP.loopbackIPv6.length === 2);
+            return address.address === EndPoint.CONST_IP.loopbackIPv6[0] || address.address === EndPoint.CONST_IP.loopbackIPv6[1];
+        }
     },
 
     isNAT(address) {
         if (typeof address === 'string') {
-            let el = address.split('@');
-            address = {};
-            switch(el[0]) {
-                case '4': address.family = 'IPv4'; break;
-                case '6': address.family = 'IPv6'; break;
-                default: break;
-            }
-            address.family = el[0];
-            address.address = el[1];
-            address.port = el[2];
+            address = EndPoint.toAddress(address);
         }
 
         if (EndPoint.isZero(address) || EndPoint.isLoopback(address)) {
             return true;
         }
 
-        if (!address.family || address.family == 'IPv4') {
+        // 暂时认为IPv6地址都是公网地址
+        if (!address.family || address.family == EndPoint.FAMILY.IPv4) {
             let el = address.address.split('.');
             if (el.length === 4) {
                 let el1 = parseInt(el[1]);
@@ -114,6 +120,14 @@ const EndPoint = {
             }
         }
         return false;
+    },
+
+    zero(family) {
+        return family === EndPoint.FAMILY.IPv4? EndPoint.CONST_IP.zeroIPv4[0] : EndPoint.CONST_IP.zeroIPv6[0];
+    },
+
+    loopback(family) {
+        return family === EndPoint.FAMILY.IPv4? EndPoint.CONST_IP.loopbackIPv4[0] : EndPoint.CONST_IP.loopbackIPv6[0];
     },
 
     // 猜测一个内网监听地址的公网访问地址
@@ -187,7 +201,7 @@ const NetHelper = {
             netInterface[name].forEach(info => {
                 // 127.0.0.1和::1是回环地址，由参数指定是否过滤
                 if (withInternal || !info.internal) {
-                    if (info.family === 'IPv4') {
+                    if (info.family === EndPoint.FAMILY.IPv4) {
                         let el = info.address.split('.');
                         // 去掉0.x.x.x和169.254.x.x
                         if (el.length !== 4 ||
@@ -195,7 +209,7 @@ const NetHelper = {
                             (parseInt(el[0]) === 169 && parseInt(el[1]) === 254)) {
                             return;
                         }
-                    } else if (info.family === 'IPv6') {
+                    } else if (info.family === EndPoint.FAMILY.IPv6) {
                         let el = info.address.split(':');
                         if (el.length === 0 ||
                             parseInt(el[0], 16) === 0xfe80) {
@@ -382,6 +396,40 @@ const HashDistance = {
         return algorithm.UInt(hash & mask);
     },
 
+    or(hash1, hash2) {
+        return algorithm.UInt(hash1 | hash2);
+    },
+
+    and(hash1, hash2) {
+        return algorithm.UInt(hash1 & hash2);
+    },
+
+    xor(hash1, hash2) {
+        return algorithm.UInt(hash1 ^ hash2);
+    },
+
+    moveRight(hash, bitCount) {
+        return hash >>> bitCount;
+    },
+
+    moveLeft(hash, bitCount) {
+        return algorithm.UInt(hash << bitCount);
+    },
+
+    max(hash1, hash2) {
+        if (HashDistance.compareHash(hash1, hash2) >= 0) {
+            return hash1;
+        }
+        return hash2;
+    },
+
+    min(hash1, hash2) {
+        if (HashDistance.compareHash(hash1, hash2) <= 0) {
+            return hash1;
+        }
+        return hash2;
+    },
+
     isBitSet(hash, bitPos) {
         return !!HashDistance.hashBit(hash, bitPos);
     },
@@ -395,6 +443,7 @@ const HashDistance = {
         return hash1 - hash2;
     },
 
+    // 按照到targetHashObj距离从近到远排列
     sortByDistance(hashObjArray, targetHashObj) {
         let targetHash = targetHashObj.hash || HashDistance.checkHash(targetHashObj.peerid);
         hashObjArray.sort((obj1, obj2) => {
@@ -430,11 +479,44 @@ const HashDistance = {
     MAX_HASH: 0xFFFFFFFF, // HASH_MASK
 };
 
+// 32位序列号，解决序列号递增溢出问题，溢出后归0，并且在跟之前序列号比较时+0xFFFFFFFF还原
+// 前置条件：不会短时间内产生溢出导致新序列号归0后再次追上旧的还生效的序列号
+const SequenceU32 = {
+    random() {
+        return Math.floor(((Date.now() + Math.random() * 10000000) % 65535) * 32768);
+    },
+
+    compare(seq1, seq2) {
+        return SequenceU32.delta(seq1, seq2);
+    },
+
+    add(seq, delta) {
+        seq += delta;
+        return seq % 0xFFFFFFFF;
+    },
+
+    sub(seq, delta) {
+        seq -= delta;
+        return seq < 0? seq + 0xFFFFFFFF : seq;
+    },
+
+    delta(seq1, seq2) {
+        let delta = seq1 - seq2;
+        if (delta > 0x80000000) {
+            return delta - 0xFFFFFFFF;
+        } else if (delta < -0x80000000) {
+            return delta + 0xFFFFFFFF;
+        }
+        return delta;
+    },
+}
+
 module.exports.EndPoint = EndPoint;
 module.exports.NetHelper = NetHelper;
 module.exports.algorithm = algorithm;
 module.exports.TimeHelper = TimeHelper;
 module.exports.HashDistance = HashDistance;
+module.exports.SequenceU32 = SequenceU32;
 
 if (require.main === module) {
     console.log(NetHelper.getLocalIPs(false));

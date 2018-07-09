@@ -37,6 +37,8 @@ export class INode extends EventEmitter {
     protected m_port: number = 0;
     protected m_addr: string = '';
     protected m_peerid: string = '';
+    // chain的创始块的hash值，从chain_node传入， 可用于传输中做校验
+    protected m_genesis_hash:string = '';
 
     protected m_inConn: NodeConnection[] = [];
     protected m_outConn: NodeConnection[] = [];
@@ -47,12 +49,15 @@ export class INode extends EventEmitter {
         this.m_peerid = options.peerid;
     }
 
+    set genesis_hash(genesis_hash:string) {
+        this.m_genesis_hash = genesis_hash;
+    }
+
     get peerid() {
         return this.m_peerid;
     }
 
     public async init() {
-
     }
 
     public async listen(): Promise<ErrorCode> {
@@ -67,6 +72,7 @@ export class INode extends EventEmitter {
         let conn = result.conn;
         conn.setRemote(peerid);
         let ver: Version = new Version();
+        ver.genesis_hash = this.m_genesis_hash;
         ver.peerid = this.m_peerid;
         let err = await new Promise((resolve: (value: ErrorCode) => void) => {
             conn.once('pkg', (pkg) => {
@@ -192,6 +198,7 @@ export class INode extends EventEmitter {
 
     on(event: 'inbound', listener: (conn: NodeConnection) => void): this;
     on(event: 'error', listener: (conn: NodeConnection, err: ErrorCode) => void): this;
+    on(event: 'ban', listener: (remote: string) => void): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
@@ -209,6 +216,11 @@ export class INode extends EventEmitter {
                 let dataReader: BufferReader = new BufferReader(buff);
                 let ver: Version = new Version();
                 ver.decode(dataReader);
+                // 检查对方包里的genesis_hash是否对应得上
+                if ( ver.genesis_hash != this.m_genesis_hash ) {
+                    inbound.close();
+                    return;
+                }
                 //忽略网络传输时间
                 let nTimeDelta = ver.timestamp - Date.now();
                 inbound.setRemote(ver.peerid);
@@ -254,6 +266,13 @@ export class INode extends EventEmitter {
                     thisNode.closeConnection(this);
                     thisNode.emit('error', this, err);
                 });
+
+                // 接收到 reader的传出来的error 事件后, emit ban事件, 给上层的chain_node去做处理
+                // 这里只需要emit给上层, 最好不要处理其他逻辑
+                this.m_reader.on('error', ( err:ErrorCode, column: string ) => {
+                    let remote = this.getRemote()
+                    thisNode.emit('ban', remote)
+                })
             }
             private m_pendingWriters: PackageStreamWriter[];
             private m_reader: PackageStreamReader;

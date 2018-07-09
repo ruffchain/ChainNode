@@ -37,17 +37,38 @@ export class ViewExecutor {
     protected async prepareContext(blockHeader: BlockHeader, storage: IReadableStorage, externContext: any): Promise<any> {
         let kv =  (await storage.getReadableKeyValue(Chain.kvUser)).kv!;
         let context = Object.create(externContext);
-        context.getNow = (): number => {
-            return blockHeader.timestamp;
-        };
-        
-        context.getHeight = (): number => {
-            return blockHeader.number;
-        };
+        // context.getNow = (): number => {
+        //     return blockHeader.timestamp;
+        // };
 
-        context.getStorage = (): IReadableKeyValue => {
-            return kv;
-        }
+        Object.defineProperty(
+            context, 'now', {
+                writable: false,
+                value: blockHeader.timestamp
+            } 
+        );
+        
+        // context.getHeight = (): number => {
+        //     return blockHeader.number;
+        // };
+
+        Object.defineProperty(
+            context, 'height', {
+                writable: false,
+                value: blockHeader.number
+            } 
+        );
+
+        // context.getStorage = (): IReadWritableKeyValue => {
+        //     return kv;
+        // }
+
+        Object.defineProperty(
+            context, 'storage', {
+                writable: false,
+                value: kv
+            } 
+        );
         return context;
     }
 

@@ -71,12 +71,20 @@ class TouchNodeTask extends Task {
             response.body.r_nodes.forEach(peerid => {
                 this.m_arrivePeeridSet.add(peerid);
                 this.m_requestPeeridSet.add(peerid);
-                this.m_pendingPeerList.delete(peerid);
+                let arrived = this.m_pendingPeerList.get(peerid);
+                if (arrived) {
+                    this.m_pendingPeerList.delete(peerid);
+                    arrived.resender.finish();
+                }
             });
         }
 
         this.m_arrivePeeridSet.add(response.src.peerid);
-        this.m_pendingPeerList.delete(response.common.src.peerid);
+        let touchedPeerEx = this.m_pendingPeerList.get(response.common.src.peerid);
+        if (touchedPeerEx) {
+            this.m_pendingPeerList.delete(response.common.src.peerid);
+            touchedPeerEx.resender.finish();
+        }
 
         if (this.m_arrivePeeridSet.size != arrivedPeerCount && this.m_package.body) {
             let eNodes = null;
@@ -184,9 +192,15 @@ class TouchNodeTask extends Task {
                 Peer.retryInterval(this.bucket.localPeer, remotePeer),
                 Config.Package.RetryTimes,
                 this.m_isImmediately);
+            // 可能已经超时了，再重试一下
+            this.m_pendingPeerList.set(peerEx.peer.peerid, peerEx);
             peerEx.resender.send();
         }
         this.m_owner.handshakeSource(peerEx.peer, peerEx.agencyPeer, false, false, peerEx._onHandshake);
+    }
+
+    destroy() {
+        this.m_pendingPeerList.forEach(peerEx => peerEx.resender.finish());
     }
 
     // override以下必须由子类重载
