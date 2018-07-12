@@ -114,11 +114,10 @@ class TouchNodeTask extends Task {
     _retryImpl() {
         let outtimePeers = [];
         for (let [peerid, peerEx] of this.m_pendingPeerList) {
+            let self = this;
             if (!peerEx.resender.isTimeout()) {
-                peerEx.resender.send();
-                // 对方没有响应，试着打洞
-                if (peerEx.agencyPeer && peerEx.resender.tryTimes >= 2) {
-                    this._hole(peerEx);
+                if (!peerEx.isHole) {
+                    peerEx.resender.send();
                 }
             } else {
                 outtimePeers.push(peerid);
@@ -151,6 +150,7 @@ class TouchNodeTask extends Task {
             let peerEx = {
                 peer,
                 agencyPeer,
+                isHole: false,
                 resender: new ResendControlor(peer,
                     this.m_package,
                     this.packageSender,
@@ -160,8 +160,10 @@ class TouchNodeTask extends Task {
             };
             this.m_pendingPeerList.set(peer.peerid, peerEx);
             this.m_requestPeeridSet.add(peer.peerid);
-            if (peer.eplist.length === 0 && !peer.address && agencyPeer) {
-                this._hole(peerEx);
+            if (agencyPeer) {
+                // 如果有中转节点，走穿透逻辑
+                peerEx.isHole = true;
+                this.m_owner.handshakeSource(peerEx.peer, peerEx.agencyPeer, false, false, peerEx.resender, () => peerEx.isHole = false);
             } else {
                 peerEx.resender.send();
             }
@@ -172,31 +174,6 @@ class TouchNodeTask extends Task {
 
     get _isExcludeLocalPeer() {
         return true;
-    }
-
-    _hole(peerEx) {
-        if (peerEx._onHandshake) {
-            return;
-        }
-
-        peerEx._onHandshake = (result, remotePeer) => {
-            if (result !== DHTResult.SUCCESS || this.isComplete || this.m_arrivePeeridSet.has(peerEx.peer.peerid)) {
-                return;
-            }
-            
-            peerEx.resender.abort();
-            peerEx.peer = remotePeer;
-            peerEx.resender = new ResendControlor(remotePeer,
-                this.m_package,
-                this.packageSender,
-                Peer.retryInterval(this.bucket.localPeer, remotePeer),
-                Config.Package.RetryTimes,
-                this.m_isImmediately);
-            // 可能已经超时了，再重试一下
-            this.m_pendingPeerList.set(peerEx.peer.peerid, peerEx);
-            peerEx.resender.send();
-        }
-        this.m_owner.handshakeSource(peerEx.peer, peerEx.agencyPeer, false, false, peerEx._onHandshake);
     }
 
     destroy() {

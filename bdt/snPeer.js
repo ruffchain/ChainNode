@@ -59,7 +59,6 @@ async function start() {
             initPort: udpPort,
             maxPortOffset: 0,
         },
-        listenerEPList: [`4@${OUT_HOST}@${tcpPort}@t`, `4@${OUT_HOST}@${udpPort}@u`]
     };
 
     let {result, p2p} = await P2P.create(snDHTServerConfig);

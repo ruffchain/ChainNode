@@ -37,6 +37,7 @@ class PackageProcessor {
 
     process(cmdPackage, remotePeer, remoteAddr, localAddr) {
         SendStat.onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr);
+        this.m_taskExecutor.onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr);
         switch (cmdPackage.cmdType) {
             case DHTCommandType.FIND_PEER_REQ:
                 this._processFindPeer(cmdPackage, remotePeer);

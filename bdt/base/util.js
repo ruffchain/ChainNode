@@ -146,6 +146,10 @@ const EndPoint = {
             endpoint = EndPoint.toAddress(endpoint.join('@'));
         }
 
+        if (endpoint.family !== internetAddress.family) {
+            return [false, ''];
+        }
+        
         const isNAT = EndPoint.isNAT(endpoint);
         const isZero = EndPoint.isZero(endpoint);
         const isTCP = EndPoint.PROTOCOL.tcp == endpoint.protocol;

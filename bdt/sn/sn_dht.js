@@ -422,7 +422,8 @@ class SNDHT {
                 return;
             }
             this.m_recentSNMap.set(params.peerid, {onlineTime: Date.now(), hash: HashDistance.hash(params.peerid)});
-            this.m_eventEmitter.emit(SNDHT.Event.SN.online, {peerid: params.peerid});
+            this.m_fatherDHT.ping(sourcePeer);
+            setImmediate(() => this.m_eventEmitter.emit(SNDHT.Event.SN.online, {peerid: params.peerid}));
         };
         this.m_snDHT.attachBroadcastEventListener(SNDHT.Event.SN.online, this.m_snOnlineListener);
         this.m_snDHT.emitBroadcastEvent(SNDHT.Event.SN.online, {peerid: this.m_localPeer.peerid});

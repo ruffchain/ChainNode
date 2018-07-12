@@ -412,11 +412,11 @@ class LocalPeer extends Peer {
 
         let _unionEPList = (newEPList, _isReuseListener, isConjecture) => {
             for (let ep of newEPList) {
-                if (EndPoint.isZero(ep)) {
+                let addr = EndPoint.toAddress(ep);
+                if (EndPoint.isZero(addr)) {
                     continue;
                 }
     
-                let addr = EndPoint.toAddress(ep);
                 if (!_isReuseListener) {
                     if (addr.protocol === EndPoint.PROTOCOL.tcp) {
                         continue;
@@ -436,7 +436,7 @@ class LocalPeer extends Peer {
                         if (isConjecture) {
                             this.m_conjectureEPCount++;
                         } else {
-                            if (!isNAT) {
+                            if (!isNAT && addr.family === EndPoint.FAMILY.IPv4) {
                                 this.m_discoverInternetEPCount++;
                             }
                         }
@@ -458,7 +458,7 @@ class LocalPeer extends Peer {
                         if (info.isConjecture) {
                             delete info.isConjecture;
                             this.m_conjectureEPCount--;
-                            if (!isNAT) {
+                            if (!isNAT && addr.family === EndPoint.FAMILY.IPv4) {
                                 this.m_discoverInternetEPCount++;
                             }
                         }
@@ -481,7 +481,7 @@ class LocalPeer extends Peer {
                     }
     
                     const [isOk, newEp] = BaseUtil.EndPoint.conjectureEndPoint(ep, outerAddress);
-                    if ( isOk ) {
+                    if (isOk) {
                         additionalEPList.push(newEp);
                     }
                 });
@@ -599,7 +599,7 @@ class LocalPeer extends Peer {
                 for (let [ep, epInfo] of this.m_eplist) {
                     // LOG_INFO(`now=${now},ep=${ep},epInfo=${JSON.stringify(epInfo)}`);
                     let epAddress = EndPoint.toAddress(ep);
-                    if (epInfo.senderEP && (epInfo.isInitEP || now - epInfo.updateTime <= this.EP_TIMEOUT) && !EndPoint.isNAT(epAddress)) {
+                    if (epInfo.senderEP && epAddress.family === EndPoint.FAMILY.IPv4 && (epInfo.isInitEP || now - epInfo.updateTime <= this.EP_TIMEOUT) && !EndPoint.isNAT(epAddress)) {
                         let epSenderAddress = EndPoint.toAddress(epInfo.senderEP);
                         // 收发地址完全匹配，或者发送地址是'0.0.0.0'但port匹配，刚好映射到相同port的情况时，会误判
                         if (ep === epInfo.senderEP || 
@@ -651,7 +651,9 @@ class LocalPeer extends Peer {
                 if (info.isConjecture) {
                     this.m_conjectureEPCount--;
                 } else if (!EndPoint.isNAT(addr)) {
-                    this.m_discoverInternetEPCount--;
+                    if (addr.family === EndPoint.FAMILY.IPv4) {
+                        this.m_discoverInternetEPCount--;
+                    }
                 }
             }
         }

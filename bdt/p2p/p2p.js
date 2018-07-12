@@ -138,10 +138,10 @@ class P2P extends EventEmitter {
                 initPort:number initial udp port    默认：0，随机PORT
                 maxPortOffset:number max try bind port offset   默认：0；initPort=0时，忽略该参数
             }
-            snPeer: {
+            snPeer: [{
                 peerid:
                 eplist:
-            }
+            }]
             dhtEntry: [{
                 peerid:
                 eplist
@@ -550,7 +550,7 @@ P2P.EVENT = {
  * 启动BDT协议栈基本流程：
  * let {result, p2p} = await P2P.create(params);
  * p2p.joinDHT([dhtPeer1, dhtPeer2, ...]);
- * p2p.snPeer = {peerid, eplist}
+ * p2p.snPeer = [{peerid, eplist}, ...]
  * await p2p.startupBDTStack();
  * let bdtStack = p2p.bdtStack; // BDT协议栈
  * 

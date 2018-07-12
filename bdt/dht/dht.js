@@ -31,21 +31,6 @@ const ROOT_SERVICE_PATH = [];
 const BASE_DHT_SERVICE_ID = '';
 
 
-// 抽象一层中间调用方法
-// 让function能够兼容 await 和 callback
-function compatible(context, func, ...args) {
-    let callback = args[args.length - 1]
-    if ( callback ) {
-        func.call(context, ...args)
-    } else {
-        return new Promise(resolve => {
-            // resolve 替换callback
-            args[args.length - 1] = resolve
-            func.call(context, ...args)
-        })
-    }
-}
-
 class DHTBase extends EventEmitter {
     constructor(mixSocket, localPeer, packageFactory, taskMgr) {
         super();
@@ -199,7 +184,17 @@ class DHTBase extends EventEmitter {
 
     // callback({result, values: Map<key, value>})
     getValue(tableName, keyName, flags = FLAG_PRECISE, callback = undefined) {
-        return compatible(this, this._getValue, tableName, keyName, flags, callback)
+        const generateCallback = handler => {
+            this._getValue(tableName, keyName, flags, (result, values = new Map()) => {
+                handler({result, values})
+            });
+        }
+
+        if (callback) {
+            generateCallback(callback)
+        } else {
+            return new Promise(resolve => generateCallback(resolve))
+        }
     }
 
     _getValue(tableName, keyName, flags = FLAG_PRECISE, callback = undefined) {
@@ -257,7 +252,6 @@ class DHTBase extends EventEmitter {
     }
 
     emitBroadcastEvent(eventName, params) {
-        // return compatible(this, this._emitBroadcastEvent, eventName, params);
         return this._emitBroadcastEvent(eventName, params);
     }
 
@@ -742,7 +736,7 @@ class DHT extends DHTBase {
 
     // 对某个节点发起主动握手
     handshake(remotePeer, agencyPeer, callback) {
-        this.m_taskExecutor.handshakeSource(remotePeer, agencyPeer, false, false, callback);
+        this.m_taskExecutor.handshakeSource(remotePeer, agencyPeer, false, false, null, callback);
     }
 
     updateLocalPeerAdditionalInfo(keyName, newValue) {

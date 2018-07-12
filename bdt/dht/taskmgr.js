@@ -28,6 +28,8 @@ class TaskExecutor {
         this.m_distributedValueTable = distributedValueTable;
         this.m_taskMgr = taskMgr;
         this.m_servicePath = '';
+
+        this.m_handshakeTaskMap = new Map(); // <remotePeerid, tasklist>
     }
 
     findPeer(peerid, isImmediately, callback = null, onStep = null) {
@@ -125,7 +127,8 @@ class TaskExecutor {
     // agencyPeer: 穿透中介节点，置空则不进行穿透
     // isHoleImmediately: 直连的同时，立即开始穿透；非频繁紧急情况使用，不建议
     // passive：被动连接，先不测试直连，通过agencyPeer通知对方连入；粗测本地网络环境使用
-    handshakeSource(targetPeer, agencyPeer, isHoleImmediately, passive, callback) {
+    // handshakeSender: 如果是为了发送特定包而握手，填充该参数，用用户包替换握手包，减少无谓的握手包
+    handshakeSource(targetPeer, agencyPeer, isHoleImmediately, passive, handshakeSender, callback) {
         for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
             if (task.type === 'HandshakeSourceTask'
                 && task.peerid === targetPeer.peerid) {
@@ -146,10 +149,18 @@ class TaskExecutor {
             return;
         }
 
-        let newTask = new HandshakeTask.Source(this, targetPeer, agencyPeer, isHoleImmediately, passive);
+        let newTask = new HandshakeTask.Source(this, targetPeer, agencyPeer, isHoleImmediately, passive, handshakeSender);
         if (callback) {
             newTask.addCallback(callback);
         }
+
+        let tasklist = this.m_handshakeTaskMap.get(targetPeer.peerid);
+        if (!tasklist) {
+            tasklist = [];
+            this.m_handshakeTaskMap.set(targetPeer.peerid, tasklist);
+        }
+        tasklist.push(newTask);
+
         this.m_taskMgr._run(newTask);
     }
 
@@ -170,7 +181,22 @@ class TaskExecutor {
         }
 
         let newTask = new HandshakeTask.Target(this, srcPeer, taskid);
+
+        let tasklist = this.m_handshakeTaskMap.get(srcPeer.peerid);
+        if (!tasklist) {
+            tasklist = [];
+            this.m_handshakeTaskMap.set(srcPeer.peerid, tasklist);
+        }
+        tasklist.push(newTask);
+
         this.m_taskMgr._run(newTask);
+    }
+
+    onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr) {
+        let tasklist = this.m_handshakeTaskMap.get(remotePeer.peerid);
+        if (tasklist) {
+            tasklist.forEach(task => task.onRemoteResponse(cmdPackage, remotePeer, remoteAddr, localAddr));
+        }
     }
 
     get bucket() {
@@ -206,6 +232,10 @@ class TaskExecutor {
     }
 
     onTaskComplete(task) {
+        if (task.type === 'HandshakeSourceTask' || task.type === 'HandshakeTargetTask') {
+            this.m_handshakeTaskMap.delete(task.peerid);
+        }
+
         this.m_taskMgr._onTaskComplete(task);
     }
 }

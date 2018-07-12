@@ -46,7 +46,11 @@ class PeerFinder extends BDT.PeerFinder {
 
     findSN(peerid, fromCache, onStep) {
         if (this.m_snPeer) {
-            return Promise.resolve([BDT.ERROR.success, [this.m_snPeer]]);
+            let snPeerArray = this.m_snPeer;
+            if (!Array.isArray(this.m_snPeer)) {
+                snPeerArray = [this.m_snPeer];
+            }
+            return Promise.resolve([BDT.ERROR.success, snPeerArray]);
         } else if (this.m_snDHT) {
             return new Promise(resolve => {
                 this.m_snDHT.findSN(peerid,

@@ -26,12 +26,14 @@ function isEmptyEPList(eplist) {
 // isHoleImmediately = false表示先尝试自己向对方发起握手，几次失败后再试着通过中介peer进行打洞；否则两者同时进行，以最快速度建立连接
 // passive = true表示优先通过中介让对方反向接入，一段时间后才主动向对方发起握手，可用于在实时性要求不高时检测本地网络是否能被新peer主动连接
 class HandshakeSourceTask extends Task {
-    constructor(owner, targetPeer, agencyPeer, isHoleImmediately, passive) {
+    constructor(owner, targetPeer, agencyPeer, isHoleImmediately, passive, handshakeSender) {
         super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
         this.m_id = Task.genGlobalTaskID(this.bucket.localPeer.peerid, this.m_id);
-        this.m_handshakePackage = null;
-        this.m_handshakeResender = null;
+        this.m_handshakeResender = {sender: handshakeSender};
+        if (handshakeSender) {
+            this.m_handshakeResender.isDeposit = true;
+        }
         this.m_targetPeer = targetPeer;
         this.m_holePackage = null;
         this.m_holeResender = null;
@@ -49,6 +51,12 @@ class HandshakeSourceTask extends Task {
         return this.m_targetPeer.peerid;
     }
 
+    onRemoteResponse(cmdPackage, remotePeer, remoteAddr, localAddr) {
+        let connectedPeer = this._connectedPeer();
+        this.m_targetPeer = connectedPeer || remotePeer;
+        setImmediate(() => this._onComplete(DHTResult.SUCCESS));
+    }
+
     _startImpl() {
         let connectedPeer = this._connectedPeer();
         if (connectedPeer) {
@@ -57,19 +65,26 @@ class HandshakeSourceTask extends Task {
             return;
         }
 
-        this.m_handshakePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HANDSHAKE_REQ);
-        this.m_handshakePackage.body = {taskid: this.id};
-        this.m_handshakeResender = new ResendControlor(this.m_targetPeer,
-            this.m_handshakePackage,
-            this.packageSender,
-            Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer),
-            Config.Package.RetryTimes - 1);
+        let handshakePackage = null;
+        if (!this.m_handshakeResender.sender) {
+            handshakePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HANDSHAKE_REQ);
+            handshakePackage.body = {taskid: this.id};
+            this.m_handshakeResender.sender = new ResendControlor(this.m_targetPeer,
+                handshakePackage,
+                this.packageSender,
+                Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer),
+                Config.Package.RetryTimes - 1);
+        }
 
         if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) && !this.m_isPassive) {
-            this.packageSender.sendPackage(this.m_targetPeer,
-                this.m_handshakePackage,
-                false,
-                Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer));
+            if (handshakePackage) {
+                this.packageSender.sendPackage(this.m_targetPeer,
+                    handshakePackage,
+                    false,
+                    Peer.retryInterval(this.bucket.localPeer, this.m_targetPeer));
+            } else {
+                this.m_handshakeResender.sender.send();
+            }
         }
         
         // 本地有监听地址时才可能被反向穿透
@@ -116,7 +131,7 @@ class HandshakeSourceTask extends Task {
                     if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) &&
                         (!this.m_isPassive || this.consum >= maxPassiveDelay)) {
             
-                        this.m_handshakeResender.send();
+                        this.m_handshakeResender.sender.send();
                     }
                 } 
             }
@@ -159,7 +174,7 @@ class HandshakeSourceTask extends Task {
         if ((!isEmptyEPList(this.m_targetPeer.eplist) || this.m_targetPeer.address) &&
             (!this.m_isPassive || this.consum >= maxPassiveDelay)) {
 
-            this.m_handshakeResender.send();
+            this.m_handshakeResender.sender.send();
         }
     }
 
@@ -169,8 +184,9 @@ class HandshakeSourceTask extends Task {
         if (this.m_holeResender) {
             this.m_holeResender.finish();
         }
-        if (this.m_handshakeResender) {
-            this.m_handshakeResender.finish();
+        // 外面托管的包归构造方管理
+        if (this.m_handshakeResender && !this.m_handshakeResender.isDeposit && this.m_handshakeResender.sender) {
+            this.m_handshakeResender.sender.finish();
         }
     }
 
@@ -253,7 +269,6 @@ class HandshakeTargetTask extends Task {
         super(owner, {timeout: HandshakeConfig.TimeoutMS, maxIdleTime: TaskConfig.MaxIdleTimeMS});
 
         this.m_id = taskid;
-        this.m_handshakePackage = null;
         this.m_handshakeResender = null;
         this.m_srcPeer = srcPeer;
         this.m_isDone = false;
@@ -263,6 +278,10 @@ class HandshakeTargetTask extends Task {
         return this.m_srcPeer.peerid;
     }
 
+    onRemoteResponse(cmdPackage, remotePeer, remoteAddr, localAddr) {
+        this.m_isDone = true;
+    }
+
     _startImpl() {
         // 打洞的目的是要src能连接上target，target是否能连接上src不能作为成功打洞的标准
         // if (this._isConnected()) {
@@ -270,11 +289,11 @@ class HandshakeTargetTask extends Task {
         //     return;
         // }
 
-        this.m_handshakePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HANDSHAKE_REQ);
-        this.m_handshakePackage.body = {taskid: this.id};
+        let handshakePackage = this.packageFactory.createPackage(DHTPackage.CommandType.HANDSHAKE_REQ);
+        handshakePackage.body = {taskid: this.id};
 
         this.m_handshakeResender = new ResendControlor(this.m_srcPeer,
-            this.m_handshakePackage,
+            handshakePackage,
             this.packageSender,
             Peer.retryInterval(this.bucket.localPeer, this.m_srcPeer),
             Config.Package.RetryTimes);
