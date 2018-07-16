@@ -14,12 +14,12 @@ import {ChainServer} from './rpc';
 import GlobalConfig = require('../../core/chain/globalConfig');
 
 type ConsensusInstance = {
-    chain: (options: ChainOptions, commandOptions: CommandOptions)=>Chain|undefined;
-    miner: (options: MinerOptions, commandOptions: CommandOptions)=>Miner|undefined;
-    create: (command: CommandOptions)=>any|undefined;
+    chain: (options: ChainOptions, commandOptions: CommandOptions) => Chain|undefined;
+    miner: (options: MinerOptions, commandOptions: CommandOptions) => Miner|undefined;
+    create: (command: CommandOptions) => any|undefined;
 };
 
-type NetInstance = (commandOptions: CommandOptions)=>INode|undefined;
+type NetInstance = (commandOptions: CommandOptions) => INode|undefined;
 
 class ChainHost {
     constructor() {
@@ -67,7 +67,7 @@ class ChainHost {
         }
         let ci = this.m_consensus.get(commandOptions.get('consensus'));
         let param: any = ci!.create(commandOptions);
-        param.txlivetime = commandOptions.has('txlivetime') ? commandOptions.get('txlivetime') : 60*60 ;
+        param.txlivetime = commandOptions.has('txlivetime') ? commandOptions.get('txlivetime') : 60 * 60 ;
         
         let err = await this.m_miner!.create(param);
         console.log(`create genesis finished with error code: ${err}`);
@@ -115,14 +115,14 @@ class ChainHost {
             }
         }
 
-        await GlobalConfig.LoadConfig(dataDir, Chain.kvConfig, Chain.s_dbFile);
-
         chainOptions.loggerOptions = {
             console: true, 
             level: 'debug', 
             file: {root: path.join(dataDir, 'log')}
         };
     
+        await GlobalConfig.loadConfig(dataDir, Chain.kvConfig, Chain.s_dbFile);
+        
         let consensus = null;
         if (GlobalConfig.isLoad()) {
             consensus = GlobalConfig.getConfig('consensus');
@@ -148,7 +148,7 @@ class ChainHost {
             
         } else {
             let minerOptions: MinerOptions = Object.create(chainOptions);
-            //dpos的miner可以没有coinbase，用secret代替
+            // dpos的miner可以没有coinbase，用secret代替
             minerOptions.coinbase = commandOptions.get('coinbase');
             // if (!minerOptions.coinbase) {
             //     console.error('invalid coinbase');
@@ -162,7 +162,6 @@ class ChainHost {
         }
         return true;
     }
-
 
     public registerConsensus(consensus: string, instance: ConsensusInstance) {
         this.m_consensus.set(consensus, instance);
@@ -194,4 +193,3 @@ class ChainHost {
 }
 
 export = new ChainHost();
-

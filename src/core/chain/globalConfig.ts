@@ -19,14 +19,13 @@ class GlobalConfig {
         return this.m_isLoad;
     }
 
-    public async LoadConfig(dataDir: string, kvConfig: string, dbFile: string): Promise<ErrorCode> {
+    public async loadConfig(dataDir: string, kvConfig: string, dbFile: string): Promise<ErrorCode> {
         let gh = await this.getGenesisHeaderHash(dataDir, dbFile);
         if (gh.err) {
-            console.log(`getGenesisHeaderHash failed`);
-            return ErrorCode.RESULT_FAILED;
+            return gh.err;
         }
         let filePath = path.join(dataDir, `./storage/dump/${gh.hash!}`);
-        let db: sqlite.Database = await sqlite.open(filePath, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+        let db: sqlite.Database = await sqlite.open(filePath, { mode: sqlite3.OPEN_READONLY });
         let kv: StorageTable = new StorageTable(db, kvConfig);
         let ga = await kv.getAll();
         if (ga.err) {
@@ -42,7 +41,13 @@ class GlobalConfig {
     }
 
     protected async getGenesisHeaderHash(dataDir: string, dbFile: string): Promise<{err: ErrorCode, hash?: string}> {
-        let db: sqlite.Database = await sqlite.open(dataDir + '/' + dbFile, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+        let db: sqlite.Database;
+        try {
+           db = await sqlite.open(dataDir + '/' + dbFile, { mode: sqlite3.OPEN_READONLY });
+        } catch (error) {
+            return {err: ErrorCode.RESULT_NOT_FOUND};
+        }
+
         const result = await db.get('select hash from best where height=0');
         if (!result || !result.hash) {
             return {err: ErrorCode.RESULT_NOT_FOUND};
