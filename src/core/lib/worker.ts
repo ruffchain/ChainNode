@@ -1,5 +1,4 @@
-import { EventEmitter } from "events";
-import * as path from 'path';
+import { EventEmitter } from 'events';
 import {ChildProcess, spawn} from 'child_process';
 
 export class Worker extends EventEmitter {
@@ -15,9 +14,9 @@ export class Worker extends EventEmitter {
     }
 
     run() {
-        //1. 开一个进程，传serverPort, file, params进去
-        //2. 子进程启动，开始运行
-        //3. 函数返回后，子进程
+        // 1. 开一个进程，传serverPort, file, params进去
+        // 2. 子进程启动，开始运行
+        // 3. 函数返回后，子进程
 
         const bin = process.argv[0];
         const options = { stdio: 'pipe', env: process.env };

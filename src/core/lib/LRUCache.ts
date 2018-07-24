@@ -49,7 +49,7 @@ class DLink<T> {
         return this.m_tail;
     }
 
-    public remove(node:LRUNode<T>) {
+    public remove(node: LRUNode<T>) {
         if (this.length === 0) {
             return;
         }
@@ -104,8 +104,7 @@ class DLink<T> {
     }
 }
 
-
-export class LRUCache<TKey,TValue> {
+export class LRUCache<TKey, TValue> {
     protected m_maxCount: number;
     protected m_memValue: Map<TKey, [TValue, LRUNode<TKey>]>;
     protected m_link: DLink<TKey>;

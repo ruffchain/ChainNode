@@ -1,10 +1,6 @@
 import { BufferReader, BufferWriter, Serializable, ErrorCode, SerializableWithHash, stringify } from '../serializable';
 import { Encoding } from '../lib/encoding';
 import * as Address from '../address';
-import * as digest from '../lib/digest';
-import { write } from 'fs';
-import { read } from 'fs-extra';
-
 
 export class Transaction extends SerializableWithHash {
     private m_publicKey: Buffer;
@@ -51,7 +47,7 @@ export class Transaction extends SerializableWithHash {
         this.m_input = stringify(i);
     }
 
-    set publickey(b:  Buffer) {
+    set publickey(b: Buffer) {
         this.m_publicKey = b;
     }
 
@@ -80,7 +76,6 @@ export class Transaction extends SerializableWithHash {
         return writer;
     }
 
-
     public encode(writer: BufferWriter): BufferWriter {
         super.encode(writer);
         writer.writeBytes(this.m_signature);
@@ -88,16 +83,28 @@ export class Transaction extends SerializableWithHash {
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {
-        this.m_method = reader.readVarString();
-        this.m_nonce = reader.readU32();
-        this.m_publicKey = reader.readBytes(33, false);
-        this._decodeInput(reader);
+        try {
+            this.m_method = reader.readVarString();
+            this.m_nonce = reader.readU32();
+            this.m_publicKey = reader.readBytes(33, false);
+            this._decodeInput(reader);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
         return ErrorCode.RESULT_OK;
     }
 
     public decode(reader: BufferReader): ErrorCode {
-        super.decode(reader);
-        this.m_signature = reader.readBytes(64, false);
+        let err = super.decode(reader);
+        if (err) {
+            return err;
+        }
+        try {
+            this.m_signature = reader.readBytes(64, false);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
         return ErrorCode.RESULT_OK;
     }
 
@@ -163,7 +170,11 @@ export class EventLog implements Serializable {
     }
 
     public decode(reader: BufferReader): ErrorCode {
-        this.m_params = JSON.parse(reader.readVarString());
+        try {
+            this.m_params = JSON.parse(reader.readVarString());
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
         return ErrorCode.RESULT_OK;
     }
 
@@ -224,9 +235,12 @@ export class Receipt implements Serializable {
         this.m_transactionHash = reader.readVarString();
         this.m_returnCode = reader.readI32();
         let nCount: number = reader.readU16();
-        for(let i=0; i < nCount; i++) {
+        for (let i = 0; i < nCount; i++) {
             let log: EventLog = new EventLog();
-            log.decode(reader)
+            let err = log.decode(reader);
+            if (err) {
+                return err;
+            }
             this.m_eventLogs.push(log);
         }
 

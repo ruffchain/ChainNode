@@ -1,24 +1,26 @@
 import {Options as CommandOptions} from '../lib/simple_command';
+import * as fs from 'fs-extra';
 
-import {Chain, ChainOptions} from '../../core/dpos_chain/chain';
-import {Miner, MinerOptions} from '../../core/dpos_chain/miner';
+import {ValueChain, ValueMiner, DposChain, DposMiner, ChainCreator} from '../../core';
 
 import chainHost = require('../host/chain_host');
 
-import * as fs from 'fs-extra';
-
 chainHost.registerConsensus('dpos', {
-    chain(options: any, commandOptions: CommandOptions):Chain {
-        return new Chain(options);
+    async chain(commandOptions: CommandOptions): Promise<ValueChain|undefined> {
+        let creator: ChainCreator = new ChainCreator();
+        let cc = await creator.createChain(commandOptions, DposChain);
+        if (!cc.err) {
+            return cc.chain as ValueChain;
+        }
     }, 
-    miner(options: any, commandOptions: CommandOptions):Miner {
+    miner(options: any, commandOptions: CommandOptions): ValueMiner {
         let secret = commandOptions.get('minerSecret');
         if (secret) {
             options.minerSecret = Buffer.from(secret, 'hex');
         }
-        return new Miner(options);
+        return new DposMiner(options);
     },
-    create(command: CommandOptions):any {
+    create(command: CommandOptions): any {
         if (!command.has('genesisFile')) {
             throw new Error('dpos create MUST have genesis file!');
         }
@@ -39,4 +41,3 @@ chainHost.registerConsensus('dpos', {
         return json;
     }
 });
-

@@ -6,7 +6,7 @@ export type Command = {command?: string, options: Options};
 
 export function parseCommand(): Command|undefined {
     if (process.argv.length < 3) {
-        console.log('invalid command');
+        console.log('no enough command');
         return ;
     }
     let command: Command = {options: new Map()};
@@ -31,7 +31,7 @@ export function parseCommand(): Command|undefined {
                 command.options.set(curKey, arg);
                 curKey = undefined;
             } else {
-                console.error('invalid command');
+                console.error(`error command ${arg}, key must start with --`);
                 return undefined;
             }
         }

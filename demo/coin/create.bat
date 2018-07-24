@@ -1,4 +1,4 @@
-node ./dist/src/client/host/host.js create ^
+node ./dist/src/client/tools/host.js create ^
 --consensus pow ^
 --handler "./dist/demo/coin/contract/handler.js" ^
 --dataDir "./demo/coin/genesis"

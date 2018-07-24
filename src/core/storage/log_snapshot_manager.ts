@@ -1,31 +1,25 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import assert = require('assert');
 
 import {ErrorCode} from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import { BufferWriter, BufferReader } from '../serializable';
+import {StorageLogger} from './logger';
+import {JStorageLogger} from './js_log';
 
 import { Storage, StorageOptions } from './storage';
-import { IStorageSnapshotManager, StorageDumpSnapshot } from "./dump_snapshot";
+import { IStorageSnapshotManager, StorageDumpSnapshot, StorageSnapshotManagerOptions } from './dump_snapshot';
 import { StorageDumpSnapshotManager } from './dump_snapshot_manager';
 import {HeaderStorage} from '../chain/header_storage';
 
-
-
-
 export class SnapshotManager implements IStorageSnapshotManager {
-    constructor(options: {
-        path: string,
-        headerStorage: HeaderStorage, 
-        storageType: new (options: StorageOptions) => Storage,
-        recycleHandler: (blockHash: string) => Promise<{err: ErrorCode, recycle?: boolean}>, 
-        logger: LoggerInstance}) {
+    constructor(options: StorageSnapshotManagerOptions) {
         this.m_logPath = path.join(options.path, 'log');
         this.m_dumpManager = new StorageDumpSnapshotManager(options);
         this.m_headerStorage = options.headerStorage;
         this.m_storageType = options.storageType;
         this.m_logger = options.logger;
-        this.m_recycleHandler = options.recycleHandler;
     }
 
     private m_logPath: string;
@@ -34,21 +28,17 @@ export class SnapshotManager implements IStorageSnapshotManager {
     private m_storageType: new (options: StorageOptions) => Storage;
     private m_logger: LoggerInstance;
     private m_snapshots: Map<string, {ref: number}> = new Map();
-    private m_recycleHandler: (blockHash: string) => Promise<{err: ErrorCode, recycle?: boolean}>;
 
     public recycle() {
         let recycledMap = new Map(this.m_snapshots);
         for (let [blockHash, stub] of recycledMap.entries()) {
             if (!stub.ref) {
-                this.m_recycleHandler(blockHash).then((rhr: {err: ErrorCode, recycle?: boolean}) => {
-                    if (!rhr.err && !stub!.ref && rhr.recycle) {
-                        this.m_dumpManager.removeSnapshot(blockHash);
-                        this.m_snapshots.delete(blockHash);
-                    }
-                });
+                this.m_dumpManager.removeSnapshot(blockHash);
+                this.m_snapshots.delete(blockHash);
             }
         }
     }
+
     async init(): Promise<ErrorCode> {
         fs.ensureDirSync(this.m_logPath);
         let err = await this.m_dumpManager.init();
@@ -59,7 +49,6 @@ export class SnapshotManager implements IStorageSnapshotManager {
         for (let ss of snapshots) {
             this.m_snapshots.set(ss.blockHash, {ref: 0});
         }
-        //this._checkRecycle();
         return ErrorCode.RESULT_OK;
     }
 
@@ -76,8 +65,6 @@ export class SnapshotManager implements IStorageSnapshotManager {
             logger.encode(writer);
             fs.writeFileSync(this.getLogPath(blockHash), writer.render());
         }
-        //先删除不需要的snapshot，再set
-        //this._checkRecycle();
         this.m_snapshots.set(blockHash, {ref: 0});
         return csr;
         
@@ -89,6 +76,31 @@ export class SnapshotManager implements IStorageSnapshotManager {
 
     getLogPath(blockHash: string): string {
         return path.join(this.m_logPath, blockHash + '.redo');
+    }
+
+    public getRedoLog(blockHash: string): JStorageLogger|undefined {
+        let redoLogRaw = fs.readFileSync(this.getLogPath(blockHash));
+        if ( !redoLogRaw ) {
+            return undefined;
+        }
+
+        let redoLog = new JStorageLogger();
+        let err = redoLog.decode(new BufferReader(redoLogRaw));
+        if (err) {
+            this.m_logger.error(`decode redo log ${blockHash} from storage failed`);
+            return undefined;
+        }
+
+        return redoLog;
+    }
+
+    // 保存redolog文件
+    // 文件内容来源是 从其他节点请求来， 并不是本地节点自己运行的redolog
+    public writeRedoLog(blockHash: string, redoLog: StorageLogger) {
+        let filepath = this.getLogPath(blockHash);
+        let writer = new BufferWriter();
+        redoLog.encode(writer);
+        fs.writeFileSync(filepath, writer.render());
     }
 
     async getSnapshot(blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
@@ -108,21 +120,21 @@ export class SnapshotManager implements IStorageSnapshotManager {
         let err = ErrorCode.RESULT_NOT_FOUND;
         let nearestSnapshot: StorageDumpSnapshot;
         do {
-            let ssr = await this.m_dumpManager.getSnapshot(header.hash);
-            if (!ssr.err) {
-                nearestSnapshot = ssr.snapshot!;
-                err = ssr.err;
+            let _ssr = await this.m_dumpManager.getSnapshot(header.hash);
+            if (!_ssr.err) {
+                nearestSnapshot = _ssr.snapshot!;
+                err = _ssr.err;
                 break;
-            } else if (ssr.err !== ErrorCode.RESULT_NOT_FOUND) {
-                err = ssr.err;
+            } else if (_ssr.err !== ErrorCode.RESULT_NOT_FOUND) {
+                err = _ssr.err;
                 break;
             }
-            let hr = await this.m_headerStorage.loadHeader(header.preBlockHash);
-            if (hr.err) {
+            let _hr = await this.m_headerStorage.loadHeader(header.preBlockHash);
+            if (_hr.err) {
                 err = ErrorCode.RESULT_INVALID_BLOCK;
                 break;
             }
-            header = hr.header!;
+            header = _hr.header!;
             blockPath.push(header.hash);
         } while (true);
         if (err) {
@@ -138,12 +150,12 @@ export class SnapshotManager implements IStorageSnapshotManager {
         if (err) {
             return {err};
         }
-        for (let blockHash of blockPath.reverse()) {
-            if (!fs.existsSync(this.getLogPath(blockHash))) {
+        for (let _blockHash of blockPath.reverse()) {
+            if (!fs.existsSync(this.getLogPath(_blockHash))) {
                 err = ErrorCode.RESULT_NOT_FOUND;
                 break;
             }
-            let log = fs.readFileSync(this.getLogPath(blockHash));
+            let log = fs.readFileSync(this.getLogPath(_blockHash));
             err = await storage.redo(log);
             if (err) {
                 break;
@@ -162,17 +174,10 @@ export class SnapshotManager implements IStorageSnapshotManager {
     releaseSnapshot(blockHash: string): void {
         let stub = this.m_snapshots.get(blockHash);
         if (stub) {
-            --stub.ref;
-            if (!stub.ref) {
-                this.m_recycleHandler(blockHash).then((rhr: {err: ErrorCode, recycle?: boolean}) => {
-                    if (!rhr.err && !stub!.ref && rhr.recycle) {
-                        this.m_dumpManager.removeSnapshot(blockHash);
-                        this.m_snapshots.delete(blockHash);
-                    }
-                });
+            assert(stub.ref > 0);
+            if (stub.ref > 0) {
+                --stub.ref;
             }
         }
     }
 }
-
-

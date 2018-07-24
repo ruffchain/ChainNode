@@ -1,8 +1,9 @@
 import * as process from 'process';
-import '../lib/unhandled_rejection';
+import {init as initUnhandledRejection} from '../lib/unhandled_rejection';
 import {parseCommand} from '../lib/simple_command';
+import * as core from '../../core';
 
-import * as address from '../../core/address';
+initUnhandledRejection();
 
 function main() {
     let command = parseCommand();
@@ -12,18 +13,18 @@ function main() {
     }
 
     if (command!.command === 'create') {
-        let [key, secret] = address.createKeyPair();
-        let addr = address.addressFromSecretKey(secret);
+        let [key, secret] = core.createKeyPair();
+        let addr = core.addressFromSecretKey(secret);
         console.log(`address:${addr} secret:${secret.toString('hex')}`);
         process.exit();
     } else {
         if (command!.options.has('secret')) {
-            let pub = address.publicKeyFromSecretKey(command!.options.get('secret'));
-            let addr = address.addressFromPublicKey(pub!);
+            let pub = core.publicKeyFromSecretKey(command!.options.get('secret'));
+            let addr = core.addressFromPublicKey(pub!);
             console.log(`address:${addr}\npubkey:${pub!.toString('hex')}`);
             process.exit();
-        } else if(command!.options.has('pubkey')) {
-            let addr = address.addressFromPublicKey(command!.options.get('pubkey'));
+        } else if (command!.options.has('pubkey')) {
+            let addr = core.addressFromPublicKey(command!.options.get('pubkey'));
             console.log(`address:${addr}`);
             process.exit();
         } else {
@@ -32,6 +33,5 @@ function main() {
         }
     }
 }
-
 
 main();

@@ -1,4 +1,4 @@
-let XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
+let XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
 export class RPCClient {
     private m_url: string;
     constructor(serveraddr: string, port: number) {
@@ -7,14 +7,14 @@ export class RPCClient {
 
     call(funName: string, funcArgs: any, onComplete: (resp: string | null, code: number) => void) {
         let sendObj = {
-            'funName': funName,
-            'args': funcArgs
-        }
+            funName,
+            args: funcArgs
+        };
         const xmlhttp = new XMLHttpRequest();
-        xmlhttp.onreadystatechange = function () {
-            if (xmlhttp.readyState == 4) {
+        xmlhttp.onreadystatechange = () => {
+            if (xmlhttp.readyState === 4) {
 
-                if (xmlhttp.status == 200) {
+                if (xmlhttp.status === 200) {
                     let strResp = xmlhttp.responseText;
                     onComplete(strResp, xmlhttp.status);
                 } else {
@@ -23,12 +23,12 @@ export class RPCClient {
             }
         };
 
-        xmlhttp.ontimeout = function (err: any) {
+        xmlhttp.ontimeout = (err: any) => {
             onComplete(null, 504);
         };
 
-        xmlhttp.open("POST", this.m_url, true);
-        xmlhttp.setRequestHeader("Content-Type", "application/json");
+        xmlhttp.open('POST', this.m_url, true);
+        xmlhttp.setRequestHeader('Content-Type', 'application/json');
 
         xmlhttp.send(JSON.stringify(sendObj));
     }
@@ -36,7 +36,7 @@ export class RPCClient {
     async callAsync(funcName: string, funcArgs: any): Promise<{ resp: string | null, ret: number }> {
         return new Promise<{ resp: string | null, ret: number }>((reslove, reject) => {
             this.call(funcName, funcArgs, (resp, statusCode) => {
-                reslove({ resp: resp, ret: statusCode });
+                reslove({ resp, ret: statusCode });
             });
         });
     }

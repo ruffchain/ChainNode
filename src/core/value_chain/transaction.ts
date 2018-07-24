@@ -1,8 +1,8 @@
 import { BigNumber } from 'bignumber.js';
-import * as BaseTransaction from '../chain/transaction';
+import {Transaction} from '../chain';
 import { BufferWriter, BufferReader, ErrorCode } from '../serializable';
 
-export class Transaction extends BaseTransaction.Transaction {
+export class ValueTransaction extends Transaction {
     constructor() {
         super();
         this.m_value = new BigNumber(0);
@@ -16,19 +16,19 @@ export class Transaction extends BaseTransaction.Transaction {
         return this.m_value;
     }
 
-    get fee(): BigNumber {
-        return this.m_fee;
-    }
-
     set value(value: BigNumber) {
         this.m_value = value;
     }
 
+    get fee(): BigNumber {
+        return this.m_fee;
+    }
+   
     set fee(value: BigNumber) {
         this.m_fee = value;
     }
 
-    protected _encodeHashContent(writer: BufferWriter): BufferWriter{
+    protected _encodeHashContent(writer: BufferWriter): BufferWriter {
         super._encodeHashContent(writer);
         writer.writeBigNumber(this.m_value);
         writer.writeBigNumber(this.m_fee);
@@ -36,9 +36,16 @@ export class Transaction extends BaseTransaction.Transaction {
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {
-        super._decodeHashContent(reader);
-        this.m_value = reader.readBigNumber();
-        this.m_fee = reader.readBigNumber();
+        let err = super._decodeHashContent(reader);
+        if (err) {
+            return err;
+        }
+        try {
+            this.m_value = reader.readBigNumber();
+            this.m_fee = reader.readBigNumber();
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
 
         return ErrorCode.RESULT_OK;
     }

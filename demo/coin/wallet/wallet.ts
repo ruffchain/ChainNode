@@ -1,8 +1,8 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import '../../../src/client/lib/unhandled_rejection';
-import {parseCommand, Command} from '../../../src/client/lib/simple_command';
-import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, Transaction} from '../../../src/client/client/client';
+import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection} from '../../../src/client';
+
+initUnhandledRejection();
 
 function main() {
     let command = parseCommand();
@@ -27,13 +27,12 @@ function main() {
     }
 
     let chainClient = new ChainClient({
-        host: host,
-        port: port
+        host,
+        port
     });
 
-
     let watchingTx: string[] = [];
-    chainClient.on('tipBlock', async (tipBlock)=>{
+    chainClient.on('tipBlock', async (tipBlock) => {
         for (let tx of watchingTx.slice()) {
             let {err, block, receipt} = await chainClient.getTransactionReceipt({tx});
             if (!err) {
@@ -71,8 +70,8 @@ function main() {
             }
             console.log(`${ret.value!}`);
         },
-        transferTo: async (to: string, amount: string, fee: string)=> {
-            let tx = new Transaction();
+        transferTo: async (to: string, amount: string, fee: string) => {
+            let tx = new ValueTransaction();
             tx.method = 'transferTo',
             tx.value = new BigNumber(amount);
             tx.fee = new BigNumber(fee);
@@ -84,7 +83,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`transferTo failed for ${err}`);
                 return ;
@@ -98,18 +97,18 @@ function main() {
         let chain = runEnv;
         try {
             eval(cmd);
-        } catch(e) {
+        } catch (e) {
             console.error(e.message);
         }
     }
     
-    let cmd = command.options.get('run');
-    if (cmd) {
-        runCmd(cmd);
+    let c = command.options.get('run');
+    if (c) {
+        runCmd(c);
     }
 
     let rl = readline.createInterface(process.stdin, process.stdout);
-    rl.on('line', (cmd: string)=>{
+    rl.on('line', (cmd: string) => {
         runCmd(cmd);
     });
 }

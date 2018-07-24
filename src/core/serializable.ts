@@ -12,7 +12,6 @@ import * as digest from './lib/digest';
 import {BigNumber} from 'bignumber.js';
 import { isUndefined, isNull, isNumber, isBuffer, isBoolean, isString, isArray, isObject } from 'util';
 
-
 export interface JSONable {
     stringify(): any;
 }

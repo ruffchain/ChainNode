@@ -1,9 +1,9 @@
 import {INode, NodeConnection} from '../net/node';
 import {ErrorCode} from '../error_code';
-import {IConnection} from '../net/connection';
-import {Connection} from './connection';
+import {IConnection} from '../net';
+import {StandaloneConnection} from './connection';
 
-export class Node extends INode {
+export class StandaloneNode extends INode {
     constructor(peerid: string) {
         super({peerid});
     }
@@ -15,7 +15,7 @@ export class Node extends INode {
     }
 
     protected _connectionType(): new(...args: any[]) => IConnection {
-        return Connection;
+        return StandaloneConnection;
     }
 
     public async listen(): Promise<ErrorCode> {

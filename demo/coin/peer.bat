@@ -1,4 +1,4 @@
-node ./dist/src/client/host/host.js peer ^
+node ./dist/src/client/tools/host.js peer ^
 --consensus pow ^
 --handler "./dist/demo/coin/contract/handler.js" ^
 --genesis "./demo/coin/genesis" ^

@@ -1,25 +1,24 @@
 import {ErrorCode} from '../error_code';
-import {IConnection} from '../net/connection';
+import {IConnection} from '../net';
 
-const P2P = require('../../../../bdt/p2p/p2p')
+const P2P = require('../../../../bdt/p2p/p2p');
 const assert = require('assert');
 
-
-export class Connection extends IConnection {
+export class BdtConnection extends IConnection {
     private m_bdt_connection: any;
-    private m_remote:string;
+    private m_remote: string;
     protected m_nTimeDelta: number = 0;
     constructor(options: {bdt_connection: any, remote: string}) {
         super();
         this.m_bdt_connection = options.bdt_connection;
 
-        this.m_bdt_connection.on(P2P.Connection.EVENT.drain, ()=>{
+        this.m_bdt_connection.on(P2P.Connection.EVENT.drain, () => {
             this.emit('drain');
         });
-        this.m_bdt_connection.on(P2P.Connection.EVENT.data, (data: Buffer[])=>{
-            this.emit('data', data)
+        this.m_bdt_connection.on(P2P.Connection.EVENT.data, (data: Buffer[]) => {
+            this.emit('data', data);
         });
-        this.m_bdt_connection.on(P2P.Connection.EVENT.error, ()=>{
+        this.m_bdt_connection.on(P2P.Connection.EVENT.error, () => {
             this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
         });
         this.m_remote = options.remote;
@@ -50,6 +49,6 @@ export class Connection extends IConnection {
     }
 
     setTimeDelta(n: number) {
-        this.m_nTimeDelta = n
+        this.m_nTimeDelta = n;
     }
 }

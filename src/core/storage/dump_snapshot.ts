@@ -4,6 +4,7 @@ import * as path from 'path';
 import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import {HeaderStorage} from '../chain/header_storage';
+
 import { Storage, StorageOptions} from './storage';
 const digest = require('../lib/digest');
 
@@ -43,12 +44,10 @@ export class StorageDumpSnapshot {
     }
 }
 
-
 export type StorageSnapshotManagerOptions = {
     path: string,
     headerStorage: HeaderStorage, 
     storageType: new (options: StorageOptions) => Storage,
-    recycleHandler: (blockHash: string) => Promise<{err: ErrorCode, recycle?: boolean}>, 
     logger: LoggerInstance
 };
 

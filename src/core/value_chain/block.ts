@@ -1,9 +1,9 @@
-import * as BaseBlock from '../chain/block';
+import { BlockHeader } from '../chain';
 import { BufferWriter } from '../lib/writer';
 import { BufferReader } from '../lib/reader';
-import {ErrorCode} from '../error_code';
+import { ErrorCode } from '../error_code';
 
-export class BlockHeader extends BaseBlock.BlockHeader {
+export class ValueBlockHeader extends BlockHeader {
     constructor() {
         super();
         this.m_coinbase = '';
@@ -30,7 +30,11 @@ export class BlockHeader extends BaseBlock.BlockHeader {
         if (err !== ErrorCode.RESULT_OK) {
             return err;
         }
-        this.m_coinbase = reader.readVarString('utf-8');
+        try {
+            this.m_coinbase = reader.readVarString('utf-8');
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
         return ErrorCode.RESULT_OK;
     }
 

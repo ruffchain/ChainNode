@@ -1,9 +1,4 @@
 import {EventEmitter} from 'events';
-export {ErrorCode, BigNumber} from '../types';
-export {Transaction} from '../../core/value_chain/transaction';
-export * from '../../core/address';
-export {stringify} from '../../core/serializable';
-
 import {HostClient, HostClientOptions} from './rpc';
 
 export type ChainClientOptions = HostClientOptions;
@@ -13,25 +8,25 @@ export class ChainClient extends HostClient {
         super(options);
     }
 
-    on(event: 'tipBlock', listener: (block: any)=> void): this;
+    on(event: 'tipBlock', listener: (block: any) => void): this;
     on(event: string | symbol, listener: (...args: any[]) => void): this {
         this.m_emitter.on(event, listener);
         this._beginWatchTipBlock();
         return this;
     }
-    once(event: 'tipBlock', listener: (block: any)=> void): this;
+    once(event: 'tipBlock', listener: (block: any) => void): this;
     once(event: string | symbol, listener: (...args: any[]) => void): this {
         this.m_emitter.once(event, listener);
         this._beginWatchTipBlock();
         return this;
     }
 
-    async _beginWatchTipBlock() {
+    private async _beginWatchTipBlock() {
         if (this.m_tipBlockTimer) {
             return ;
         }
         this.m_tipBlockTimer = setInterval(
-            async ()=>{
+            async () => {
                 let {err, block} = await this.getBlock({which: 'latest'});
                 if (block) {
                     if (!this.m_tipBlock || this.m_tipBlock.hash !== block.hash) {

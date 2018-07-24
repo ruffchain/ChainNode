@@ -1,26 +1,23 @@
-import * as ValueBlock from '../value_chain/block';
 import { BufferWriter } from '../lib/writer';
 import { BufferReader } from '../lib/reader';
 import { ErrorCode } from '../error_code';
-import { Chain } from '../chain/chain';
-import * as POWConsensus from './consensus';
+import { ValueBlockHeader, Chain } from '../value_chain';
+import * as consensus from './consensus';
 import * as assert from 'assert';
 import * as digest from '../lib/digest';
-
-export const INT32_MAX = 0xffffffff;
 
 // type Constructor<T> = new () => T;
 
 // export function blockHeaderClass<T extends BaseBlock.BlockHeader>(superBlockHeader: Constructor<T>) {
 //     class BlockHeaderClass extends (superBlockHeader as Constructor<BaseBlock.BlockHeader>) {
-export class BlockHeader extends ValueBlock.BlockHeader {
+export class PowBlockHeader extends ValueBlockHeader {
     constructor() {
         super();
         this.m_bits = 0;
         this.m_nonce = 0;
         this.m_nonce1 = 0;
 
-        //this.m_bits = POWUtil.getTarget(prevheader);
+        // this.m_bits = POWUtil.getTarget(prevheader);
     }
 
     private m_bits: number;
@@ -39,17 +36,17 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         return this.m_nonce;
     }
 
+    set nonce(_nonce: number) {
+        assert(_nonce <= consensus.INT32_MAX);
+        this.m_nonce = _nonce;
+    }
+
     get nonce1(): number {
         return this.m_nonce1;
     }
 
-    set nonce(nonce: number) {
-        assert(nonce <= INT32_MAX);
-        this.m_nonce = nonce;
-    }
-
     set nonce1(nonce: number) {
-        assert(nonce <= INT32_MAX);
+        assert(nonce <= consensus.INT32_MAX);
         this.m_nonce1 = nonce;
     }
 
@@ -71,7 +68,12 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         if (err !== ErrorCode.RESULT_OK) {
             return err;
         }
-        this.m_bits = reader.readU32();
+        try {
+            this.m_bits = reader.readU32();
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
         return ErrorCode.RESULT_OK;
     }
 
@@ -80,8 +82,12 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         if (err !== ErrorCode.RESULT_OK) {
             return err;
         }
-        this.m_nonce = reader.readU32();
-        this.m_nonce1 = reader.readU32();
+        try {
+            this.m_nonce = reader.readU32();
+            this.m_nonce1 = reader.readU32();
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
         return ErrorCode.RESULT_OK;
     }
 
@@ -90,21 +96,21 @@ export class BlockHeader extends ValueBlock.BlockHeader {
         if (vr.err || !vr.valid) {
             return vr;
         }
-        //check bits
-        let {err, target} = await POWConsensus.getTarget(this, chain);
+        // check bits
+        let {err, target} = await consensus.getTarget(this, chain);
         if (err) {
             return {err};
         }
-        if(this.m_bits !== target) {
+        if (this.m_bits !== target) {
             return {err: ErrorCode.RESULT_OK, valid: false};
         }
-        //check POW
+        // check POW
         return {err: ErrorCode.RESULT_OK, valid: this.verifyPOW()};
     }
 
     public verifyPOW(): boolean {
         let content: Buffer = this.encode(new BufferWriter()).render();
-        return POWConsensus.verifyPOW(digest.hash256(content), this.m_bits);
+        return consensus.verifyPOW(digest.hash256(content), this.m_bits);
     }
 
     public stringify(): any {

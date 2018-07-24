@@ -1,15 +1,15 @@
 import {ErrorCode} from '../error_code';
-import {IReadableKeyValue, IReadableStorage} from '../storage/storage';
-import {BlockHeader} from '../chain/block';
 import {BaseHandler, ViewListener} from './handler';
-import {Chain} from '../chain/chain';
+import {Chain, BlockHeader, IReadableStorage} from '../chain';
+import { LoggerInstance } from '../lib/logger_util';
 
 export type ViewExecutorOptions = {
     header: BlockHeader, 
-    storage:IReadableStorage, 
+    storage: IReadableStorage, 
     handler: BaseHandler,
     method: string, 
     param: any,
+    logger: LoggerInstance,
     externContext: any
 };
 
@@ -19,7 +19,8 @@ export class ViewExecutor {
     protected m_param: any;
     protected m_externContext: any;
     protected m_header: BlockHeader; 
-    protected m_storage:IReadableStorage; 
+    protected m_storage: IReadableStorage; 
+    protected m_logger: LoggerInstance;
 
     constructor(options: ViewExecutorOptions) {
         this.m_handler = options.handler;
@@ -28,9 +29,10 @@ export class ViewExecutor {
         this.m_externContext = options.externContext;
         this.m_header = options.header;
         this.m_storage = options.storage;
+        this.m_logger = options.logger;
     }
 
-    public get externContext():any {
+    public get externContext(): any {
         return this.m_externContext;
     }
 
@@ -69,10 +71,17 @@ export class ViewExecutor {
                 value: kv
             } 
         );
+
+        Object.defineProperty(
+            context, 'logger', {
+                writable: false,
+                value: this.m_logger
+            } 
+        );
         return context;
     }
 
-    public async execute(): Promise<{err: ErrorCode, value?:any}>  {
+    public async execute(): Promise<{err: ErrorCode, value?: any}>  {
         let fcall: ViewListener|undefined =  this.m_handler.getViewMethod(this.m_method);
         if (!fcall) {
             return {err: ErrorCode.RESULT_NOT_SUPPORT};    

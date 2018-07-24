@@ -1,7 +1,7 @@
 import {ErrorCode} from '../error_code';
-import {IConnection} from '../net/connection';
+import {IConnection} from '../net';
 
-export class Connection extends IConnection {
+export class StandaloneConnection extends IConnection {
     send(data: Buffer): number {
         return 0;
     }
@@ -12,5 +12,3 @@ export class Connection extends IConnection {
         return '';
     }
 }
-
-

@@ -11,9 +11,8 @@ import { Lock } from '../lib/Lock';
 import {TxStorage} from './tx_storage';
 import {BlockStorage} from './block_storage';
 
-
 const initHeaderSql = 'CREATE TABLE IF NOT EXISTS "headers"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "pre" CHAR(64) NOT NULL, "verified" TINYINT NOT NULL, "raw" BLOB NOT NULL);';
-const initBestSql = 'CREATE TABLE IF NOT EXISTS "best"("height" INTEGER PRIMARY KEY NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL,  "timestamp" INTEGER NOT NULL);'
+const initBestSql = 'CREATE TABLE IF NOT EXISTS "best"("height" INTEGER PRIMARY KEY NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL,  "timestamp" INTEGER NOT NULL);';
 const getByHashSql = 'SELECT raw, verified FROM headers WHERE hash = $hash';
 const getByTimestampSql = 'SELECT h.raw, h.verified FROM headers AS h LEFT JOIN best AS b ON b.hash = h.hash WHERE b.timestamp = $timestamp';
 const getHeightOnBestSql = 'SELECT b.height, h.raw, h.verified FROM headers AS h LEFT JOIN best AS b ON b.hash = h.hash WHERE b.hash = $hash';
@@ -30,12 +29,12 @@ export enum VERIFY_STATE {
     notVerified = 0,
     verified = 1,
     invalid = 2
-};
+}
 
 class BlockHeaderEntry {
     public blockheader: BlockHeader;
     public verified: VERIFY_STATE;
-    constructor (blockheader: BlockHeader, verified: VERIFY_STATE) {
+    constructor(blockheader: BlockHeader, verified: VERIFY_STATE) {
         this.blockheader = blockheader;
         this.verified = verified;
     }
@@ -140,7 +139,8 @@ export class HeaderStorage {
         let header: BlockHeader = new this.m_blockHeaderType();
         let err: ErrorCode = header.decode(new BufferReader(rawHeader, false));
         if (err !== ErrorCode.RESULT_OK) {
-            return { err: ErrorCode.RESULT_OK };
+            this.m_logger.error(`decode header ${arg} from header storage failed`);
+            return { err };
         }
         if (arg !== 'latest' && header.number !== arg && header.hash !== arg) {
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -155,7 +155,6 @@ export class HeaderStorage {
         return { err: ErrorCode.RESULT_OK, header, verified };
     }
 
-
     public async getHeightOnBest(hash: string): Promise<{ err: ErrorCode, height?: number, header?: BlockHeader }> {
         let result = await this.m_db.get(getHeightOnBestSql, {$hash: hash});
         if (!result || result.height === undefined) {
@@ -165,12 +164,13 @@ export class HeaderStorage {
         let header: BlockHeader = new this.m_blockHeaderType();
         let err: ErrorCode = header.decode(new BufferReader(result.raw, false));
         if (err !== ErrorCode.RESULT_OK) {
+            this.m_logger.error(`decode header ${hash} from header storage failed`);
             return { err };
         }
         return { err: ErrorCode.RESULT_OK, height: result.height, header };
     }
 
-    public async _saveHeader(header: BlockHeader): Promise<ErrorCode>{
+    public async _saveHeader(header: BlockHeader): Promise<ErrorCode> {
         let headerRaw = header.encode(new BufferWriter()).render();
         try {
             await this.m_db.run(insertHeaderSql, { $hash: header.hash, $raw: headerRaw, $pre: header.preBlockHash, $verified: VERIFY_STATE.notVerified });
@@ -184,7 +184,6 @@ export class HeaderStorage {
     public async saveHeader(header: BlockHeader): Promise<ErrorCode> {
         return await this._saveHeader(header);
     }
-
 
     public async createGenesis(genesis: BlockHeader): Promise<ErrorCode> {
         assert(genesis.number === 0);
@@ -204,7 +203,7 @@ export class HeaderStorage {
 
         try {
 
-            await this.m_db.run(insertHeaderSql, { $hash: genesis.hash, $pre:genesis.preBlockHash, $raw: headerRaw, $verified: VERIFY_STATE.verified });
+            await this.m_db.run(insertHeaderSql, { $hash: genesis.hash, $pre: genesis.preBlockHash, $raw: headerRaw, $verified: VERIFY_STATE.verified });
             await this.m_db.run(extendBestSql, {$hash: genesis.hash, $height: genesis.number, $timestamp: genesis.timestamp});
 
             await this._commit();
@@ -219,7 +218,7 @@ export class HeaderStorage {
     public async getNextHeader(hash: string): Promise<{err: ErrorCode, results?: {header: BlockHeader, verified: VERIFY_STATE}[]}> {
         let query: any;
         try {
-            query = await this.m_db.all(getByPreBlockSql, {$pre:hash});
+            query = await this.m_db.all(getByPreBlockSql, {$pre: hash});
         } catch (e) {
             this.m_logger.error(`getNextHeader ${hash} failed, ${e}`);
             return {err: ErrorCode.RESULT_EXCEPTION};
@@ -232,6 +231,7 @@ export class HeaderStorage {
             let header: BlockHeader = new this.m_blockHeaderType();
             let err: ErrorCode = header.decode(new BufferReader(result.raw, false));
             if (err !== ErrorCode.RESULT_OK) {
+                this.m_logger.error(`decode header ${result.hash} from header storage failed`);
                 return {err};
             }
             results.push({header, verified: result.verified});
@@ -267,9 +267,9 @@ export class HeaderStorage {
                 txViewOp.push({op: 'remove', value: forkFrom.number});
                 break;
             } else if (result.err === ErrorCode.RESULT_NOT_FOUND) {
-                let result = await this.loadHeader(forkFrom.preBlockHash);
-                assert(result.header);
-                forkFrom = result.header!;
+                let _result = await this.loadHeader(forkFrom.preBlockHash);
+                assert(_result.header);
+                forkFrom = _result.header!;
                 sqls.push(`INSERT INTO best (hash, height, timestamp) VALUES("${forkFrom.hash}", "${forkFrom.number}", "${forkFrom.timestamp}")`);
                 txViewOp.push({op: 'add', value: forkFrom.hash});
                 continue;

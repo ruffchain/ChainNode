@@ -5,11 +5,10 @@ import * as fs from 'fs-extra';
 
 export type LoggerOptions = {
     logger?: LoggerInstance;
-    loggerOptions?: {console: boolean, file?: {root: string}, level?: string};
+    loggerOptions?: {console: boolean, file?: {root: string, filename?: string}, level?: string};
 };
 
-
-export function initLogger(options: LoggerOptions): LoggerInstance  {
+export function initLogger(options: LoggerOptions): LoggerInstance {
     if (options.logger) {
         return options.logger;
     } else if (options.loggerOptions) {
@@ -28,27 +27,15 @@ export function initLogger(options: LoggerOptions): LoggerInstance  {
                 json: false,
                 level: 'info',
                 timestamp: true,
-                filename: path.join(options.loggerOptions.file.root, `info.log`),
+                filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
                 datePattern: 'yyyy-MM-dd.',
                 prepend: true,
                 handleExceptions: true,
                 humanReadableUnhandledException: true
             }));
         }
-        
-            
-        // loggerTransports.push(new transports.DailyRotateFile({
-        //     name: 'error',
-        //     json: false,
-        //     level: 'error',
-        //     timestamp: true,
-        //     handleExceptions: true,
-        //     filename: options.dataDir + `/log/error.log`,
-        //     datePattern: 'yyyy-MM-dd.',
-        //     prepend: true
-        // }));
         const logger = new Logger({
-            level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
+            level: options.loggerOptions.level || 'info',
             transports: loggerTransports
         });
         return logger;

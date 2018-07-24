@@ -1,7 +1,5 @@
-import {ErrorCode} from '../types';
+import {ErrorCode, ValueTransaction, BufferWriter} from '../../core';
 import {RPCClient} from '../lib/rpc_client';
-import {Transaction} from '../../core/value_chain/transaction';
-import { BufferWriter } from '../../core/lib/writer';
 
 export type HostClientOptions = {host: string, port: number};
 
@@ -10,7 +8,7 @@ export class HostClient {
         this.m_client = new RPCClient(options.host, options.port);
     }
 
-    async getBlock(params: {which: string|number|'lastest', transactions?:boolean}): Promise<{err: ErrorCode, block?: any}> {
+    async getBlock(params: {which: string|number|'lastest', transactions?: boolean}): Promise<{err: ErrorCode, block?: any}> {
         let cr = await this.m_client.callAsync('getBlock', params);
         if (cr.ret !== 200) {
             return {err: ErrorCode.RESULT_FAILED};
@@ -34,8 +32,8 @@ export class HostClient {
         return JSON.parse(cr.resp!);
     }
 
-    async sendTrasaction(params: {tx: Transaction}): Promise<ErrorCode> {
-        let writer = new BufferWriter;
+    async sendTransaction(params: {tx: ValueTransaction}): Promise<ErrorCode> {
+        let writer = new BufferWriter();
         params.tx.encode(writer);
         let cr = await this.m_client.callAsync('sendTransaction', {tx: writer.render()});
         if (cr.ret !== 200) {

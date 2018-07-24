@@ -1,8 +1,6 @@
 import {ErrorCode} from '../error_code';
 import {Serializable} from '../serializable';
-import {Storage, StorageTransaction, IReadableKeyValue, IWritableKeyValue, IReadWritableStorage, IReadWritableKeyValue} from '../storage/storage';
-
-
+import {Storage, StorageTransaction, IReadableKeyValue, IWritableKeyValue, IReadWritableStorage, IReadWritableKeyValue} from './storage';
 
 export interface IStorageLogger {
     init(): any;
@@ -41,7 +39,7 @@ export class LoggedStorage {
         let logger = this.m_logger;
         {
             let proto = storage.beginTransaction;
-            storage.beginTransaction = async (): Promise<{ err: ErrorCode, value: StorageTransaction }>=>{
+            storage.beginTransaction = async (): Promise<{ err: ErrorCode, value: StorageTransaction }> => {
                 let ltr = await this.m_logger.beginTransaction();
                 await ltr.value!.beginTransaction();
                 let btr = await proto.bind(storage)();

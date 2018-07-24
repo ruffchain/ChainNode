@@ -10,14 +10,11 @@ import {LoggerInstance} from '../lib/logger_util';
 import {IStorageSnapshotManager, StorageSnapshotManagerOptions, StorageDumpSnapshot} from './dump_snapshot';
 import {IReadableStorage, IReadWritableStorage, Storage, StorageOptions} from './storage';
 import {SnapshotManager} from './log_snapshot_manager';
-
-export {StorageDumpSnapshot, IStorageSnapshotManager} from './dump_snapshot';
-export {IReadableStorage, IReadWritableStorage, Storage, StorageOptions} from './storage';
-
+import {StorageLogger} from './logger';
 
 export type StorageManagerOptions = {
     path: string;
-    storageType: new (options:StorageOptions) => Storage;
+    storageType: new (options: StorageOptions) => Storage;
     logger: LoggerInstance;
 } & StorageSnapshotManagerOptions;
 
@@ -29,8 +26,8 @@ export class StorageManager {
         this.m_snapshotManager = new SnapshotManager(options);
     }
     private m_path: string;
-    private m_storageType: new (options:StorageOptions) => Storage;
-    private m_snapshotManager: IStorageSnapshotManager;
+    private m_storageType: new (options: StorageOptions) => Storage;
+    private m_snapshotManager: SnapshotManager;
     private m_logger: LoggerInstance;
     private m_views: Map<string, {storage: Storage, ref: number}> = new Map();
 
@@ -49,7 +46,9 @@ export class StorageManager {
             return csr;
         }
         // assert((await csr.snapshot!.messageDigest()).value !== (await from.messageDigest()).value);
-        await from.remove();
+        if (remove) {
+            await from.remove();
+        }
         return csr;
     }
 
@@ -90,7 +89,7 @@ export class StorageManager {
             if (stub.storage.isInit) {
                 return {err: ErrorCode.RESULT_OK, storage: stub.storage};
             } else {
-                return new Promise<{err: ErrorCode, storage?: Storage}>((resolve) =>{
+                return new Promise<{err: ErrorCode, storage?: Storage}>((resolve) => {
                     stub!.storage!.once('init', (err: ErrorCode) => {
                         if (err) {
                             resolve({err});
@@ -110,17 +109,25 @@ export class StorageManager {
         };
         this.m_views.set(blockHash, stub);
 
-        let ret = new Promise<{err: ErrorCode, storage?: Storage}>((resolve) =>{
-            stub!.storage.once('init', (err)=>{
+        let sr = await this.m_snapshotManager.getSnapshot(blockHash);
+        if (sr.err) {
+            this.m_logger.error(`get snapshot failed for ${sr.err}`);
+            this.m_views.delete(blockHash);
+            return {err: sr.err};
+        }
+
+        let ret = new Promise<{err: ErrorCode, storage?: Storage}>((resolve) => {
+            stub!.storage.once('init', (err) => {
                 if (err) {
+                    this.m_snapshotManager.releaseSnapshot(blockHash);
                     this.m_views.delete(blockHash);
                     resolve({err});
                 } else {
                     resolve({err, storage: stub!.storage});
                 }
             });
-        })
-        await this.m_snapshotManager.getSnapshot(blockHash);
+        });
+        
         stub!.storage.init(true);
 
         return ret;
@@ -128,6 +135,18 @@ export class StorageManager {
 
     public async getSnapshotView(blockHash: string): Promise<{err: ErrorCode, storage?: IReadableStorage}> {
         return await this._getSnapshotStorage(blockHash);
+    }
+
+    // 根据block hash 获取redo log内容
+    // 提供给chain_node层引用
+    public getRedoLog(blockHash: string): StorageLogger|undefined {
+        return this.m_snapshotManager.getRedoLog(blockHash);
+    }
+
+    // 对象形式的redo log（通过网络请求, 然后解析buffer获得) 写入至本地文件
+    // 提供给chain层引用
+    public writeRedoLog(blockHash: string, log: StorageLogger) {
+        this.m_snapshotManager.writeRedoLog(blockHash, log);
     }
 
     public async releaseSnapshotView(blockHash: string) {

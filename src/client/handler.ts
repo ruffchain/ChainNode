@@ -1,2 +1,2 @@
-import {ChainHandler} from './types';
-export = new ChainHandler();
+import {ValueHandler} from '../core';
+export = new ValueHandler();

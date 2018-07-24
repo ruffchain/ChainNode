@@ -117,7 +117,7 @@ export class BlockHeader extends SerializableWithHash {
 
     public updateContent(content: BlockContent) {
         this.m_merkleRoot = this._genMerkleRoot(content.transactions);
-        this.m_receiptHash = this._genReceiptHash(content.receipts)
+        this.m_receiptHash = this._genReceiptHash(content.receipts);
     }
 
     protected _encodeHashContent(writer: BufferWriter): BufferWriter {
@@ -131,12 +131,17 @@ export class BlockHeader extends SerializableWithHash {
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {
-        this.m_number = reader.readU32();
-        this.m_timestamp = reader.readI32();
-        this.m_merkleRoot = reader.readHash('hex');
-        this.m_storageHash = reader.readHash('hex');
-        this.m_receiptHash = reader.readHash('hex');
-        this.m_preBlockHash = reader.readHash('hex');
+        try {
+            this.m_number = reader.readU32();
+            this.m_timestamp = reader.readI32();
+            this.m_merkleRoot = reader.readHash('hex');
+            this.m_storageHash = reader.readHash('hex');
+            this.m_receiptHash = reader.readHash('hex');
+            this.m_preBlockHash = reader.readHash('hex');
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
         return ErrorCode.RESULT_OK;
     }
 
@@ -226,7 +231,14 @@ export class BlockContent implements Serializable {
     public decode(reader: BufferReader): ErrorCode {
         this.m_transactions = [];
         this.m_receipts = new Map();
-        let txCount = reader.readU16();
+        
+        let txCount: number;
+        try {
+            txCount = reader.readU16();
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
         for (let ix = 0; ix < txCount; ++ix) {
             let tx = new this.m_transactionType();
             let err = tx.decode(reader);
@@ -263,7 +275,8 @@ export class Block implements Serializable {
             let writer: BufferWriter = new BufferWriter();
             options.header.encode(writer);
             let reader: BufferReader = new BufferReader(writer.render());
-            this.m_header.decode(reader);
+            let err = this.m_header.decode(reader);
+            assert(!err, `clone header failed with err ${err}`);
         }
         this.m_content = new BlockContent(this.m_transactionType);
     }
@@ -276,7 +289,8 @@ export class Block implements Serializable {
             headerType: this.headerType,
             transactionType: this.transactionType
         });
-        newBlock.decode(reader);
+        let err = newBlock.decode(reader);
+        assert(!err, `clone block ${this.m_header.hash} failed for ${err}`);
         return newBlock;
     }
 
@@ -291,7 +305,6 @@ export class Block implements Serializable {
     get header(): BlockHeader {
         return this.m_header;
     }
-
 
     get content(): BlockContent {
         return this.m_content;

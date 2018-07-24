@@ -5,7 +5,7 @@ import * as assert from 'assert';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
 
-import {StorageLogger} from '../storage/js_log';
+import {JStorageLogger} from '../storage/js_log';
 
 const { TransactionDatabase } = require('sqlite3-transactions');
 declare module 'sqlite' {
@@ -15,13 +15,10 @@ declare module 'sqlite' {
     }
 }
 
-
 import { ErrorCode } from '../error_code';
-import * as BaseStorage  from '../storage/storage';
+import * as BaseStorage from '../storage/storage';
 
-
-
-export class StorageTable implements BaseStorage.IReadWritableKeyValue {
+export class SqliteStorageTable implements BaseStorage.IReadWritableKeyValue {
     constructor(public db: sqlite.Database, public name: string) { 
         
     }
@@ -49,8 +46,8 @@ export class StorageTable implements BaseStorage.IReadWritableKeyValue {
         const result = await this.db.all(`select name,value from ${this.name} where field="____default____"`);
 
         let value: Map<string, any> = new Map<string, any>();
-        result.forEach((x) => value.set(x.name,JSON.parse(x.value)));
-        return {err: ErrorCode.RESULT_OK, value: value};
+        result.forEach((x) => value.set(x.name, JSON.parse(x.value)));
+        return {err: ErrorCode.RESULT_OK, value};
     }
 
     public async hset(key: string, field: string, value: any): Promise<{ err: ErrorCode; }> {
@@ -268,8 +265,6 @@ export class StorageTable implements BaseStorage.IReadWritableKeyValue {
     }
 }
 
-
-
 class StorageTransaction implements BaseStorage.StorageTransaction {
     protected m_transcationDB: any;
     protected m_transcation: any;
@@ -316,14 +311,12 @@ class StorageTransaction implements BaseStorage.StorageTransaction {
     }
 }
 
-
-
-export class Storage extends BaseStorage.Storage {
+export class SqliteStorage extends BaseStorage.Storage {
     private m_db?: sqlite.Database;
     private m_isInit: boolean = false;
 
-    protected _createLogger(): StorageLogger {
-        return new StorageLogger();
+    protected _createLogger(): JStorageLogger {
+        return new JStorageLogger();
     }
 
     public get isInit(): boolean {
@@ -371,18 +364,17 @@ export class Storage extends BaseStorage.Storage {
     public async createKeyValue(name: string): Promise<{err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue}> {
         await this.m_db!.exec(`CREATE TABLE IF NOT EXISTS ${name} \
             (name TEXT, field TEXT, value TEXT, unique(name, field))`);
-        let tbl = new StorageTable(this.m_db!, name);
+        let tbl = new SqliteStorageTable(this.m_db!, name);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
     }
 
     public async getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue }> {
-        let tbl = new StorageTable(this.m_db!, name);
+        let tbl = new SqliteStorageTable(this.m_db!, name);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
     }
 
-
     public async getReadWritableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue }> {
-        let tbl = new StorageTable(this.m_db!, name);
+        let tbl = new SqliteStorageTable(this.m_db!, name);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
     }
 
@@ -394,6 +386,4 @@ export class Storage extends BaseStorage.Storage {
 
         return { err: ErrorCode.RESULT_OK, value: transcation };
     }
-
-
 }

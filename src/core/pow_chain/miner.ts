@@ -5,44 +5,54 @@ import { ErrorCode } from '../error_code';
 import {Workpool} from '../lib/workpool';
 import { BufferWriter } from '../lib/writer';
 
-import { Block } from '../chain/block';
-import * as ValueMiner from '../value_chain/miner';
-import {Storage} from '../storage/storage';
+import { Block, ValueMiner, ValueMinerOptions, Chain, BlockHeader, MinerState, Storage } from '../value_chain';
 
-import { BlockHeader, INT32_MAX } from './block';
-import * as POWConsensus from './consensus';
-import { Chain, ChainOptions } from './chain';
+import { PowBlockHeader } from './block';
+import * as consensus from './consensus';
+import { PowChain } from './chain';
+import {ChainCreator} from '../chain/chain_creator';
 
-
-export type MinerOptions = ChainOptions & ValueMiner.MinerOptions; 
-
-export class Miner extends ValueMiner.Miner {
+export class PowMiner extends ValueMiner {
     private workpool: Workpool;
 
-    constructor(options: MinerOptions) {
+    constructor(options: ValueMinerOptions) {
         super(options);
         const filename = path.resolve(__dirname, 'pow_worker.js');
         this.workpool = new Workpool(filename, 1);
     }
 
-    protected _chainInstance(options: ChainOptions) {
-        return new Chain(options);
+    protected async _chainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        let cc = await chainCreator.createChain(commandOptions, PowChain);
+        if (cc.err) {
+            return {err: cc.err};
+        }
+
+        return {err: ErrorCode.RESULT_OK, chain: cc.chain as PowChain};
     }
 
-    get chain(): Chain {
-        return <Chain>this.m_chain;
+    protected async _genesisChainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        let cc = await chainCreator.createGenesis(commandOptions, PowChain);
+        if (cc.err) {
+            return {err: cc.err};
+        }
+
+        return {err: ErrorCode.RESULT_OK, chain: cc.chain as PowChain};
     }
 
-    private _newHeader(): BlockHeader {
-        let tip = <BlockHeader>this.m_chain.tipBlockHeader!;
-        let blockHeader = new BlockHeader();
+    get chain(): PowChain {
+        return this.m_chain as PowChain;
+    }
+
+    private _newHeader(): PowBlockHeader {
+        let tip = this.m_chain!.tipBlockHeader! as PowBlockHeader;
+        let blockHeader = new PowBlockHeader();
         blockHeader.setPreBlock(tip);
         blockHeader.timestamp = Date.now() / 1000;
         return blockHeader;
     }
 
-    public async initialize(): Promise<ErrorCode> {
-        let err = await super.initialize();
+    public async initialize(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<ErrorCode> {
+        let err = await super.initialize(chainCreator, commandOptions);
         if (err) {
             return err;
         }
@@ -51,9 +61,9 @@ export class Miner extends ValueMiner.Miner {
     }
 
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
-        //这里计算bits
+        // 这里计算bits
         this.m_logger.info(`${this.peerid} begin mine Block (${block.number})`);
-        let tr = await POWConsensus.getTarget(<BlockHeader>block.header, this.m_chain);
+        let tr = await consensus.getTarget(block.header as PowBlockHeader, this.m_chain!);
         if (tr.err) {
             return tr.err;
         }
@@ -62,12 +72,12 @@ export class Miner extends ValueMiner.Miner {
             console.error(`cannot get target bits for block ${block.number}`);
             return ErrorCode.RESULT_INVALID_BLOCK;
         }
-        (<BlockHeader>block.header).bits = tr.target!;
+        (block.header as PowBlockHeader).bits = tr.target!;
         // 使用一个workerpool来计算正确的nonce
-        let ret = await this._calcuteBlockHashWorkpool(<BlockHeader>(block.header), {start: 0, end: INT32_MAX}, {start: 0, end: INT32_MAX});
+        let ret = await this._calcuteBlockHashWorkpool((block.header as PowBlockHeader), {start: 0, end: consensus.INT32_MAX}, {start: 0, end: consensus.INT32_MAX});
         if (ret === ErrorCode.RESULT_OK) {
             block.header.updateHash();
-            this.m_logger.info(`${this.peerid} mined Block (${block.number}) target ${(<BlockHeader>block.header).bits} : ${block.header.hash}`);
+            this.m_logger.info(`${this.peerid} mined Block (${block.number}) target ${(block.header as PowBlockHeader).bits} : ${block.header.hash}`);
         }
         
         return ret;
@@ -79,36 +89,33 @@ export class Miner extends ValueMiner.Miner {
      * @param tipBlock 
      */
 
-    protected async _onTipBlock(chain: ValueMiner.Chain, tipBlock: BlockHeader): Promise<void> {
+    protected async _onTipBlock(chain: Chain, tipBlock: BlockHeader): Promise<void> {
         this.m_logger.info(`${this.peerid} onTipBlock ${tipBlock.number} : ${tipBlock.hash}`);
-        if (this.m_state === ValueMiner.MinerState.mining) {
-            this.m_logger.info(`${this.peerid} cancel mining`)
+        if (this.m_state === MinerState.mining) {
+            this.m_logger.info(`${this.peerid} cancel mining`);
             this.workpool.stop();
         } 
         this._createBlock(this._newHeader());
     }
 
-    private async _calcuteBlockHashWorkpool(blockHeader: BlockHeader,
-        nonceRange: { start: number, end: number },
-        nonce1Range: { start: number, end: number }
-    ):Promise<ErrorCode> {
+    private async _calcuteBlockHashWorkpool(blockHeader: PowBlockHeader, nonceRange: { start: number, end: number }, nonce1Range: { start: number, end: number }): Promise<ErrorCode> {
         return new Promise<ErrorCode>((reslove, reject) => {
             let buffer = blockHeader.encode(new BufferWriter()).render();
-            this.workpool.push({data: buffer, nonce:nonceRange, nonce1:nonce1Range}, (code, signal, ret) => {
+            this.workpool.push({data: buffer, nonce: nonceRange, nonce1: nonce1Range}, (code, signal, ret) => {
                 if (code === 0) {
                     let result = JSON.parse(ret);
                     blockHeader.nonce = result['nonce'];
                     blockHeader.nonce1 = result['nonce1'];
                     assert(blockHeader.verifyPOW());
                     reslove(ErrorCode.RESULT_OK);
-                } else if(signal === 'SIGTERM') {
+                } else if (signal === 'SIGTERM') {
                     reslove(ErrorCode.RESULT_CANCELED);
                 } else {
                     console.error(`worker error! code: ${code}, ret: ${ret}`);
                     reslove(ErrorCode.RESULT_FAILED);
                 }
             });
-        })
+        });
     }
 
     protected async _createGenesisBlock(block: Block, storage: Storage, options?: any): Promise<ErrorCode> {
@@ -129,7 +136,7 @@ export class Miner extends ValueMiner.Miner {
         await kvr.kv!.set('basicBits', options!.consensus.basicBits);
         await kvr.kv!.set('limit', options!.consensus.limit);
 
-        (<BlockHeader>block.header).bits = 520159231;
+        (block.header as PowBlockHeader).bits = 520159231;
         block.header.updateHash();
         return ErrorCode.RESULT_OK;
     }

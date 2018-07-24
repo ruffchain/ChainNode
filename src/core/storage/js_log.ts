@@ -1,11 +1,10 @@
 import { ErrorCode } from '../error_code';
 import * as BaseLogger from './logger';
 import {BufferReader, BufferWriter} from '../serializable';
-import {StorageTransaction, IWritableKeyValue, IReadWritableStorage} from '../storage/storage';
-
+import {StorageTransaction, IWritableKeyValue, IReadWritableStorage} from './storage';
 
 class TransactionLogger implements StorageTransaction {
-    constructor(private owner: StorageLogger) {
+    constructor(private owner: JStorageLogger) {
 
     }
 
@@ -26,11 +25,10 @@ class TransactionLogger implements StorageTransaction {
 }
 
 class KeyValueLogger implements IWritableKeyValue {
-    constructor(private owner: StorageLogger, private name: string) {
+    constructor(private owner: JStorageLogger, private name: string) {
         
     }
     
-
     async set(key: string, value: any): Promise<{ err: ErrorCode }> {
         this.owner.appendLog(`await ${this.name}.set(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
         return {err: ErrorCode.RESULT_OK};
@@ -97,7 +95,7 @@ class KeyValueLogger implements IWritableKeyValue {
     }
 }
 
-export class StorageLogger implements BaseLogger.StorageLogger {
+export class JStorageLogger implements BaseLogger.StorageLogger {
     constructor() {
         this.m_log = '';
     }
@@ -108,6 +106,10 @@ export class StorageLogger implements BaseLogger.StorageLogger {
         let val = `kv${this.m_nextVal}`;
         ++this.m_nextVal;
         return val;
+    }
+
+    get log(): string {
+        return this.m_log!;
     }
 
     redoOnStorage(storage: IReadWritableStorage): Promise<ErrorCode> {

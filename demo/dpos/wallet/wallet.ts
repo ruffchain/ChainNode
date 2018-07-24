@@ -1,8 +1,8 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import '../../../src/client/lib/unhandled_rejection';
-import {parseCommand, Command} from '../../../src/client/lib/simple_command';
-import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, Transaction} from '../../../src/client/client/client';
+import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection} from '../../../src/client';
+
+initUnhandledRejection();
 
 function main() {
     let command = parseCommand();
@@ -27,12 +27,12 @@ function main() {
     }
 
     let chainClient = new ChainClient({
-        host: host,
-        port: port
+        host,
+        port
     });
 
     let watchingTx: string[] = [];
-    chainClient.on('tipBlock', async (tipBlock)=>{
+    chainClient.on('tipBlock', async (tipBlock) => {
         console.log(`client onTipBlock, height ${tipBlock.number}`);
         for (let tx of watchingTx.slice()) {
             let {err, block, receipt} = await chainClient.getTransactionReceipt({tx});
@@ -53,8 +53,6 @@ function main() {
         }
     });
 
-    chainClient._beginWatchTipBlock();
-
     let runEnv = {
         getAddress: () => {
             console.log(address);
@@ -73,8 +71,8 @@ function main() {
             }
             console.log(`${_address}\`s Balance: ${ret.value!}`);
         },
-        transferTo: async (to: string, amount: string, fee: string)=> {
-            let tx = new Transaction();
+        transferTo: async (to: string, amount: string, fee: string) => {
+            let tx = new ValueTransaction();
             tx.method = 'transferTo',
             tx.value = new BigNumber(amount);
             tx.fee = new BigNumber(fee);
@@ -86,7 +84,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`transferTo failed for ${err}`);
                 return ;
@@ -96,7 +94,7 @@ function main() {
         },
 
         vote: async (candidates: string[], fee: string) => {
-            let tx = new Transaction();
+            let tx = new ValueTransaction();
             tx.method = 'vote';
             tx.fee = new BigNumber(fee);
             tx.input = candidates;
@@ -107,7 +105,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`vote failed for ${err}`);
                 return ;
@@ -117,9 +115,10 @@ function main() {
         },
 
         mortgage: async (amount: string, fee: string) => {
-            let tx = new Transaction();
+            let tx = new ValueTransaction();
             tx.method = 'mortgage';
             tx.fee = new BigNumber(fee);
+            tx.value = new BigNumber(amount);
             tx.input = amount;
             let {err, nonce} = await chainClient.getNonce({address});
             if (err) {
@@ -128,7 +127,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`mortgage failed for ${err}`);
                 return ;
@@ -138,7 +137,7 @@ function main() {
         },
 
         unmortgage: async (amount: string, fee: string) => {
-            let tx = new Transaction();
+            let tx = new ValueTransaction();
             tx.method = 'unmortgage';
             tx.fee = new BigNumber(fee);
             tx.input = amount;
@@ -149,7 +148,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`unmortgage failed for ${err}`);
                 return ;
@@ -159,7 +158,7 @@ function main() {
         },
 
         register: async (fee: string) => {
-            let tx = new Transaction();
+            let tx = new ValueTransaction();
             tx.method = 'register';
             tx.fee = new BigNumber(fee);
             tx.input = '';
@@ -170,7 +169,7 @@ function main() {
             }
             tx.nonce = nonce! + 1;
             tx.sign(secret);
-            err = await chainClient.sendTrasaction({tx});
+            err = await chainClient.sendTransaction({tx});
             if (err) {
                 console.error(`register failed for ${err}`);
                 return ;
@@ -194,7 +193,7 @@ function main() {
         getStoke: async (_address: string) => {
             let ret = await chainClient.view({
                 method: 'getStoke',
-                params: {address:_address}
+                params: {address: _address}
             });
             if (ret.err) {
                 console.error(`getStoke failed for ${ret.err};`);
@@ -216,12 +215,12 @@ function main() {
         },
     };
 
-    function runCmd(cmd: string) {
+    function runCmd(_cmd: string) {
         let chain = runEnv;
         try {
-            eval(cmd);
-        } catch(e) {
-            console.error('e='+e.message);
+            eval(_cmd);
+        } catch (e) {
+            console.error('e=' + e.message);
         }
     }
     
@@ -231,8 +230,8 @@ function main() {
     }
 
     let rl = readline.createInterface(process.stdin, process.stdout);
-    rl.on('line', (cmd: string)=>{
-        runCmd(cmd);
+    rl.on('line', (_cmd: string) => {
+        runCmd(_cmd);
     });
 }
 

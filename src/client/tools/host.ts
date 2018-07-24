@@ -1,18 +1,21 @@
 import * as process from 'process';
-import '../lib/unhandled_rejection';
+import {init as initUnhandledRejection} from '../lib/unhandled_rejection';
 import {parseCommand} from '../lib/simple_command';
 
-import chainhost = require('./chain_host');
+import chainhost = require('../host/chain_host');
 import '../tcp/host';
 import '../bdt/host';
 import '../pow/host';
 import '../dpos/host';
+
+initUnhandledRejection();
 
 Error.stackTraceLimit = 1000;
 
 async function main() {
     let command = parseCommand();
     if (!command) {
+        console.error(`parse command error, exit.`);
         process.exit();
         return ;
     }
@@ -25,7 +28,7 @@ async function main() {
         await chainhost.createGenesis(command.options);
         exit = true;
     } else {
-        console.error('invalid command');
+        console.error(`invalid action command ${command.command}`);
         exit = true;
     }
     if (exit) {
@@ -34,6 +37,3 @@ async function main() {
 }
 
 main();
-
-
-

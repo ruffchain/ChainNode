@@ -4,7 +4,6 @@ import * as fs from 'fs-extra';
 import { ErrorCode } from '../error_code';
 import { Storage } from './storage';
 import { StorageDumpSnapshot, IStorageSnapshotManager } from './dump_snapshot';
-export { StorageDumpSnapshot } from './dump_snapshot';
 
 export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     constructor(options: {path: string}) {
@@ -24,7 +23,9 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
 
     public listSnapshots(): StorageDumpSnapshot[] {
         let blocks = fs.readdirSync(this.m_path);
-        return blocks.map((blockHash) => {return new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));});
+        return blocks.map((blockHash) => {
+            return new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
+        });
     }
 
     public getSnapshotFilePath(blockHash: string): string {
@@ -56,4 +57,3 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
         return ErrorCode.RESULT_OK;
     }
 }
-

@@ -5,13 +5,12 @@ import {LoggerInstance} from '../lib/logger_util';
 import { StorageLogger, LoggedStorage } from './logger';
 import { BufferReader } from '../lib/reader';
 
-
 const digest = require('../lib/digest');
-
 
 export interface IReadableKeyValue {
     // 单值操作
     get(key: string): Promise<{ err: ErrorCode, value?: any }>;
+    getAll(): Promise<{ err: ErrorCode, value: Map<string, any>}>;
 
     // hash
     hexists(key: string, field: string): Promise<boolean>;
@@ -21,7 +20,6 @@ export interface IReadableKeyValue {
     hkeys(key: string): Promise<{ err: ErrorCode, value: string[] }>;
     hvalues(key: string): Promise<{ err: ErrorCode, value: any[] }>;
     hgetall(key: string): Promise<{ err: ErrorCode; value: any[]; }>;
-
 
     // array
     lindex(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
@@ -56,13 +54,11 @@ export interface IWritableKeyValue {
 
 export type IReadWritableKeyValue = IReadableKeyValue & IWritableKeyValue;
 
-
 export interface StorageTransaction {
     beginTransaction(): Promise<ErrorCode>;
     commit(): Promise<ErrorCode>;
     rollback(): Promise<ErrorCode>;
 }
-
 
 export abstract class  IReadableStorage {
     public abstract getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
@@ -74,11 +70,10 @@ export abstract class  IReadWritableStorage extends IReadableStorage {
     public abstract beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }>;
 }
 
-
 export type StorageOptions = {
     filePath: string, 
     logger: LoggerInstance
-}
+};
 
 export abstract class Storage extends IReadWritableStorage {
     protected m_filePath: string;
@@ -106,12 +101,12 @@ export abstract class Storage extends IReadWritableStorage {
         }
     }
 
-    on(event: 'init', listener: (err: ErrorCode)=>any): this;
+    on(event: 'init', listener: (err: ErrorCode) => any): this;
     on(event: string, listener: (...args: any[]) => void): this {
         this.m_eventEmitter.on(event, listener);
         return this;
     }
-    once(event: 'init', listener: (err: ErrorCode)=>any): this;
+    once(event: 'init', listener: (err: ErrorCode) => any): this;
     once(event: string, listener: (...args: any[]) => void): this {
         this.m_eventEmitter.once(event, listener);
         return this;
@@ -152,4 +147,3 @@ export abstract class Storage extends IReadWritableStorage {
         return { err: ErrorCode.RESULT_OK, value: hash };
     }
 }
-

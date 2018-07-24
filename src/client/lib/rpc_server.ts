@@ -1,6 +1,5 @@
-import { EventEmitter } from "events";
-import * as http from "http";
-
+import { EventEmitter } from 'events';
+import * as http from 'http';
 
 export class RPCServer extends EventEmitter {
     private m_addr: string;

@@ -1,29 +1,28 @@
-import {ErrorCode} from '../types';
 import {RPCServer} from '../lib/rpc_server';
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {Chain} from '../../core/value_chain/chain';
-import {Miner} from '../../core/value_chain/miner';
-import {Transaction} from '../../core/value_chain/transaction';
-import { BufferReader } from '../../core/lib/reader';
+import {ErrorCode, ValueChain, INode, GlobalConfig, ChainCreator, ValueMinerOptions, ValueMiner, ValueTransaction, BufferReader, stringify} from '../../core';
+
 import { isUndefined } from 'util';
-import {stringify} from '../../core/serializable';
 
 function promisify(f: any) {
-    return function () {
+    return () => {
         let args = Array.prototype.slice.call(arguments);
-        return new Promise(function (resolve, reject) {
-            args.push(function (err: any, result: any) {
-                if (err) reject(err);
-                else resolve(result);
+        return new Promise((resolve, reject) => {
+            args.push((err: any, result: any) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve(result);
+                }
             });
             f.apply(null, args);
         });
-    }
+    };
 }
 
 export class ChainServer {
-    constructor(chain: Chain, miner?: Miner) {
+    constructor(chain: ValueChain, miner?: ValueMiner) {
         this.m_chain = chain;
         this.m_miner = miner;
     }
@@ -33,19 +32,19 @@ export class ChainServer {
         if (!host) {
             return false;
         }
-        let port =commandOptions.get('rpcport');
+        let port = commandOptions.get('rpcport');
         if (!port) {
             return false;
         }
-        this.m_server = new RPCServer(host, parseInt(port));
+        this.m_server = new RPCServer(host, parseInt(port, 10));
         this._initMethods();
         this.m_server.start();
         return true;
     }
 
     _initMethods() {
-        this.m_server!.on('sendTransaction', async (params: {tx: any}, resp)=>{
-            let tx = new Transaction();
+        this.m_server!.on('sendTransaction', async (params: {tx: any}, resp) => {
+            let tx = new ValueTransaction();
             let err = tx.decode(new BufferReader(Buffer.from(params.tx, 'hex')));
             if (err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify(err)));
@@ -56,7 +55,7 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getTransactionReceipt', async (params: {tx: string}, resp)=>{
+        this.m_server!.on('getTransactionReceipt', async (params: {tx: string}, resp) => {
             let cr = await this.m_chain.getTransactionReceipt(params.tx);
             if (cr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
@@ -71,13 +70,13 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getNonce', async (params: {address: string}, resp)=>{
+        this.m_server!.on('getNonce', async (params: {address: string}, resp) => {
             let nonce = await this.m_chain.getNonce(params.address);
             await promisify(resp.write.bind(resp)(JSON.stringify(nonce)));
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('view', async (params: {method: string, params: any, from?: number|string|'latest'}, resp)=>{
+        this.m_server!.on('view', async (params: {method: string, params: any, from?: number|string|'latest'}, resp) => {
             let cr = await this.m_chain.view(isUndefined(params.from) ? 'latest' : params.from , params.method, params.params);
             if (cr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
@@ -86,7 +85,7 @@ export class ChainServer {
                 try {
                     s = stringify(cr.value!);
                     cr.value = s;
-                } catch(e) {
+                } catch (e) {
                     cr.err = ErrorCode.RESULT_INVALID_FORMAT;
                     delete cr.value;
                 }
@@ -95,13 +94,13 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getBlock', async (params: {which: number|string|'latest', transactions?:boolean}, resp)=>{
+        this.m_server!.on('getBlock', async (params: {which: number|string|'latest', transactions?: boolean}, resp) => {
             let hr = await this.m_chain.getHeader(params.which);
             if (hr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: hr.err})));
             } else {
                 if (params.transactions) {
-                
+                    
                 } else {
                     await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
                 }
@@ -110,7 +109,7 @@ export class ChainServer {
         });
     }
 
-    private m_chain: Chain;
-    private m_miner?: Miner;
+    private m_chain: ValueChain;
+    private m_miner?: ValueMiner;
     private m_server?: RPCServer;
 }

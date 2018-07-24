@@ -1,16 +1,15 @@
-import {Transaction} from './transaction';
 import {Chain, ChainOptions} from './chain';
 import {Block, BlockHeader} from './block';
 import {ErrorCode} from '../error_code';
 import * as assert from 'assert';
-import { BlockStorage } from './block_storage';
-import {LoggerInstance, initLogger, LoggerOptions} from '../lib/logger_util';
+import {LoggerInstance} from '../lib/logger_util';
 import { EventEmitter } from 'events';
-import { Storage } from '../storage/storage_manager';
+import { Storage } from '../storage';
+import {ChainCreator} from './chain_creator';
 
 export {Chain} from './chain';
 
-export type MinerOptions = {} & ChainOptions;
+export type MinerOptions = {} ;
 
 export enum MinerState {
     none = 0,
@@ -18,52 +17,62 @@ export enum MinerState {
     idle = 2,
     executing = 3,
     mining = 4,
-};
+}
 
-export class Miner extends EventEmitter{
-    protected m_chain: Chain;
+export class Miner extends EventEmitter {
+    protected m_chain?: Chain;
     // private m_miningBlock?: Block;
     protected m_state: MinerState;
-    protected m_logger: LoggerInstance;
+    protected m_logger!: LoggerInstance;
     constructor(options: MinerOptions) {
         super();
-        this.m_logger = initLogger(options);
-        options.logger = this.m_logger;
+
         this.m_state = MinerState.none;
-        this.m_chain = this._chainInstance(options);
     }
 
-    protected _chainInstance(options: ChainOptions) {
-        return new Chain(options);
+    protected async _chainInstance(chainCreator: ChainCreator, param: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        return await chainCreator.createChain(param, Chain);
+    }
+
+    protected async _genesisChainInstance(chainCreator: ChainCreator, param: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        return await chainCreator.createGenesis(param, Chain);
     }
 
     get chain(): Chain {
-        return this.m_chain;
+        return this.m_chain!;
     }
 
     get peerid(): string {
-        return this.m_chain.peerid;
+        return this.m_chain!.peerid;
     }
 
-    public async initialize(): Promise<ErrorCode> {
+    public async initialize(chainCreator: ChainCreator, param: Map<string, any>): Promise<ErrorCode> {
         this.m_state = MinerState.initializing;
-        let err = await this.m_chain.initialize();
-        if (err !== ErrorCode.RESULT_OK) {
-            return err;
+        let cc = await this._chainInstance(chainCreator, param);
+        if (cc.err) {
+            return cc.err;
         }
-        this.m_chain.on('tipBlock', (chain: Chain, tipBlock: BlockHeader)=>{
-            this._onTipBlock(this.m_chain, tipBlock);
+        this.m_chain = cc.chain!;
+        this.m_logger = this.chain.logger;
+       
+        this.m_chain!.on('tipBlock', (chain: Chain, tipBlock: BlockHeader) => {
+            this._onTipBlock(this.m_chain!, tipBlock);
         });
         this.m_state = MinerState.idle;
         return ErrorCode.RESULT_OK;
     }
 
+    public async create(chainCreator: ChainCreator, param: Map<string, any>, options?: any): Promise<ErrorCode> {
+        let cc = await this._genesisChainInstance(chainCreator, param);
+        if (cc.err) {
+            return cc.err;
+        }
+        this.m_chain = cc.chain!;
+        this.m_logger = this.chain.logger;
 
-    public async create(options?: any): Promise<ErrorCode> {
-        await this.m_chain.initComponents();
-        let genesis = this.m_chain.newBlock();
+        let genesis = this.m_chain!.newBlock();
         genesis.header.timestamp = Date.now() / 1000;
-        let sr = await this.m_chain.storageManager.createStorage('genesis');
+        let sr = await this.chain.storageManager.createStorage('genesis');
         if (sr.err) {
             return sr.err;
         }
@@ -75,28 +84,26 @@ export class Miner extends EventEmitter{
                 break;
             }
             this._decorateBlock(genesis);
-            let nber = await this.m_chain.newBlockExecutor(genesis, sr.storage!);
+            let nber = await this.chain.newBlockExecutor(genesis, sr.storage!);
             if (nber.err) {
                 err = nber.err;
                 break;
             }
             err = await nber.executor!.execute();
-            await nber.executor!.uninit();
             if (err) {
                 break;
             }
-            let ssr = await this.m_chain.storageManager.createSnapshot(sr.storage!, genesis.header.hash);
+            let ssr = await this.chain.storageManager.createSnapshot(sr.storage!, genesis.header.hash);
             if (ssr.err) {
                 err = ssr.err;
                 break;
             }
             assert(ssr.snapshot);
-            err = await this.m_chain.create(genesis, ssr.snapshot!);
+            err = await this.chain.create(genesis, ssr.snapshot!);
         } while (false);
         await sr.storage!.remove();
         return err;
     }
-
 
     /**
      * virtual 
@@ -116,7 +123,9 @@ export class Miner extends EventEmitter{
             return kvr.err;
         }
 
-        assert(options!.txlivetime && options!.consensusname, 'options must have txlivetime');
+        assert(options!.txlivetime, 'options must have txlivetime');
+        assert(options!.consensusname, 'options must have consensusname');
+
         await kvr.kv!.set('txlivetime', options!.txlivetime);
         await kvr.kv!.set('consensus', options!.consensusname);
 
@@ -124,35 +133,34 @@ export class Miner extends EventEmitter{
     }
 
     protected async _createBlock(header: BlockHeader): Promise<ErrorCode> {
-        let block = this.m_chain.newBlock(header);
+        let block = this.chain.newBlock(header);
         this.m_state = MinerState.executing;
-        let tx = this.m_chain.pending.popTransaction();
+        let tx = this.chain.pending.popTransaction();
         while (tx) {
             block.content.addTransaction(tx);
-            tx = this.m_chain.pending.popTransaction();
+            tx = this.chain.pending.popTransaction();
         }
         await this._decorateBlock(block);
-        let sr = await this.m_chain.storageManager.createStorage(header.preBlockHash, block.header.preBlockHash);
+        let sr = await this.chain.storageManager.createStorage(header.preBlockHash, block.header.preBlockHash);
         if (sr.err) {
             return sr.err;
         }
         let err: ErrorCode;
         do {
-            let nber = await this.m_chain.newBlockExecutor(block, sr.storage!);
+            let nber = await this.chain.newBlockExecutor(block, sr.storage!);
             if (nber.err) {
                 err = nber.err;
                 break;
             }
             err = await nber.executor!.execute();
-            await nber.executor!.uninit();
             if (err) {
-                this.m_logger.error(`${this.m_chain.node!.node.peerid} execute failed! ret ${err}`);
+                this.m_logger.error(`${this.chain.node!.node.peerid} execute failed! ret ${err}`);
                 break;
             }
             this.m_state = MinerState.mining;
             err = await this._mineBlock(block);
             if (err) {
-                this.m_logger.error(`${this.m_chain.node!.node.peerid} mine block failed! ret ${err}`);
+                this.m_logger.error(`${this.chain.node!.node.peerid} mine block failed! ret ${err}`);
                 break;
             }
         } while (false);
@@ -160,13 +168,13 @@ export class Miner extends EventEmitter{
             await sr.storage!.remove();
             return err;
         }
-        let ssr = await this.m_chain.storageManager.createSnapshot(sr.storage!, block.hash, true);
+        let ssr = await this.chain.storageManager.createSnapshot(sr.storage!, block.hash, true);
         if (ssr.err) {
             return ssr.err;
         }
-        await this.m_chain.addMinedBlock(block, ssr.snapshot!);
+        await this.chain.addMinedBlock(block, ssr.snapshot!);
         this.m_state = MinerState.idle;
-        this.m_logger.info(`finish mine a block on block hash: ${this.m_chain.tipBlockHeader!.hash} number: ${this.m_chain.tipBlockHeader!.number}`);
+        this.m_logger.info(`finish mine a block on block hash: ${this.chain.tipBlockHeader!.hash} number: ${this.chain.tipBlockHeader!.number}`);
         return err;
     }
 

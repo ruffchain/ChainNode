@@ -1,74 +1,71 @@
 import { BigNumber } from 'bignumber.js';
-
 import { ErrorCode } from '../error_code';
 
-import {Storage, IReadableStorage, IReadWritableKeyValue, IReadableKeyValue} from '../storage/storage';
-import {ViewExecutor} from '../executor/view';
-import * as BaseChain from '../chain/chain';
-import { Block } from '../chain/block';
+import { Storage } from '../storage';
+import { TransactionContext, EventContext, ViewContext, GenesisOptions, ChainOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor} from '../chain';
+import { ValueBlockHeader } from './block';
+import { ValueTransaction } from './transaction';
+import { ValueBlockExecutor} from './executor';
+import * as ValueContext from './context';
 
-import { BlockHeader } from './block';
-import {Transaction} from './transaction';
-import { ValueContext, ValueViewContext, BlockExecutor} from './executor';
-
-export type TransactionContext = {
+export type ValueTransactionContext = {
     value: BigNumber;
-    getBalance: (address: string)=> Promise<BigNumber>;
-    transferTo: (address: string, amount: BigNumber)=> Promise<ErrorCode>;
-} & BaseChain.TransactionContext;
+    getBalance: (address: string) => Promise<BigNumber>;
+    transferTo: (address: string, amount: BigNumber) => Promise<ErrorCode>;
+} & TransactionContext;
 
-export type EventContext = {
-    getBalance: (address: string)=> Promise<BigNumber>;
-    transferTo: (address: string, amount: BigNumber)=> Promise<ErrorCode>;
-} & BaseChain.EventContext;
+export type ValueEventContext = {
+    getBalance: (address: string) => Promise<BigNumber>;
+    transferTo: (address: string, amount: BigNumber) => Promise<ErrorCode>;
+} & EventContext;
 
-export type ViewContext = {
-    getBalance: (address: string)=> Promise<BigNumber>;
-} & BaseChain.ViewContext;
+export type ValueViewContext = {
+    getBalance: (address: string) => Promise<BigNumber>;
+} & ViewContext;
 
+export type ValueGenesisOptions = GenesisOptions;
+export type ValueChainOptions = ChainOptions;
 
-export type ChainOptions = BaseChain.ChainOptions
-
-export class Chain extends BaseChain.Chain {
-    constructor(options: ChainOptions) {
-        super(options);
+export class ValueChain extends Chain {
+    constructor() {
+        super();
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let kvBalance = (await storage.getReadWritableKeyValue(Chain.kvBalance)).kv!;
-        let ve = new ValueContext(kvBalance);
+        let kvBalance = (await storage.getReadWritableKeyValue(ValueChain.kvBalance)).kv!;
+        let ve = new ValueContext.Context(kvBalance);
         let externContext = Object.create(null);
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
         externContext.transferTo = (address: string, amount: BigNumber): Promise<ErrorCode> => {
-            return ve.transferTo(Chain.sysAddress, address, amount);
+            return ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        let executor = new BlockExecutor({block, storage, handler: this.m_options.handler, externContext});
+        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.m_options.handler, externContext, config: this.m_globalConfig!});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
-    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined,): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
-        let kvBalance = (await storage.getReadableKeyValue(Chain.kvBalance)).kv!;
-        let ve = new ValueViewContext(kvBalance);
+    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
+        let kvBalance = (await storage.getReadableKeyValue(ValueChain.kvBalance)).kv!;
+        let ve = new ValueContext.ViewContext(kvBalance);
         let externContext = Object.create(null);
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
-        let executor = new ViewExecutor({header, storage, method, param, handler: this.m_options.handler, externContext});
+        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.m_options.handler, externContext});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
     protected _getBlockHeaderType(): new () => BlockHeader {
-        return BlockHeader;
+        return ValueBlockHeader;
     }
     
-    protected _getTransactionType(): new () => Transaction {
-        return Transaction;
+    protected _getTransactionType() {
+        return ValueTransaction;
     }
 
     // 存储每个address的money，其中有一个默认的系统账户
-    public static kvBalance: string = '__balance'; //address<--->blance
+    public static kvBalance: string = '__balance'; // address<--->blance
 
     public static sysAddress: string = '0';
 }

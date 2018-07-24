@@ -3,29 +3,21 @@ import * as assert from 'assert';
 import { ErrorCode } from '../error_code';
 import { addressFromSecretKey } from '../address';
 
-import {Storage} from '../storage/storage_manager';
-import { Block } from '../chain/block';
-import * as ValueMiner from '../value_chain/miner';
+import {ValueMinerOptions, ValueMiner, Chain, Block, Storage} from '../value_chain';
+import { DposBlockHeader } from './block';
+import {ChainCreator} from '../chain/chain_creator';
+import {DposChain} from './chain';
+import * as consensus from './consensus';
 
-import { Chain, ChainOptions } from './chain';
-import * as Consensus from './consensus';
-import { BlockHeader } from './block';
-import GlobalConfig = require('../chain/globalConfig');
+export type DposMinerOptions = {minerSecret: Buffer} & ValueMinerOptions;
 
-export type MinerOptions = {minerSecret: Buffer} & ValueMiner.MinerOptions & ChainOptions;
-
-export type CreateOptions = {
-    candidates: string[],
-    miners: string[]
-};
-
-export class Miner extends ValueMiner.Miner {
+export class DposMiner extends ValueMiner {
     private m_secret: Buffer;
     private m_address!: string;
     private m_timer?: NodeJS.Timer;
     protected m_runTxPending: any = [];
     protected m_currTx: any = null;
-    constructor(options: MinerOptions) {
+    constructor(options: DposMinerOptions) {
         super(options);
         this.m_secret = options.minerSecret;
         this.m_address = addressFromSecretKey(this.m_secret)!;
@@ -35,23 +27,37 @@ export class Miner extends ValueMiner.Miner {
         assert(this.coinbase, `secret key failed`);
     }
 
-    protected _chainInstance(options: ChainOptions) {
-        return new Chain(options);
+    protected async _chainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        let cc = await chainCreator.createChain(commandOptions, DposChain);
+        if (cc.err) {
+            return {err: cc.err};
+        }
+
+        return {err: ErrorCode.RESULT_OK, chain: cc.chain};
     }
 
-    get chain(): Chain {
-        return <Chain>this.m_chain;
+    protected async _genesisChainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
+        let cc = await chainCreator.createGenesis(commandOptions, DposChain);
+        if (cc.err) {
+            return {err: cc.err};
+        }
+
+        return {err: ErrorCode.RESULT_OK, chain: cc.chain as Chain};
+    }
+
+    get chain(): DposChain {
+        return this.m_chain as DposChain;
     }
 
     get address(): string {
         return this.m_address;
     }
 
-    public async initialize(): Promise<ErrorCode> {
+    public async initialize(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<ErrorCode> {
         if (!this.m_address) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
-        let err = await super.initialize();
+        let err = await super.initialize(chainCreator, commandOptions);
         if (err) {
             return err;
         }
@@ -60,7 +66,6 @@ export class Miner extends ValueMiner.Miner {
 
         return ErrorCode.RESULT_OK;
     }
-
 
     protected async _resetTimer(): Promise<ErrorCode> {
         let tr = await this._nextBlockTimeout();
@@ -73,14 +78,14 @@ export class Miner extends ValueMiner.Miner {
             delete this.m_timer; 
         }
         
-        this.m_timer = setTimeout(async ()=>{
+        this.m_timer = setTimeout(async () => {
             delete this.m_timer;
             let now = Date.now() / 1000;
-            let tip = <BlockHeader>this.m_chain.tipBlockHeader!;
-            let blockHeader = new BlockHeader();
+            let tip = this.m_chain!.tipBlockHeader! as DposBlockHeader;
+            let blockHeader = new DposBlockHeader();
             blockHeader.setPreBlock(tip);
             blockHeader.timestamp = now;
-            let dmr = await blockHeader.getDueMiner(<Chain>this.m_chain);
+            let dmr = await blockHeader.getDueMiner(this.m_chain as Chain);
             if (dmr.err) {
                 return ;
             }
@@ -97,25 +102,24 @@ export class Miner extends ValueMiner.Miner {
         return ErrorCode.RESULT_OK;
     }
     
-
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
-        //只需要给block签名
+        // 只需要给block签名
         this.m_logger.info(`${this.peerid} create block, sign ${this.m_address}`);
-        (<BlockHeader>block.header).signBlock(this.m_secret);
+        (block.header as DposBlockHeader).signBlock(this.m_secret);
         block.header.updateHash();
         return ErrorCode.RESULT_OK;
     }
 
     protected async _nextBlockTimeout(): Promise<{err: ErrorCode, timeout?: number}> {
-        let hr = await this.m_chain.getHeader(0);
+        let hr = await this.m_chain!.getHeader(0);
         if (hr.err) {
-            return {err: hr.err}
+            return {err: hr.err};
         }
         let now = Date.now() / 1000;
-        let blockInterval = GlobalConfig.getConfig('blockInterval');
-        let nextTime = (Math.floor((now - hr.header!.timestamp) / blockInterval)+1) * blockInterval;
+        let blockInterval = this.m_chain!.globalConfig.getConfig('blockInterval');
+        let nextTime = (Math.floor((now - hr.header!.timestamp) / blockInterval) + 1) * blockInterval;
 
-        return {err: ErrorCode.RESULT_OK, timeout: (nextTime + hr.header!.timestamp - now)*1000};
+        return {err: ErrorCode.RESULT_OK, timeout: (nextTime + hr.header!.timestamp - now) * 1000};
     }
 
     protected async _createGenesisBlock(block: Block, storage: Storage, options: any): Promise<ErrorCode> {
@@ -124,11 +128,11 @@ export class Miner extends ValueMiner.Miner {
             return err;
         }
 
-        //storage的键值对要在初始化的时候就建立好
-        await storage.createKeyValue(Consensus.ViewContext.kvDPOS);
+        // storage的键值对要在初始化的时候就建立好
+        await storage.createKeyValue(consensus.ViewContext.kvDPOS);
+        let denv = new consensus.Context(this.m_chain!.globalConfig, this.m_logger);
 
-        let denv = new Consensus.Context();
-        let ir = await denv.init(storage,options.candidates, options.miners);
+        let ir = await denv.init(storage, options.candidates, options.miners);
         if (ir.err) {
             return ir.err;
         }

@@ -3,17 +3,17 @@ import * as path from 'path';
 import {LoggerInstance} from '../lib/logger_util';
 import * as fs from 'fs-extra';
 
-
 export type NodeStorageOptions = {
     count: number;
     dataDir: string;
     logger: LoggerInstance
-}
+};
 
 type BanInfo = {
     peerid: string;
-    endtime: number; //结束禁用的时间
-}
+    endtime: number; // 结束禁用的时间
+};
+
 export class NodeStorage {
     protected m_nodes: string[] = [];
     protected m_banNodes: BanInfo[] = [];
@@ -35,7 +35,7 @@ export class NodeStorage {
 
         setInterval(() => {
             this.flush();
-        }, 60*1000);
+        }, 60 * 1000);
     }
 
     public get(arg: number|'all'): string[] {
@@ -45,7 +45,7 @@ export class NodeStorage {
         } else {
             count = count > this.m_nodes.length ? this.m_nodes.length : arg;
         }
-        let peerids: string[] = this.m_nodes.slice(0,count);
+        let peerids: string[] = this.m_nodes.slice(0, count);
 
         return peerids;
     }
@@ -53,10 +53,10 @@ export class NodeStorage {
     public add(peerid: string): ErrorCode {
         let nIndex = this.getIndex(peerid); 
         if (nIndex !== -1) {
-            this.m_nodes.splice(nIndex,1);
+            this.m_nodes.splice(nIndex, 1);
         }
 
-        this.m_nodes.splice(0,0,peerid);
+        this.m_nodes.splice(0, 0, peerid);
         this.m_bFlush = true;
 
         return ErrorCode.RESULT_OK;
@@ -68,13 +68,13 @@ export class NodeStorage {
             return ErrorCode.RESULT_NOT_FOUND;
         }
        
-        this.m_nodes.splice(nIndex,1);
+        this.m_nodes.splice(nIndex, 1);
         this.m_bFlush = true;
 
         return ErrorCode.RESULT_OK;
     }
 
-    //time的单位为分钟
+    // time的单位为分钟
     public ban(peerid: string, time: number): ErrorCode {
         let nIndex = this.getIndex(peerid);
         if (nIndex !== -1) {
@@ -85,7 +85,7 @@ export class NodeStorage {
             this.m_banNodes.splice(nIndex, 1);
         }
 
-        let info: BanInfo = {peerid: peerid,  endtime: time === 0 ? 0: Date.now() +  time*60*1000};
+        let info: BanInfo = {peerid,  endtime: time === 0 ? 0 : Date.now() +  time * 60 * 1000};
 
         let pos = 0;
         for (let i = 0; i < this.m_banNodes.length; i++) {
@@ -120,7 +120,7 @@ export class NodeStorage {
     }
 
     protected getIndex(peerid: string): number {
-        for (let i=0; i< this.m_nodes.length; i++) {
+        for (let i = 0; i < this.m_nodes.length; i++) {
             if (this.m_nodes[i] === peerid) {
                 return i;
             }
@@ -130,7 +130,7 @@ export class NodeStorage {
     }
 
     protected getBanIndex(peerid: string): number {
-        for (let i=0; i< this.m_banNodes.length; i++) {
+        for (let i = 0; i < this.m_banNodes.length; i++) {
             if (this.m_banNodes[i].peerid === peerid) {
                 return i;
             }

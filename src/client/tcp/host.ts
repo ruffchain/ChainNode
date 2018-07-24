@@ -1,10 +1,10 @@
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {instance as staticOutInstance } from '../../core/net/static_out_node';
-import {Node} from '../../core/net_tcp/node';
+import {StaticOutNode, TcpNode } from '../../core';
+
 import chainHost = require('../host/chain_host');
 
-chainHost.registerNet('tcp', (commandOptions: CommandOptions): any=>{
+chainHost.registerNet('tcp', (commandOptions: CommandOptions): any => {
     let host = commandOptions.get('host');
     if (!host) {
         console.error('invalid tcp host');
@@ -19,8 +19,8 @@ chainHost.registerNet('tcp', (commandOptions: CommandOptions): any=>{
     if (!peers) {
         peers = [];
     } else {
-        peers = (<string>peers).split(';');
+        peers = (peers as string).split(';');
     }
-    let nodeType = staticOutInstance(Node);
+    let nodeType = StaticOutNode(TcpNode);
     return new nodeType({host, port}, peers);
 });

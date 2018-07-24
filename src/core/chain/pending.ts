@@ -3,9 +3,8 @@ import {Chain} from './chain';
 import {BlockHeader} from './block';
 import {ErrorCode} from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
-import {StorageManager, IReadableStorage} from '../storage/storage_manager';
+import {StorageManager, IReadableStorage} from '../storage';
 import {Lock} from '../lib/Lock';
-import GlobalConfig = require('./globalConfig');
 
 export type TransactionWithTime = {tx: Transaction, ct: number};
 
@@ -28,22 +27,24 @@ export class PendingTransactions {
         if (options.txlivetime) {
             this.m_txLiveTime = options.txlivetime;
         } else {
-            this.m_txLiveTime = GlobalConfig.getConfig('txlivetime', 60*60);
+            this.m_txLiveTime = 60 * 60;
         }
         this.m_pendingLock = new Lock();
     }
 
     public async addTransaction(tx: Transaction): Promise<ErrorCode> {
+        this.m_logger.info(`addTransaction, txhash=${tx.hash}`);
         await this.m_pendingLock.enter();
-        //this.m_logger.info('transactions length='+this.m_transactions.length.toString());
+        // this.m_logger.info('transactions length='+this.m_transactions.length.toString());
         // if (this.m_orphanTx.has(tx.address as string)) {
         //     this.m_logger.info('m_orphanTx length='+(this.m_orphanTx.get(tx.address as string) as Transaction[]).length);
         // }
         if (this.isExist(tx)) {
+            this.m_logger.error(`addTransaction failed, tx exist,hash=${tx.hash}`);
             await this.m_pendingLock.leave();
             return ErrorCode.RESULT_TX_EXIST;
         }
-        let ret: any = await this._addTx({tx: tx, ct: Date.now()});
+        let ret: any = await this._addTx({tx, ct: Date.now()});
         await this.m_pendingLock.leave();
         return ret;
     }
@@ -53,14 +54,14 @@ export class PendingTransactions {
             if (!this.m_transactions.length) {
                 return null;
             }
-            let txTime: TransactionWithTime = <TransactionWithTime>this.m_transactions.shift();
+            let txTime: TransactionWithTime = this.m_transactions.shift()!;
             if (this.isTimeout(txTime)) {
-                //当前tx已经超时，那么同一个地址的其他tx(nonce一定大于当前tx的）进行排队等待
-                this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce-1);
-                let i=0;
+                // 当前tx已经超时，那么同一个地址的其他tx(nonce一定大于当前tx的）进行排队等待
+                this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce - 1);
+                let i = 0;
                 while (i < this.m_transactions.length) {
                     if (this.m_transactions[i].tx.address === txTime.tx.address) {
-                        let txTemp: TransactionWithTime = <TransactionWithTime>(this.m_transactions.splice(i,1)[0]);
+                        let txTemp: TransactionWithTime = (this.m_transactions.splice(i, 1)[0]);
                         this.addToOrphan(txTime.tx.address as string, txTemp);
                     } else {
                         i++;
@@ -75,6 +76,7 @@ export class PendingTransactions {
     public async updateTipBlock(header: BlockHeader): Promise<ErrorCode> {
         let svr = await this.m_storageManager.getSnapshotView(header.hash);
         if (svr.err) {
+            this.m_logger.error(`updateTipBlock getSnapshotView failed, errcode=${svr.err},hash=${header.hash},number=${header.number}`);
             return svr.err;
         }
         if (this.m_curHeader) {
@@ -122,20 +124,20 @@ export class PendingTransactions {
                     if (this.isTimeout(this.m_transactions[i])) {
                         this.m_transactions.splice(i, 1);
                         this.addToQueue(txTime);
-                        //addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
+                        // addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
                         this.m_mapNonce.set(txTime.tx.address as string, nonce!);
                         return ErrorCode.RESULT_OK;
                     }
 
-                    let err = await this.checkSmallNonceTx(txTime.tx, this.m_transactions[i].tx);
-                    if (err === ErrorCode.RESULT_OK) {
+                    let _err = await this.checkSmallNonceTx(txTime.tx, this.m_transactions[i].tx);
+                    if (_err === ErrorCode.RESULT_OK) {
                         this.m_transactions.splice(i, 1);
                         this.addToQueue(txTime);
-                        //addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
+                        // addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
                         this.m_mapNonce.set(txTime.tx.address as string, nonce!);
                         return ErrorCode.RESULT_OK;
                     }
-                    return err;
+                    return _err;
                 }
             }
             return ErrorCode.RESULT_ERROR_NONCE_IN_TX;
@@ -149,12 +151,11 @@ export class PendingTransactions {
         return ErrorCode.RESULT_ERROR_NONCE_IN_TX;
     }
 
-    //获取mem中的nonce值
+    // 获取mem中的nonce值
     protected async getNonce(address: string): Promise<{err: ErrorCode, nonce?: number}> {
         if (this.m_mapNonce.has(address)) {
             return {err: ErrorCode.RESULT_OK, nonce: this.m_mapNonce.get(address) as number};
-        }
-        else {
+        } else {
             return await this.getStorageNonce(address);
         }
     }
@@ -163,6 +164,7 @@ export class PendingTransactions {
         try {
             let nonceTableInfo = await this.m_storageView!.getReadableKeyValue(Chain.kvNonce);
             if (nonceTableInfo.err) {
+                this.m_logger.error(`getStorageNonce, getReadableKeyValue failed,errcode=${nonceTableInfo.err}`);
                 return {err: nonceTableInfo.err};
             }
             let ret = await nonceTableInfo.kv!.get(s);
@@ -174,6 +176,7 @@ export class PendingTransactions {
             }
             return {err: ErrorCode.RESULT_OK, nonce: ret.value as number};
         } catch (error) {
+            this.m_logger.error(`getStorageNonce exception, error=${error},address=${s}`);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
@@ -189,8 +192,8 @@ export class PendingTransactions {
             if (tx.nonce <= nonce!) {
                 this.m_transactions.splice(index, 1);
                 if (this.m_mapNonce.has(tx.address as string)) {
-                    if ((this.m_mapNonce.get(<string>tx.address) as number) <= nonce!) {
-                        this.m_mapNonce.delete(<string>tx.address);
+                    if ((this.m_mapNonce.get(tx.address as string) as number) <= nonce!) {
+                        this.m_mapNonce.delete(tx.address  as string);
                     }
                 }
             } else {
@@ -229,7 +232,7 @@ export class PendingTransactions {
         } else {
             for (let i = 0; i < l.length; i++) {
                 if (txTime.tx.nonce < l[i].tx.nonce) {
-                    l.splice(i,0,txTime);
+                    l.splice(i, 0, txTime);
                     break;
                 }
             }

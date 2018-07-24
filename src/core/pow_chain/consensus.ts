@@ -1,11 +1,12 @@
 const BN = require('bn.js');
-import { BlockHeader } from './block';
-import { Chain } from '../chain/chain';
+import { PowBlockHeader } from './block';
+import { Chain } from '../chain';
 import * as assert from 'assert';
 import { ErrorCode } from '../error_code';
-import GlobalConfig = require('../chain/globalConfig');
 
-//我们测试时保证1分钟一块，每10块调整一次难度
+export const INT32_MAX = 0xffffffff;
+
+// 我们测试时保证1分钟一块，每10块调整一次难度
 
 // //每次重新计算难度的间隔块，BTC为2016, 
 // export const retargetInterval = 10;
@@ -28,9 +29,10 @@ import GlobalConfig = require('../chain/globalConfig');
  */
 
 export function fromCompact(compact: number) {
-    if (compact === 0)
+    if (compact === 0) {
         return new BN(0);
-
+    }
+        
     const exponent = compact >>> 24;
     const negative = (compact >>> 23) & 1;
 
@@ -45,11 +47,12 @@ export function fromCompact(compact: number) {
         num.iushln(8 * (exponent - 3));
     }
 
-    if (negative)
+    if (negative) {
         num.ineg();
-
+    }
+    
     return num;
-};
+}
 
 /**
  * Convert a big number to a compact number.
@@ -59,9 +62,10 @@ export function fromCompact(compact: number) {
  */
 
 export function toCompact(num: any) {
-    if (num.isZero())
+    if (num.isZero()) {
         return 0;
-
+    }
+       
     let exponent = num.byteLength();
     let mantissa;
 
@@ -79,13 +83,14 @@ export function toCompact(num: any) {
 
     let compact = (exponent << 24) | mantissa;
 
-    if (num.isNeg())
+    if (num.isNeg()) {
         compact |= 0x800000;
-
+    }
+        
     compact >>>= 0;
 
     return compact;
-};
+}
 
 /**
  * Verify proof-of-work.
@@ -97,36 +102,38 @@ export function toCompact(num: any) {
 export function verifyPOW(hash: Buffer, bits: number): boolean {
     let target = fromCompact(bits);
 
-    if (target.isNeg() || target.isZero())
+    if (target.isNeg() || target.isZero()) {
         return false;
+    } 
     let targetHash = target.toBuffer('be', 32);
     return hash.compare(targetHash) < 1;
-};
+}
 
-export function retarget(prevbits: number, actualTimespan: number): number {
+export function retarget(prevbits: number, actualTimespan: number, chain: Chain): number {
     let target = fromCompact(prevbits);
 
-    if (actualTimespan < (GlobalConfig.getConfig('targetTimespan') / 4 | 0)) {
-        actualTimespan = GlobalConfig.getConfig('targetTimespan') / 4 | 0;
+    if (actualTimespan < (chain.globalConfig.getConfig('targetTimespan') / 4 | 0)) {
+        actualTimespan = chain.globalConfig.getConfig('targetTimespan') / 4 | 0;
     }
 
-    if (actualTimespan > GlobalConfig.getConfig('targetTimespan') * 4) {
-        actualTimespan = GlobalConfig.getConfig('targetTimespan') * 4;
+    if (actualTimespan > chain.globalConfig.getConfig('targetTimespan') * 4) {
+        actualTimespan = chain.globalConfig.getConfig('targetTimespan') * 4;
     }
 
     target.imuln(actualTimespan);
-    target.idivn(GlobalConfig.getConfig('targetTimespan'));
+    target.idivn(chain.globalConfig.getConfig('targetTimespan'));
 
-    if (target.gt(GlobalConfig.getConfig('limit')))
-        return GlobalConfig.getConfig('basicBits');
-
+    if (target.gt(chain.globalConfig.getConfig('limit'))) {
+        return chain.globalConfig.getConfig('basicBits');
+    }
+        
     return toCompact(target);
 }
 
-export async function getTarget(header: BlockHeader, chain: Chain): Promise<{err: ErrorCode, target?: number}> {
+export async function getTarget(header: PowBlockHeader, chain: Chain): Promise<{err: ErrorCode, target?: number}> {
     // Genesis
     if (header.number === 0) {
-        return {err: ErrorCode.RESULT_OK, target: GlobalConfig.getConfig('basicBits')};
+        return {err: ErrorCode.RESULT_OK, target: chain.globalConfig.getConfig('basicBits')};
     }
     let prevRet = await chain.getHeader(header.preBlockHash);
     // Genesis
@@ -135,29 +142,29 @@ export async function getTarget(header: BlockHeader, chain: Chain): Promise<{err
     }
 
     // Do not retarget
-    if ((header.number + 1) % GlobalConfig.getConfig('retargetInterval') !== 0) {
-        return {err: ErrorCode.RESULT_OK, target: (<BlockHeader>prevRet.header).bits};
+    if ((header.number + 1) % chain.globalConfig.getConfig('retargetInterval') !== 0) {
+        return {err: ErrorCode.RESULT_OK, target: (prevRet.header as PowBlockHeader).bits};
     }
 
     // Back 2 weeks
-    const height = header.number - (GlobalConfig.getConfig('retargetInterval') - 1);
+    const height = header.number - (chain.globalConfig.getConfig('retargetInterval') - 1);
     assert(height >= 0);
 
     let hr = await chain.getHeader(height);
-    let retargetFrom: BlockHeader|undefined;
+    let retargetFrom: PowBlockHeader;
     if (!hr.err) {
         assert(hr.header);
-        retargetFrom = <BlockHeader>hr.header;
+        retargetFrom = hr.header as PowBlockHeader;
     } else if (hr.err === ErrorCode.RESULT_NOT_FOUND) {
-        let ghr = await chain.getHeader(header, -(GlobalConfig.getConfig('retargetInterval') - 1));
+        let ghr = await chain.getHeader(header, -(chain.globalConfig.getConfig('retargetInterval') - 1));
         if (ghr.err) {
             return {err: ghr.err};
         }
         assert(ghr.header);
-        retargetFrom = <BlockHeader>ghr.header;
+        retargetFrom = ghr.header as PowBlockHeader;
     } else {
         return {err: hr.err};
     }
-    let newTraget = retarget((<BlockHeader>prevRet.header).bits, prevRet.header.timestamp - retargetFrom.timestamp);
+    let newTraget = retarget((prevRet.header as PowBlockHeader).bits, prevRet.header.timestamp - retargetFrom.timestamp, chain);
     return {err: ErrorCode.RESULT_OK, target: newTraget};
 }

@@ -1,6 +1,4 @@
 import {ErrorCode} from '../error_code';
-import {Transaction,EventLog} from '../chain/transaction';
-import {Storage} from '../storage/storage';
 
 export type TxListener = (context: any, params: any) => Promise<ErrorCode>;
 export type BlockHeigthFilter = (height: number) => Promise<boolean>;
@@ -17,7 +15,7 @@ export class BaseHandler {
 
     public addTX(name: string, listener: TxListener) {
         if (name.length > 0 && listener) {
-            this.m_txListeners.set(name,listener);
+            this.m_txListeners.set(name, listener);
         }
     }
 
@@ -27,7 +25,7 @@ export class BaseHandler {
 
     public addViewMethod(name: string, listener: ViewListener) {
         if (name.length > 0 && listener) {
-            this.m_viewListeners.set(name,listener);
+            this.m_viewListeners.set(name, listener);
         }
     }
 
