@@ -4,12 +4,14 @@ import * as fs from 'fs-extra';
 import { ErrorCode } from '../error_code';
 import { Storage } from './storage';
 import { StorageDumpSnapshot, IStorageSnapshotManager } from './dump_snapshot';
+import { LoggerInstance } from '../lib/logger_util';
 
 export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
-    constructor(options: {path: string}) {
+    constructor(options: {logger: LoggerInstance, path: string}) {
         this.m_path = path.join(options.path, 'dump');
+        this.m_logger = options.logger;
     }
-
+    protected m_logger: LoggerInstance;
     protected m_path: string;
 
     public recycle() {
@@ -33,6 +35,7 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     }
 
     public async createSnapshot(from: Storage, blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
+        this.m_logger.info(`creating snapshot ${blockHash}`);
         const snapshot = new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
         fs.copyFileSync(from.filePath, snapshot.filePath);
         return {err: ErrorCode.RESULT_OK, snapshot};

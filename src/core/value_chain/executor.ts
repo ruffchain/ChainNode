@@ -1,62 +1,34 @@
 import {BigNumber} from 'bignumber.js';
 import {ErrorCode} from '../error_code';
+import {isValidAddress} from '../address';
 
-import {Transaction, BlockHeader, Receipt, BlockExecutor, TxListener, TransactionExecutor, Storage, IReadableKeyValue, IReadWritableKeyValue} from '../chain';
-import {Context, ViewContext} from './context';
+import {Transaction, BlockHeader, Receipt, BlockExecutor, TxListener, TransactionExecutor, Storage, IReadableKeyValue, IReadWritableKeyValue, Chain} from '../chain';
+import {Context} from './context';
 import {ValueHandler} from './handler';
 import {ValueTransaction} from './transaction';
 import {ValueBlockHeader} from './block';
 import {ValueChain} from './chain';
 import { LoggerInstance } from '../lib/logger_util';
 
-// TODO: 这里的错误处理还非常不完善！！！！
-
-export class ValueViewContext {
-    constructor(protected kvBalance: IReadableKeyValue) {
-        
-    }
-
-    async getBalance(address: string): Promise<BigNumber> {
-        let retInfo = await this.kvBalance.get(address);
-        return retInfo.err === ErrorCode.RESULT_OK ? new BigNumber(retInfo.value as string) : new BigNumber(0);
-    }
-}
-
-export class ValueContext extends ValueViewContext {
-    constructor(kvBalance: IReadWritableKeyValue) {
-        super(kvBalance);
-    }
-
-    async transferTo(from: string, to: string, amount: BigNumber): Promise<ErrorCode> {
-        let fromTotal = await this.getBalance(from);
-        if (fromTotal.lt(amount)) {
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-        await (this.kvBalance as IReadWritableKeyValue).set(from, fromTotal.minus(amount).toString());
-        await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount).toString());
-        return ErrorCode.RESULT_OK;
-    }
-
-    async issue(to: string, amount: BigNumber): Promise<ErrorCode> {
-        let sh = await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount).toString());
-        return ErrorCode.RESULT_OK;
-    }
-}
+const assert = require('assert');
 
 export class ValueBlockExecutor extends BlockExecutor {
     protected _newTransactionExecutor(l: TxListener, tx: ValueTransaction): TransactionExecutor {
         return new ValueTransactionExecutor(l, tx, this.m_logger);
     }
 
-    protected async _executeEvent(bBeforeBlock: boolean): Promise<ErrorCode> {
-        if (bBeforeBlock) {
-            let l = (this.m_handler as ValueHandler).getMinerWageListener();
-            let wage = await l(this.m_block.number);
-            let kvBalance = (await this.m_storage.getReadWritableKeyValue(ValueChain.kvBalance)).kv!;
-            let ve = new Context(kvBalance);
-            await ve.issue((this.m_block.header as ValueBlockHeader).coinbase, wage);
+    protected async _executePreBlockEvent(): Promise<ErrorCode> {
+        let l = (this.m_handler as ValueHandler).getMinerWageListener();
+        let wage = await l(this.m_block.number);
+        let kvBalance = (await this.m_storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
+        let ve = new Context(kvBalance);
+        let coinbase = (this.m_block.header as ValueBlockHeader).coinbase;
+        assert(isValidAddress(coinbase), `block ${this.m_block.hash} has no coinbase set`);
+        if (!isValidAddress(coinbase)) {
+            coinbase = ValueChain.sysAddress;
         }
-        return await super._executeEvent(bBeforeBlock);
+        await ve.issue(coinbase, wage);
+        return await super._executePreBlockEvent();
     }    
 }
 
@@ -85,7 +57,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
             return {err:  nonceErr};
         }
 
-        let kvBalance = (await storage.getReadWritableKeyValue(ValueChain.kvBalance)).kv!;
+        let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
         let fromAddress: string = this.m_tx.address!;
         let nToValue: BigNumber = (this.m_tx as ValueTransaction).value;
         let nFee: BigNumber = (this.m_tx as ValueTransaction).fee;
@@ -115,7 +87,12 @@ export class ValueTransactionExecutor extends TransactionExecutor {
             receipt.eventLogs = this.m_logs;
             err = await work.value!.commit();
         }
-        err = await ve.transferTo(fromAddress, (blockHeader as ValueBlockHeader).coinbase, nFee);
+        let coinbase = (blockHeader as ValueBlockHeader).coinbase;
+        assert(isValidAddress(coinbase), `block ${blockHeader.hash} has no coinbase set`);
+        if (!isValidAddress(coinbase)) {
+            coinbase = ValueChain.sysAddress;
+        }
+        err = await ve.transferTo(fromAddress, coinbase, nFee);
         if (err) {
             return {err};
         }

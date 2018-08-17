@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const EventEmitter = require('events');
@@ -16,6 +42,8 @@ const LocalValueMgr = require('./local_value_mgr.js');
 const PiecePackageRebuilder = require('./piece_package_rebuilder.js');
 const net = require('net');
 const assert = require('assert');
+const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const DHTCommandType = DHTPackage.CommandType;
 
@@ -99,11 +127,13 @@ class DHTBase extends EventEmitter {
                     let eplist = [];
                     this.m_packageSender.mixSocket.eplist.forEach(ep => {
                         let addr = EndPoint.toAddress(ep);
-                        if (EndPoint.isZero(addr)) {
-                            addr.address = EndPoint.loopback(addr.family);
-                            ep = EndPoint.toString(addr);
+                        if (addr) {
+                            if (EndPoint.isZero(addr)) {
+                                addr.address = EndPoint.loopback(addr.family);
+                                ep = EndPoint.toString(addr);
+                            }
+                            eplist.push(ep);
                         }
-                        eplist.push(ep);
                     });
                     return eplist;
                 }
@@ -111,7 +141,7 @@ class DHTBase extends EventEmitter {
             }
         }
 
-        const generateCallback = (handler) => (result, peers = [], n_nodes = []) => {
+        const generateCallback = (handler) => (result, peers = []) => {
             if (!handler) {
                 return;
             }
@@ -119,7 +149,7 @@ class DHTBase extends EventEmitter {
                 result = 0;
                 appendLocalHost(peers);
             }
-            return handler({result, peerlist: peers, n_nodes});
+            return handler({result, peerlist: peers});
         }
 
         if (callback) {
@@ -403,7 +433,6 @@ class DHTBase extends EventEmitter {
             }
         }
 
-        let now = Date.now();
         let activedPeer = peer;
         if (serviceDescriptor.isSigninServer()) {
             if (this.isRunning()) {
@@ -466,7 +495,7 @@ class DHTBase extends EventEmitter {
     }
 
     _logStatus() {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         this.__lastLogTime = this.__lastLogTime || 0;
         if (now - this.__lastLogTime >= 600000) {
             this.__lastLogTime = now;
@@ -529,6 +558,7 @@ class DHT extends DHTBase {
         LOG_ASSERT(Peer.isValidPeerid(localPeerInfo.peerid), `Local peerid is invalid:${localPeerInfo.peerid}.`);
 
         let localPeer = new LocalPeer(localPeerInfo);
+        localPeer.___create_flag = 160809;
         let packageFactory = new DHTPackageFactory(appid);
         let taskMgr = new TaskMgr();
         super(mixSocket, localPeer, packageFactory, taskMgr);
@@ -582,6 +612,8 @@ class DHT extends DHTBase {
             this.m_highFrequencyTimer = null;
             setImmediate(() => this.emit(DHT.EVENT.stop));
         }
+
+        this.___stopped_flag = 160809;
     }
 
     stat() {
@@ -643,7 +675,7 @@ class DHT extends DHTBase {
             this._onRecvPackage(cmdPackage, remoteAddr, message);
         }
 
-        if (!cmdPackage || cmdPackage.appid != this.m_packageFactory.appid) {
+        if (!cmdPackage || cmdPackage.appid !== this.m_packageFactory.appid) {
             LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got invalid package from(${remoteAddr.address}:${remoteAddr.port})`);
             return dhtDecoder.totalLength;
         }
@@ -653,7 +685,7 @@ class DHT extends DHTBase {
         }
 
         const cmdType = cmdPackage.cmdType;
-        if ((cmdType != DHTCommandType.PACKAGE_PIECE_REQ && cmdPackage.dest.peerid !== localPeer.peerid)
+        if ((cmdType !== DHTCommandType.PACKAGE_PIECE_REQ && (!cmdPackage.dest || cmdPackage.dest.peerid !== localPeer.peerid))
             || !HashDistance.checkEqualHash(cmdPackage.dest.hash, localPeer.hash)) {
             LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTCommandType.toString(cmdType)}) ` + 
                 `to other peer(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}),` +
@@ -667,12 +699,13 @@ class DHT extends DHTBase {
             return dhtDecoder.totalLength;
         }
 
-        if (!HashDistance.checkEqualHash(cmdPackage.src.hash, HashDistance.hash(cmdPackage.src.peerid))) {
+        if (typeof cmdPackage.src.peerid !== 'string' || cmdPackage.src.peerid.length === 0 ||
+            !HashDistance.checkEqualHash(cmdPackage.src.hash, HashDistance.hash(cmdPackage.src.peerid))) {
             LOG_WARN(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package hash verify failed.(id:${cmdPackage.dest.peerid},hash:${cmdPackage.dest.hash}), localPeer is (id:${localPeer.peerid},hash:${localPeer.hash})`);
             return dhtDecoder.totalLength;
         }
 
-        LOG_INFO(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)})`);
+        LOG_INFO(`LOCALPEER(${localPeer.peerid}:${this.servicePath}) Got package(${DHTPackage.CommandType.toString(cmdPackage.cmdType)}) from(${EndPoint.toString(remoteAddr)}|${cmdPackage.dest.peerid})`);
         if (cmdPackage.common.dest.ep) {
             // maintain local peer valid internet address
             localPeer.unionEplist([cmdPackage.common.dest.ep], socket.isReuseListener);
@@ -694,8 +727,8 @@ class DHT extends DHTBase {
 
         if (cmdPackage.nodes) {
             cmdPackage.nodes.forEach(node => {
-                assert(typeof node.id === 'string' && node.id.length > 0, `nodes:${cmdPackage.nodes},type:${cmdPackage.cmdType}`);
-                if (this.m_bucket.isExpandable(node.id)) {
+                if (node.id === 'string' && node.id.length > 0 &&
+                    this.m_bucket.isExpandable(node.id)) {
                     this.m_taskExecutor.handshakeSource({peerid: node.id, eplist: node.eplist}, remotePeer, false, true);
                 }
             });
@@ -760,7 +793,20 @@ class DHT extends DHTBase {
     }
 
     _processPackagePiece(socket, cmdPackage, remoteAddr, localAddr) {
+        if (!cmdPackage.body ||
+            typeof cmdPackage.body.max === 'object' ||
+            typeof cmdPackage.body.no === 'object' ||
+            (!cmdPackage.body.max && cmdPackage.body.max !== 0) ||
+            (!cmdPackage.body.no && cmdPackage.body.no !== 0) ||
+            parseInt(cmdPackage.body.max) < parseInt(cmdPackage.body.no)) {
+                return;
+        }
+
         LOG_INFO(`LOCALPEER(${this.m_bucket.localPeer.peerid}:${this.servicePath}) got package piece (taskid:${cmdPackage.body.taskid},max:${cmdPackage.body.max},no:${cmdPackage.body.no}).`);
+
+        cmdPackage.body.max = parseInt(cmdPackage.body.max);
+        cmdPackage.body.no = parseInt(cmdPackage.body.no);
+        
         let respPackage = this.m_packageFactory.createPackage(DHTCommandType.PACKAGE_PIECE_RESP);
         respPackage.common.ackSeq = cmdPackage.common.seq;
         respPackage.body = {

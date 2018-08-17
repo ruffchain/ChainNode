@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
-import {HeaderStorage} from '../chain/header_storage';
+import {HeaderStorage} from '../block';
 
 import { Storage, StorageOptions} from './storage';
 const digest = require('../lib/digest');
