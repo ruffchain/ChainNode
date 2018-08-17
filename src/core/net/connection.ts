@@ -6,6 +6,7 @@ export class IConnection extends EventEmitter {
     on(event: 'drain', listener: (conn: IConnection) => void): this;
     on(event: 'data', listener: (conn: IConnection, data: Buffer) => void): this;
     on(event: 'close', listener: (conn: IConnection) => void): this;
+    on(event: 'checkedVersion', listener: (conn: IConnection) => void): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
@@ -13,6 +14,7 @@ export class IConnection extends EventEmitter {
     once(event: 'drain', listener: (conn: IConnection) => void): this;
     once(event: 'data', listener: (conn: IConnection, data: Buffer) => void): this;
     once(event: 'close', listener: (conn: IConnection) => void): this;
+    once(event: 'checkedVersion', listener: (conn: IConnection) => void): this;
     once(event: string, listener: any): this {
         return super.once(event, listener);
     }

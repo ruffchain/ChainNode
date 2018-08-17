@@ -19,10 +19,18 @@ export class ValueBlockHeader extends BlockHeader {
         this.m_coinbase = coinbase;
     }
 
-    protected _encodeHashContent(writer: BufferWriter): BufferWriter {
-        writer = super._encodeHashContent(writer);
-        writer.writeVarString(this.m_coinbase);
-        return writer;
+    protected _encodeHashContent(writer: BufferWriter): ErrorCode {
+        let err = super._encodeHashContent(writer);
+        if (err) {
+            return err;
+        }
+        try {
+            writer.writeVarString(this.m_coinbase);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
+        return ErrorCode.RESULT_OK;
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {

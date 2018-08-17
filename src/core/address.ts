@@ -99,7 +99,7 @@ export function verify(md: Buffer|string, signature: Buffer, publicKey: Buffer):
     return verifyBufferMsg(md, signature, publicKey);
 }
 
-export function isValid(address: string): boolean {
+export function isValidAddress(address: string): boolean {
     let buf = base58.decode(address);
     return buf.length === 25;
 }

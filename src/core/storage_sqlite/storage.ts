@@ -4,9 +4,6 @@ import * as path from 'path';
 import * as assert from 'assert';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
-
-import {JStorageLogger} from '../storage/js_log';
-
 const { TransactionDatabase } = require('sqlite3-transactions');
 declare module 'sqlite' {
     interface Database {
@@ -16,256 +13,384 @@ declare module 'sqlite' {
 }
 
 import { ErrorCode } from '../error_code';
-import * as BaseStorage from '../storage/storage';
+import {toStringifiable, fromStringifiable} from '../serializable';
+import {Storage, IReadWritableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
+import { LoggerInstance } from '../../client';
+const {LogShim} = require('../lib/log_shim');
 
-export class SqliteStorageTable implements BaseStorage.IReadWritableKeyValue {
-    constructor(public db: sqlite.Database, public name: string) { 
-        
+class SqliteStorageKeyValue implements IReadWritableKeyValue {
+    protected readonly logger: LoggerInstance;
+    constructor(readonly db: sqlite.Database, readonly fullName: string, logger: LoggerInstance) { 
+        this.logger = new LogShim(logger).bind(`[transaction: ${this.fullName}]`, true).log;
     }
 
     public async set(key: string, value: any): Promise<{ err: ErrorCode }> {
-        assert(key);
-        const json = JSON.stringify(value);
-        const sql = `REPLACE INTO ${this.name} (name, field, value) VALUES ('${key}', "____default____", '${json}')`;
-        await this.db.exec(sql);
-        return { err: ErrorCode.RESULT_OK };
+        try {
+            assert(key);
+            const json = JSON.stringify(toStringifiable(value, true));
+            const sql = `REPLACE INTO '${this.fullName}' (name, field, value) VALUES ('${key}', "____default____", '${json}')`;
+            await this.db.exec(sql);
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`set ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async get(key: string): Promise<{ err: ErrorCode, value?: any }> {
-        assert(key);
-        const result = await this.db.get(`SELECT value FROM ${this.name} \
-            WHERE name=? AND field="____default____"`, key);
+        try {
+            assert(key);
+            const result = await this.db.get(`SELECT value FROM '${this.fullName}' \
+                WHERE name=? AND field="____default____"`, key);
 
-        if (result == null) {
-            return { err: ErrorCode.RESULT_NOT_FOUND };
+            if (result == null) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            }
+            return { err: ErrorCode.RESULT_OK, value: fromStringifiable(JSON.parse(result.value)) };
+        } catch (e) {
+            this.logger.error(`get ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        return { err: ErrorCode.RESULT_OK, value: JSON.parse(result.value) };
     }
 
-    public async getAll(): Promise<{ err: ErrorCode, value: Map<string, any>}> {
-        const result = await this.db.all(`select name,value from ${this.name} where field="____default____"`);
-
-        let value: Map<string, any> = new Map<string, any>();
-        result.forEach((x) => value.set(x.name, JSON.parse(x.value)));
-        return {err: ErrorCode.RESULT_OK, value};
-    }
-
-    public async hset(key: string, field: string, value: any): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        assert(field);
-        const json = JSON.stringify(value);
-        const sql = `REPLACE INTO ${this.name} (name, field, value) VALUES ('${key}', '${field}', '${json}')`;
-        await this.db.exec(sql);
-        return { err: ErrorCode.RESULT_OK };
+    public async hset(key: string, field: string, value?: any): Promise<{ err: ErrorCode; }> {
+        try {
+            assert(key);
+            assert(field);
+            const json = JSON.stringify(toStringifiable(value, true));
+            const sql = `REPLACE INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${field}', '${json}')`;
+            await this.db.exec(sql);
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`hset ${key} ${field} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async hget(key: string, field: string): Promise<{ err: ErrorCode; value?: any; }> {
-        assert(key);
-        assert(field);
-        const result = await this.db.get(`SELECT value FROM ${this.name} WHERE name=? AND field=?`, key, field);
+        try {   
+            assert(key);
+            assert(field);
+            const result = await this.db.get(`SELECT value FROM '${this.fullName}' WHERE name=? AND field=?`, key, field);
 
-        if (result == null) {
-            return { err: ErrorCode.RESULT_NOT_FOUND };
+            if (result == null) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            }
+            return { err: ErrorCode.RESULT_OK, value: fromStringifiable(JSON.parse(result.value)) };
+        } catch (e) {
+            this.logger.error(`hget ${key} ${field} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        return { err: ErrorCode.RESULT_OK, value: JSON.parse(result.value) };
     }
 
     public async hdel(key: string, field: string): Promise<{err: ErrorCode}> {
-        await this.db.exec(`DELETE FROM ${this.name} WHERE name='${key}' and field='${field}'`);
-        return {err: ErrorCode.RESULT_OK};
+        try {
+            await this.db.exec(`DELETE FROM '${this.fullName}' WHERE name='${key}' and field='${field}'`);
+            return {err: ErrorCode.RESULT_OK};   
+        } catch (e) {
+            this.logger.error(`hdel ${key} ${field} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async hlen(key: string): Promise<{ err: ErrorCode; value: number; }> {
-        assert(key);
-        const result = await this.db.get(`SELECT count(*) as value FROM ${this.name} WHERE name=?`, key);
+    public async hlen(key: string): Promise<{ err: ErrorCode; value?: number; }> {
+        try {
+            assert(key);
+            const result = await this.db.get(`SELECT count(*) as value FROM '${this.fullName}' WHERE name=?`, key);
 
-        return { err: ErrorCode.RESULT_OK, value: result.value };
+            return { err: ErrorCode.RESULT_OK, value: result.value };   
+        } catch (e) {
+            this.logger.error(`hlen ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async hexists(key: string, field: string): Promise<boolean> {
-        let { err, value } = await this.hget(key, field);
-        return err === ErrorCode.RESULT_OK;
+    public async hexists(key: string, field: string): Promise<{ err: ErrorCode, value?: boolean}> {
+        let { err } = await this.hget(key, field);
+        if (!err) {
+            return {err: ErrorCode.RESULT_OK, value: true};
+        } else if (err === ErrorCode.RESULT_NOT_FOUND) {
+            return {err: ErrorCode.RESULT_OK, value: false};
+        } else {
+            this.logger.error(`hexists ${key} ${field} `, err);
+            return {err};
+        }
     }
 
     public async hmset(key: string, fields: string[], values: any[]): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        assert(fields.length === values.length);
+        try {
+            assert(key);
+            assert(fields.length === values.length);
 
-        const statement = await this.db.prepare(`REPLACE INTO ${this.name}  (name, field, value) VALUES (?, ?, ?)`);
-        for (let i = 0; i < fields.length; i++) {
-            await statement.run([key, fields[i], JSON.stringify(values[i])]);
+            const statement = await this.db.prepare(`REPLACE INTO '${this.fullName}'  (name, field, value) VALUES (?, ?, ?)`);
+            for (let i = 0; i < fields.length; i++) {
+                await statement.run([key, fields[i], JSON.stringify(toStringifiable(values[i], true))]);
+            }
+            await statement.finalize();
+            return { err: ErrorCode.RESULT_OK };   
+        } catch (e) {
+            this.logger.error(`hmset ${key} ${fields} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        await statement.finalize();
-        return { err: ErrorCode.RESULT_OK };
     }
 
-    public async hmget(key: string, fields: string[]): Promise<{ err: ErrorCode; value: any[]; }> {
-        assert(key);
-        const sql = `SELECT * FROM ${this.name} WHERE name=? AND field in (${fields.map((x) => '?').join(',')})`;
-        // console.log({ sql });
-        const result = await this.db.all(sql, key, ...fields);
-        const resultMap: { [other: string]: any } = {};
-        result.forEach((x) => resultMap[x.field] = JSON.parse(x.value));
-        const values = fields.map((x) => resultMap[x]);
+    public async hmget(key: string, fields: string[]): Promise<{ err: ErrorCode; value?: any[]; }> {
+        try {
+            assert(key);
+            const sql = `SELECT * FROM '${this.fullName}' WHERE name=? AND field in (${fields.map((x) => '?').join(',')})`;
+            // console.log({ sql });
+            const result = await this.db.all(sql, key, ...fields);
+            const resultMap: { [other: string]: any } = {};
+            result.forEach((x) => resultMap[x.field] = fromStringifiable(JSON.parse(x.value)));
+            const values = fields.map((x) => resultMap[x]);
 
-        return { err: ErrorCode.RESULT_OK, value: values };
+            return { err: ErrorCode.RESULT_OK, value: values };  
+        } catch (e) {
+            this.logger.error(`hmget ${key} ${fields} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async hkeys(key: string): Promise<{ err: ErrorCode; value: string[]; }> {
-        assert(key);
-        const result = await this.db.all(`SELECT * FROM ${this.name} WHERE name=?`, key);
+    public async hkeys(key: string): Promise<{ err: ErrorCode; value?: string[]; }> {
+        try {
+            assert(key);
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, key);
 
-        return { err: ErrorCode.RESULT_OK, value: result.map((x) => x.field) };
+            return { err: ErrorCode.RESULT_OK, value: result.map((x) => x.field) };
+        } catch (e) {
+            this.logger.error(`hkeys ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async hvalues(key: string): Promise<{ err: ErrorCode; value: any[]; }> {
-        assert(key);
-        const result = await this.db.all(`SELECT * FROM ${this.name} WHERE name=?`, key);
+    public async hvalues(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
+        try {
+            assert(key);
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, key);
 
-        return { err: ErrorCode.RESULT_OK, value: result.map((x) => JSON.parse(x.value)) };
+            return { err: ErrorCode.RESULT_OK, value: result.map((x) => fromStringifiable(JSON.parse(x.value))) };
+        } catch (e) {
+            this.logger.error(`hvalues ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+        
     }
 
-    public async hgetall(key: string): Promise<{ err: ErrorCode; value: any[]; }> {
-        const result = await this.db.all(`SELECT * FROM ${this.name} WHERE name=?`, key);
+    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
+        try {
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, key);
 
-        return {
-            err: ErrorCode.RESULT_OK, value: result.map((x) => {
-                return { key: x.field, value: JSON.parse(x.value) };
-            })
-        };
+            return {
+                err: ErrorCode.RESULT_OK, value: result.map((x) => {
+                    return { key: x.field, value: fromStringifiable(JSON.parse(x.value)) };
+                })
+            };
+        } catch (e) {
+            this.logger.error(`hgetall ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async hclean(key: string): Promise<ErrorCode> {
-        const result = await this.db.exec(`DELETE FROM ${this.name} WHERE name='${key}'`);
-        return ErrorCode.RESULT_OK;
+    public async hclean(key: string): Promise<{err: ErrorCode}> {
+        try {
+            const result = await this.db.exec(`DELETE FROM ${this.fullName} WHERE name='${key}'`);
+            return {err: ErrorCode.RESULT_OK}; 
+        } catch (e) {
+            this.logger.error(`hclean ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
-        assert(key);
-        return await this.hget(key, index.toString());
+        return this.hget(key, index.toString());
     }
 
     public async lset(key: string, index: number, value: any): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        return await this.hset(key, index.toString(), value);
+        try {
+            assert(key);
+            return await this.hset(key, index.toString(), JSON.stringify(toStringifiable(value, true)));
+        } catch (e) {
+            this.logger.error(`lset ${key} ${index} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+        
     }
 
-    public async llen(key: string): Promise<{ err: ErrorCode; value: number; }> {
-        assert(key);
+    public async llen(key: string): Promise<{ err: ErrorCode; value?: number; }> {
         return await this.hlen(key);
     }
 
-    public async lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode; value: any[]; }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        if (stop < 0) {
-            stop = len + stop + 1;
+    public async lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode; value?: any[]; }> {
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
+            }
+            if (!len) {
+                return {err: ErrorCode.RESULT_OK, value: []};
+            }
+            if (stop < 0) {
+                stop = len! + stop + 1;
+            }
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=? AND field >= ? AND field < ?`, key, start, stop);
+            let ret = new Array(Math.min(len!, stop - start));
+            for (let x of result) {
+                ret[parseInt(x.field)] = fromStringifiable(JSON.parse(x.value));
+            }
+            return { err: ErrorCode.RESULT_OK, value: ret };
+        } catch (e) {
+            this.logger.error(`lrange ${key} ${start} ${stop}`, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        const ret = [];
-        for (let i = start; i < stop; i++) {
-            const result = await this.lindex(key, i);
-            ret.push(result.value);
-        }
-        return { err: ErrorCode.RESULT_OK, value: ret };
     }
 
     public async lpush(key: string, value: any): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        // update index += 1
-        // set index[0] = value
-        const json = JSON.stringify(value);
-        await this.db.exec(`UPDATE ${this.name} SET field=field+1 WHERE name='${key}'`);
-        const sql = `INSERT INTO ${this.name} (name, field, value) VALUES ('${key}', '0', '${json}')`;
-        // console.log('lpush', { sql });
-        await this.db.exec(sql);
+        try {
+            assert(key);
+            // update index += 1
+            // set index[0] = value
+            const json = JSON.stringify(toStringifiable(value, true));
+            await this.db.exec(`UPDATE '${this.fullName}' SET field=field+1 WHERE name='${key}'`);
+            const sql = `INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '0', '${json}')`;
+            // console.log('lpush', { sql });
+            await this.db.exec(sql);
 
-        return { err: ErrorCode.RESULT_OK };
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`lpush ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async lpushx(key: string, value: any[]): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        const len = value.length;
-        await this.db.exec(`UPDATE ${this.name} SET field=field+${len} WHERE name='${key}'`);
-        for (let i = 0; i < len; i++) {
-            const json = JSON.stringify(value[i]);
-            await this.db.exec(`INSERT INTO ${this.name} (name, field, value) VALUES ('${key}', ${i}, ${json})`);
+        try {
+            assert(key);
+            const len = value.length;
+            await this.db.exec(`UPDATE '${this.fullName}' SET field=field+${len} WHERE name='${key}'`);
+            for (let i = 0; i < len; i++) {
+                const json = JSON.stringify(toStringifiable(value[i], true));
+                await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${i}', '${json}')`);
+            }
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`lpushx ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        return { err: ErrorCode.RESULT_OK };
     }
 
     public async lpop(key: string): Promise<{ err: ErrorCode; value?: any; }> {
-        assert(key);
         return this.lremove(key, 0);
     }
 
     public async rpush(key: string, value: any): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        const json = JSON.stringify(value);
-        await this.db.exec(`INSERT INTO ${this.name} (name, field, value) VALUES ('${key}', ${len}, '${json}')`);
-        return { err: ErrorCode.RESULT_OK };
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
+            }
+            const json = JSON.stringify(toStringifiable(value, true));
+            await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${len}', '${json}')`);
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`rpush ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
-    public async rpushx(key: string, value: any[]): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        for (let i = 0; i < value.length; i++) {
-            const json = JSON.stringify(value[i]);
-            await this.db.exec(`INSERT INTO ${this.name} (name, field, value) \
-                VALUES ('${key}', ${len + i}, '${json}')`);
-        }
+    public async rpushx(key: string, value: any[]): Promise<{ err: ErrorCode }> {
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
+            }
+            for (let i = 0; i < value.length; i++) {
+                const json = JSON.stringify(toStringifiable(value[i], true));
+                await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) \
+                    VALUES ('${key}', ${len! + i}, '${json}')`);
+            }
 
-        return { err: ErrorCode.RESULT_OK };
+            return { err: ErrorCode.RESULT_OK };    
+        } catch (e) {
+            this.logger.error(`rpushx ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async rpop(key: string): Promise<{ err: ErrorCode; value?: any; }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        if (len === 0) {
-            return { err: ErrorCode.RESULT_NOT_FOUND };
-        } else {
-            const { err: err2, value } = await this.lindex(key, len - 1);
-            await this.db.exec(`DELETE FROM ${this.name} WHERE name='${key}' AND field=${len - 1}`);
-            return { err: ErrorCode.RESULT_OK, value };
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
+            }
+            if (len === 0) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            } else {
+                const { err: err2, value } = await this.lindex(key, len! - 1);
+                await this.db.exec(`DELETE FROM '${this.fullName}' WHERE name='${key}' AND field=${len! - 1}`);
+                return { err: ErrorCode.RESULT_OK, value };
+            }
+        } catch (e) {
+            this.logger.error(`rpop ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
 
     public async linsert(key: string, index: number, value: any): Promise<{ err: ErrorCode; }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        if (len === 0 || index >= len) {
-            return await this.lset(key, len, value);
-        } else {
-            for (let i = len - 1; i >= index; i--) {
-                await this.db.exec(`UPDATE ${this.name} SET field=field+1 WHERE name='${key}' AND field = ${i}`);
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
             }
+            if (len === 0 || index >= len!) {
+                return await this.lset(key, len!, value);
+            } else {
+                for (let i = len! - 1; i >= index; i--) {
+                    await this.db.exec(`UPDATE '${this.fullName}' SET field=field+1 WHERE name='${key}' AND field = ${i}`);
+                }
 
-            return await this.lset(key, index, value);
+                return await this.lset(key, index, value);
+            }
+        } catch (e) {
+            this.logger.error(`linsert ${key} ${index} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
 
     public async lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }> {
-        assert(key);
-        const { err, value: len } = await this.llen(key);
-        if (len === 0) {
-            return { err: ErrorCode.RESULT_NOT_FOUND };
-        } else {
-            const { err: err2, value } = await this.lindex(key, index);
-            let sql = `DELETE FROM ${this.name} WHERE name='${key}' AND field='${index}'`;
-            // console.log('lremove', { sql });
-            await this.db.exec(sql);
-            for (let i = index + 1; i < len; i++) {
-                sql = `UPDATE ${this.name} SET field=field-1 WHERE name='${key}' AND field = ${i}`;
-                // console.log({ sql });
-                await this.db.exec(sql);
+        try {
+            assert(key);
+            const { err, value: len } = await this.llen(key);
+            if (err) {
+                return {err};
             }
+            if (len === 0) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            } else {
+                const { err: err2, value } = await this.lindex(key, index);
+                let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
+                // console.log('lremove', { sql });
+                await this.db.exec(sql);
+                for (let i = index + 1; i < len!; i++) {
+                    sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
+                    // console.log({ sql });
+                    await this.db.exec(sql);
+                }
 
-            return { err: ErrorCode.RESULT_OK, value };
+                return { err: ErrorCode.RESULT_OK, value };
+            }
+        } catch (e) {
+            this.logger.error(`lremove ${key} `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
 }
 
-class StorageTransaction implements BaseStorage.StorageTransaction {
+class SqliteStorageTransaction implements StorageTransaction {
     protected m_transcationDB: any;
     protected m_transcation: any;
 
@@ -311,7 +436,44 @@ class StorageTransaction implements BaseStorage.StorageTransaction {
     }
 }
 
-export class SqliteStorage extends BaseStorage.Storage {
+class SqliteDataBase implements IReadWritableDatabase {
+    protected m_db?: sqlite.Database;
+    constructor(protected readonly name: string, db: sqlite.Database, protected readonly logger: LoggerInstance) {
+        this.m_db = db;
+    }
+
+    public async getReadableKeyValue(name: string) {
+        const fullName = Storage.getKeyValueFullName(this.name, name);
+        let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+
+    public async createKeyValue(name: string) {
+        let err = Storage.checkTableName(name);
+        if (err) {
+            return {err};
+        }
+        const fullName = Storage.getKeyValueFullName(this.name, name);
+        // 先判断表是否存在
+        let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
+        if (ret[0] > 0) {
+            err = ErrorCode.RESULT_ALREADY_EXIST;
+        } else {
+            err = ErrorCode.RESULT_OK;
+            await this.m_db!.exec(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
+            (name TEXT, field TEXT, value TEXT, unique(name, field))`);
+        }
+        let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+
+    public async getReadWritableKeyValue(name: string) {
+        let tbl = new SqliteStorageKeyValue(this.m_db!, Storage.getKeyValueFullName(this.name, name), this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+}
+
+export class SqliteStorage extends Storage {
     private m_db?: sqlite.Database;
     private m_isInit: boolean = false;
 
@@ -361,26 +523,33 @@ export class SqliteStorage extends BaseStorage.Storage {
         return ErrorCode.RESULT_OK;
     }
 
-    public async createKeyValue(name: string): Promise<{err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue}> {
-        await this.m_db!.exec(`CREATE TABLE IF NOT EXISTS ${name} \
-            (name TEXT, field TEXT, value TEXT, unique(name, field))`);
-        let tbl = new SqliteStorageTable(this.m_db!, name);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    public async getReadableDataBase(name: string) {
+        let err = Storage.checkDataBaseName(name);
+        if (err) {
+            return {err};
+        }
+        return {err: ErrorCode.RESULT_OK, value: new SqliteDataBase(name, this.m_db!, this.m_logger)};
     }
 
-    public async getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue }> {
-        let tbl = new SqliteStorageTable(this.m_db!, name);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    public async createDatabase(name: string): Promise<{err: ErrorCode, value?: IReadWritableDatabase}> {
+        let err = Storage.checkDataBaseName(name);
+        if (err) {
+            return {err};
+        }
+        return await this.getReadWritableDatabase(name);
     }
 
-    public async getReadWritableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: BaseStorage.IReadWritableKeyValue }> {
-        let tbl = new SqliteStorageTable(this.m_db!, name);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    public async getReadWritableDatabase(name: string) {
+        let err = Storage.checkDataBaseName(name);
+        if (err) {
+            return {err};
+        }
+        return {err: ErrorCode.RESULT_OK, value: new SqliteDataBase(name, this.m_db!, this.m_logger)};
     }
 
-    public async beginTransaction(): Promise<{ err: ErrorCode, value: BaseStorage.StorageTransaction }> {
+    public async beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }> {
         assert(this.m_db);
-        let transcation = new StorageTransaction(this.m_db!);
+        let transcation = new SqliteStorageTransaction(this.m_db!);
 
         await transcation.beginTransaction();
 

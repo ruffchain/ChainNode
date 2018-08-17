@@ -1,8 +1,7 @@
 import {ErrorCode} from '../error_code';
 import {IConnection} from '../net';
 
-const P2P = require('../../../../bdt/p2p/p2p');
-const assert = require('assert');
+const P2P = require('../../../bdt/p2p/p2p');
 
 export class BdtConnection extends IConnection {
     private m_bdt_connection: any;
@@ -21,6 +20,9 @@ export class BdtConnection extends IConnection {
         this.m_bdt_connection.on(P2P.Connection.EVENT.error, () => {
             this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
         });
+        this.m_bdt_connection.on(P2P.Connection.EVENT.close, () => {
+            this.emit('close', this);
+        });
         this.m_remote = options.remote;
     }
 
@@ -31,7 +33,7 @@ export class BdtConnection extends IConnection {
     close(): Promise<ErrorCode> {
         if (this.m_bdt_connection) {
             this.m_bdt_connection.close();
-            delete this.m_bdt_connection; 
+            delete this.m_bdt_connection;
         }
         return Promise.resolve(ErrorCode.RESULT_OK);
     }

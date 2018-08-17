@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const Base = require('../base/base.js');
@@ -86,9 +112,11 @@ class PackageProcessor {
             case DHTCommandType.UPDATE_VALUE_RESP:
             case DHTCommandType.BROADCAST_EVENT_RESP: 
             case DHTCommandType.PACKAGE_PIECE_RESP: {
-                let task = this.m_taskMgr.getTaskByID(cmdPackage.body.taskid);
-                if (task) {
-                    task.process(cmdPackage, remotePeer);
+                if (cmdPackage.body && cmdPackage.body.taskid) {
+                    let task = this.m_taskMgr.getTaskByID(cmdPackage.body.taskid);
+                    if (task) {
+                        task.process(cmdPackage, remotePeer);
+                    }
                 }
                 break;
             }
@@ -104,6 +132,9 @@ class PackageProcessor {
     // findPeer不支持TTL，因为找到的目标节点要保证可达，而经过跳转找到的peer对本地来讲，未必可达
     _processFindPeer(cmdPackage, remotePeer) {
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findpeer command(${cmdPackage.body.target}) from peer(${cmdPackage.common.src.peerid})`);
+        if (typeof cmdPackage.body.target !== 'string' || cmdPackage.body.target.length === 0) {
+            return;
+        }
 
         let respPackage = this.m_packageFactory.createPackage(DHTCommandType.FIND_PEER_RESP);
         respPackage.common.packageID = cmdPackage.common.packageID;
@@ -144,6 +175,12 @@ class PackageProcessor {
 
         let {tableName, key, flags} = cmdPackage.body;
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got findvalue command(${tableName}:${key}:${flags}) from peer(${cmdPackage.common.src.peerid})`);
+
+        if (typeof tableName !== 'string' || tableName.length === 0 ||
+            typeof key !== 'string' || key.length === 0) {
+            return;
+        }
+            
         if (key === TOTAL_KEY
             || (flags & FLAG_PRECISE)) {
             values = this.m_distributedValueTable.findValue(tableName, key);
@@ -181,6 +218,11 @@ class PackageProcessor {
         let {event, params, source} = cmdPackage.body;
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got broadcast event(${event}:${params}) from peer(${source})`);
 
+        if (typeof event !== 'string' || event.length === 0 ||
+            !source || typeof source.peerid !== 'string' || source.peerid.length === 0) {
+            return;
+        }
+
         let timeout = cmdPackage.body.timeout - Math.max(this.m_bucket.localPeer.RTT, remotePeer.RTT || 0);
 
         let [task, isNewEvent] = this.m_taskExecutor.emitBroadcastEvent(event,
@@ -203,6 +245,9 @@ class PackageProcessor {
         let peerList = null;
         target = target || cmdPackage.body.target;
         if (this.m_bucket.localPeer.peerid !== target && !isDone) {
+            if (!Array.isArray(eNodes)) {
+                eNodes = null;
+            }
             let eNodesSet =  new Set(eNodes || []);
             if (arrivedPeerids) {
                 arrivedPeerids.forEach(peerid => eNodesSet.add(peerid));
@@ -229,11 +274,14 @@ class PackageProcessor {
     }
 
     _processHoleCall(cmdPackage, remotePeer) {
+        if (!cmdPackage.body.target || typeof cmdPackage.body.target.peerid !== 'string' || cmdPackage.body.target.peerid.length === 0) {
+            return;
+        }
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole call(to:${cmdPackage.body.target.peerid}) from peer(${cmdPackage.src.peerid})`);
 
         let targetPeerInfo = {peerid: cmdPackage.body.target.peerid, eplist: []};
 
-        targetPeerInfo.eplist = cmdPackage.body.target.eplist;
+        targetPeerInfo.eplist = cmdPackage.body.target.eplist || [];
         let targetPeer = this.m_bucket.findPeer(cmdPackage.body.target.peerid);
         if (targetPeer) {
             targetPeerInfo.eplist = Peer.unionEplist(targetPeerInfo.eplist, targetPeer.eplist);
@@ -263,9 +311,12 @@ class PackageProcessor {
     }
 
     _processHoleCalled(cmdPackage, remotePeer) {
+        if (!cmdPackage.body.src || typeof cmdPackage.body.src.peerid !== 'string' || cmdPackage.body.src.peerid.length === 0) {
+            return;
+        }
         LOG_INFO(`LOCALPEER:(${this.m_bucket.localPeer.peerid}:${this.m_servicePath}) got hole called(from:${cmdPackage.body.src.peerid}) from peer(${cmdPackage.src.peerid})`);
 
-        let srcEPList = cmdPackage.body.src.eplist;
+        let srcEPList = cmdPackage.body.src.eplist || [];
         let srcPeer = this.m_bucket.findPeer(cmdPackage.body.src.peerid);
         if (srcPeer) {
             srcEPList = Peer.unionEplist(srcEPList, srcPeer.eplist);

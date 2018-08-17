@@ -1,58 +1,68 @@
 import { EventEmitter } from 'events';
 import * as fs from 'fs-extra';
+const assert = require('assert');
 import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import { StorageLogger, LoggedStorage } from './logger';
 import { BufferReader } from '../lib/reader';
-
 const digest = require('../lib/digest');
 
 export interface IReadableKeyValue {
     // 单值操作
     get(key: string): Promise<{ err: ErrorCode, value?: any }>;
-    getAll(): Promise<{ err: ErrorCode, value: Map<string, any>}>;
 
     // hash
-    hexists(key: string, field: string): Promise<boolean>;
+    hexists(key: string, field: string): Promise<{ err: ErrorCode, value?: boolean}>;
     hget(key: string, field: string): Promise<{ err: ErrorCode, value?: any }>;
-    hmget(key: string, fields: string[]): Promise<{ err: ErrorCode, value: any[] }>;
-    hlen(key: string): Promise<{ err: ErrorCode, value: number }>;
-    hkeys(key: string): Promise<{ err: ErrorCode, value: string[] }>;
-    hvalues(key: string): Promise<{ err: ErrorCode, value: any[] }>;
-    hgetall(key: string): Promise<{ err: ErrorCode; value: any[]; }>;
+    hmget(key: string, fields: string[]): Promise<{ err: ErrorCode, value?: any[] }>;
+    hlen(key: string): Promise<{ err: ErrorCode, value?: number }>;
+    hkeys(key: string): Promise<{ err: ErrorCode, value?: string[] }>;
+    hvalues(key: string): Promise<{ err: ErrorCode, value?: any[] }>;
+    hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }>;
 
     // array
     lindex(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
-    llen(key: string): Promise<{ err: ErrorCode, value: number }>;
-    lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode, value: any[] }>;
+    llen(key: string): Promise<{ err: ErrorCode, value?: number }>;
+    lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode, value?: any[] }>;
 }
 
 export interface IWritableKeyValue {
     // 单值操作
-    set(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    set(key: string, value: any): Promise<{ err: ErrorCode }>;
     
     // hash
-    hset(key: string, field: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
-    hmset(key: string, fields: string[], values: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
-    hclean(key: string): Promise<ErrorCode>;
+    hset(key: string, field: string, value: any): Promise<{ err: ErrorCode }>;
+    hmset(key: string, fields: string[], values: any[]): Promise<{ err: ErrorCode }>;
+    hclean(key: string): Promise<{err: ErrorCode}>;
     hdel(key: string, field: string): Promise<{err: ErrorCode}>;
     
     // array
-    lset(key: string, index: number, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    lset(key: string, index: number, value: any): Promise<{ err: ErrorCode }>;
 
-    lpush(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
-    lpushx(key: string, value: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
+    lpush(key: string, value: any): Promise<{ err: ErrorCode }>;
+    lpushx(key: string, value: any[]): Promise<{ err: ErrorCode }>;
     lpop(key: string): Promise<{ err: ErrorCode, value?: any }>;
 
-    rpush(key: string, value: boolean|number|string): Promise<{ err: ErrorCode }>;
-    rpushx(key: string, value: (boolean|number|string)[]): Promise<{ err: ErrorCode }>;
-    rpop(key: string): Promise<{ err: ErrorCode, value?: boolean|number|string }>;
+    rpush(key: string, value: any): Promise<{ err: ErrorCode }>;
+    rpushx(key: string, value: any[]): Promise<{ err: ErrorCode }>;
+    rpop(key: string): Promise<{ err: ErrorCode, value?: any }>;
 
-    linsert(key: string, index: number, value: boolean|number|string): Promise<{ err: ErrorCode }>;
+    linsert(key: string, index: number, value: any): Promise<{ err: ErrorCode }>;
     lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
 }
 
 export type IReadWritableKeyValue = IReadableKeyValue & IWritableKeyValue;
+
+export interface IReadableDatabase {
+    getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
+}
+
+export interface IWritableDatabase {
+    createKeyValue(name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}>;
+    getReadWritableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
+}
+
+export type IReadWritableDatabase = IReadableDatabase & IWritableDatabase;
 
 export interface StorageTransaction {
     beginTransaction(): Promise<ErrorCode>;
@@ -61,13 +71,13 @@ export interface StorageTransaction {
 }
 
 export abstract class  IReadableStorage {
-    public abstract getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
+    public abstract getReadableDataBase(name: string): Promise<{err: ErrorCode, value?: IReadableDatabase}> ;
 }
 
 export abstract class  IReadWritableStorage extends IReadableStorage {
-    public abstract createKeyValue(name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}>;
-    public abstract getReadWritableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
-    public abstract beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }>;
+    public abstract createDatabase(name: string): Promise<{ err: ErrorCode, value?: IReadWritableDatabase }>;
+    public abstract getReadWritableDatabase(name: string): Promise<{ err: ErrorCode, value?: IReadWritableDatabase }> ;
+    public abstract beginTransaction(): Promise<{ err: ErrorCode, value?: StorageTransaction }>;
 }
 
 export type StorageOptions = {
@@ -145,5 +155,71 @@ export abstract class Storage extends IReadWritableStorage {
         let buf = await fs.readFile(this.m_filePath);
         let hash = digest.hash256(buf).toString('hex');
         return { err: ErrorCode.RESULT_OK, value: hash };
+    }
+
+    static keyValueNameSpec = '#';
+
+    static getKeyValueFullName(dbName: string, kvName: string): string {
+        return `${dbName}${this.keyValueNameSpec}${kvName}`;
+    }
+
+    static checkDataBaseName(name: string): ErrorCode {
+        if (Storage.splitFullName(name).dbName) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
+    static checkTableName(name: string): ErrorCode {
+        if (Storage.splitFullName(name).dbName) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
+    static splitFullName(fullName: string): {dbName?: string, kvName?: string, sqlName?: string} {
+        let i = fullName.indexOf(this.keyValueNameSpec);
+        if (i > 0) {
+            let dbName = fullName.substr(0, i);
+            let kvName = fullName.substr(i + 1);
+            return {
+                dbName,
+                kvName
+            };
+        }
+        return {};
+    }
+
+    public async getKeyValue(dbName: string, kvName: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> {
+        let err = Storage.checkDataBaseName(dbName);
+        if (err) {
+            return {err};
+        }
+        err = Storage.checkTableName(dbName);
+        if (err) {
+            return {err};
+        }
+        let dbr = await this.getReadWritableDatabase(dbName);
+        if (dbr.err) {
+            return {err: dbr.err};
+        }
+        return dbr.value!.getReadWritableKeyValue(kvName);
+    }
+
+    public async getTable(fullName: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }> {
+        let names = Storage.splitFullName(fullName);
+        if (!names.dbName) {
+            return {err: ErrorCode.RESULT_INVALID_PARAM};
+        }
+        let dbr = await this.getReadWritableDatabase(names.dbName);
+        if (dbr.err) {
+            return {err: dbr.err};
+        }
+        if (names.kvName) {
+            return dbr.value!.getReadWritableKeyValue(names.kvName);
+        } else {
+            assert(false, `invalid fullName ${fullName}`);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 }

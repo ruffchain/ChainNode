@@ -1,8 +1,11 @@
+const assert = require('assert');
 import {ErrorCode} from '../error_code';
 import {Chain, BlockHeader, Storage, Transaction, EventLog, Receipt} from '../chain';
 import {TxListener, BlockHeightListener} from './handler';
 
 import { LoggerInstance } from '../lib/logger_util';
+import { isNumber } from 'util';
+const {LogShim} = require('../lib/log_shim');
 
 class BaseExecutor {
     protected m_logger: LoggerInstance;
@@ -10,7 +13,7 @@ class BaseExecutor {
         this.m_logger = logger;
     }
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
-        let kv =  (await storage.getReadWritableKeyValue(Chain.kvUser)).kv!;
+        let database =  (await storage.getReadWritableDatabase(Chain.dbUser));
         let context = Object.create(externContext);
         
         // context.getNow = (): number => {
@@ -42,7 +45,7 @@ class BaseExecutor {
         Object.defineProperty(
             context, 'storage', {
                 writable: false,
-                value: kv
+                value: database
             } 
         );
 
@@ -56,14 +59,14 @@ export class TransactionExecutor extends BaseExecutor {
     protected m_logs: EventLog[] = [];
 
     constructor(listener: TxListener, tx: Transaction, logger: LoggerInstance) {
-        super(logger);
+        super(new LogShim(logger).bind(`[transaction: ${tx.hash}]`, true).log);
         this.m_listener = listener;
         this.m_tx = tx;
     }
 
     protected async _dealNonce(tx: Transaction, storage: Storage): Promise<ErrorCode> {
         // 检查nonce
-        let kvr = await storage.getReadWritableKeyValue(Chain.kvNonce);
+        let kvr = await storage.getKeyValue(Chain.dbSystem, Chain.kvNonce);
         if (kvr.err !== ErrorCode.RESULT_OK) {
             this.m_logger.error(`methodexecutor, _dealNonce, getReadWritableKeyValue failed`);
             return kvr.err;
@@ -93,14 +96,22 @@ export class TransactionExecutor extends BaseExecutor {
             this.m_logger.error(`methodexecutor, beginTransaction error,storagefile=${storage.filePath}`);
             return {err: work.err};
         }
+         
         receipt.returnCode = await this._execute(context, this.m_tx.input);
+        assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
+        if (!isNumber(receipt.returnCode)) {
+            this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=`, receipt.returnCode);
+            return {err: ErrorCode.RESULT_INVALID_PARAM};
+        }
         receipt.transactionHash = this.m_tx.hash;
         if (receipt.returnCode) {
+            this.m_logger.warn(`handler return code=${receipt.returnCode}, will rollback storage`);
             await work.value!.rollback();
         } else {
+            this.m_logger.debug(`handler return code ${receipt.returnCode}, will commit storage`);
             let err = await work.value!.commit();
             if (err) {
-                this.m_logger.error(`methodexecutor, transaction commit error,storagefile=${storage.filePath}`);
+                this.m_logger.error(`methodexecutor, transaction commit error, err=${err}, storagefile=${storage.filePath}`);
                 return {err};
             }
             receipt.eventLogs = this.m_logs;
@@ -111,9 +122,10 @@ export class TransactionExecutor extends BaseExecutor {
 
     protected async _execute(env: any, input: any): Promise<ErrorCode> {
         try {
+            this.m_logger.info(`will execute tx ${this.m_tx.hash}: ${this.m_tx.method}, params ${JSON.stringify(this.m_tx.input)}`);
             return await this.m_listener(env, this.m_tx.input);
         } catch (e) {
-            this.m_logger.error(`execute method linstener e=${e}`);
+            this.m_logger.error(`execute method linstener e=`, e.stack);
             return ErrorCode.RESULT_EXECUTE_ERROR;
         }
     }
@@ -147,13 +159,13 @@ export class EventExecutor extends BaseExecutor {
     protected m_listener: BlockHeightListener;
     protected m_bBeforeBlockExec = true;
 
-    constructor(listener: BlockHeightListener, bBeforeBlockExec: boolean, logger: LoggerInstance) {
+    constructor(listener: BlockHeightListener, logger: LoggerInstance) {
         super(logger);
         this.m_listener = listener;
-        this.m_bBeforeBlockExec = bBeforeBlockExec;
     }
 
     public async execute(blockHeader: BlockHeader, storage: Storage, externalContext: any): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
+        this.m_logger.debug(`execute event on ${blockHeader.number}`);
         let context: any = await this.prepareContext(blockHeader, storage, externalContext);
         let work = await storage.beginTransaction();
         if (work.err) {
@@ -162,20 +174,27 @@ export class EventExecutor extends BaseExecutor {
         }
         let returnCode: ErrorCode;
         try {
-            returnCode = await this.m_listener(context, this.m_bBeforeBlockExec);
+            returnCode = await this.m_listener(context);
         } catch (e) {
-            this.m_logger.error(`execute event linstener error, e=${e}`);
+            this.m_logger.error(`execute event linstener error, e=`, e);
             returnCode = ErrorCode.RESULT_EXCEPTION;
+        }
+        assert(isNumber(returnCode), `event handler return code invalid ${returnCode}`);
+        if (!isNumber(returnCode)) {
+            this.m_logger.error(`execute event failed for invalid return code`);
+            return {err: ErrorCode.RESULT_INVALID_PARAM};
         }
 
         if (returnCode === ErrorCode.RESULT_OK) {
-            let err = await work.value.commit();
+            this.m_logger.debug(`event handler commit storage`);
+            let err = await work.value!.commit();
             if (err) {
                 this.m_logger.error(`eventexecutor, transaction commit error,storagefile=${storage.filePath}`);
                 return {err};
             }
         } else {
-            await work.value.rollback();
+            this.m_logger.debug(`event handler return code ${returnCode} rollback storage`);
+            await work.value!.rollback();
         }
        
         return {err: ErrorCode.RESULT_OK, returnCode};

@@ -1,6 +1,5 @@
 import * as assert from 'assert';
 import { EventEmitter } from 'events';
-import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
@@ -8,15 +7,12 @@ import * as sqlite3 from 'sqlite3';
 import { ErrorCode } from '../error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 
-import { NodeConnection } from '../net/node';
+import { INode, NodeConnection } from '../net/node';
 
-import { HeaderStorage, VERIFY_STATE } from './header_storage';
-import { BlockStorage } from './block_storage';
-import { StorageManager, Storage, StorageDumpSnapshot, IReadableStorage, IReadWritableKeyValue, IReadableKeyValue, StorageLogger } from '../storage';
+import { HeaderStorage, VERIFY_STATE, BlockStorage, Transaction, Receipt, BlockHeader, Block } from '../block';
+import { StorageManager, Storage, StorageDumpSnapshot, IReadableStorage, IReadableDatabase, IReadWritableDatabase, StorageLogger } from '../storage';
 import { SqliteStorage } from '../storage_sqlite/storage';
 
-import { Transaction, Receipt } from './transaction';
-import { BlockHeader, Block } from './block';
 import { PendingTransactions } from './pending';
 
 import { BlockExecutor, ViewExecutor, BaseHandler } from '../executor';
@@ -24,8 +20,7 @@ import { BlockExecutor, ViewExecutor, BaseHandler } from '../executor';
 import { ChainNodeOptions, ChainNode, HeadersEventParams, BlocksEventParams, BAN_LEVEL } from './chain_node';
 
 import { Lock } from '../lib/Lock';
-
-import {GlobalConfig} from './global_config';
+import { isNullOrUndefined } from 'util';
 
 export type ExecutorContext = {
     now: number;
@@ -35,36 +30,41 @@ export type ExecutorContext = {
 
 export type TransactionContext = {
     caller: string;
-    storage: IReadWritableKeyValue;
+    storage: IReadWritableDatabase;
     emit: (name: string, param?: any) => void;
 } & ExecutorContext;
 
 export type EventContext = {
-    storage: IReadWritableKeyValue;
+    storage: IReadWritableDatabase;
 } & ExecutorContext;
 
 export type ViewContext = {
-    storage: IReadableKeyValue;
+    storage: IReadableDatabase;
 } & ExecutorContext;
 
 enum ChainState {
     none = 0,
-    syncing = 1,
-    synced = 2,
+    init = 1,
+    syncing = 2,
+    synced = 3,
 }
 
-export type GenesisOptions = {
-    handler: BaseHandler;
-    dataDir: string;
-} & LoggerOptions;
+export type ChainTypeOptions = {
+    consensus: string;
+    features: string[];
+};
 
-export type ChainOptions = {
+export type ChainGlobalOptions = {
+    txlivetime: number;
+};
+
+export type ChainInstanceOptions = {
     initializePeerCount?: number;
     headerReqLimit?: number;
     confirmDepth?: number;
     // 不用excutor校验block, 而是通过redo log; 默认为0,即使用excutor
     ignoreVerify?: number; 
-} & ChainNodeOptions & GenesisOptions;
+} & ChainNodeOptions;
 
 type SyncConnection = {
     conn: NodeConnection,
@@ -81,10 +81,9 @@ export class Chain extends EventEmitter {
      * @param options.blockHeaderType
      * @param options.node
      */
-    constructor() {
+    constructor(options: LoggerOptions) {
         super();
-        // this.m_options = Object.create(options);
-  
+        this.m_logger = initLogger(options);
         this.m_initializePeerCount = 1; // options.initializePeerCount ? options.initializePeerCount : 1;
         this.m_headerReqLimit = 2000; // options.headerReqLimit ? options.headerReqLimit : 2000;
         this.m_confirmDepth = 6; // options.confirmDepth ? options.confirmDepth : 6;
@@ -93,9 +92,12 @@ export class Chain extends EventEmitter {
     }
 
     // 存储address入链的tx的最大nonce
-    public static kvNonce: string = '__nonce'; // address<--->nonce
-    public static kvUser: string = '__user';
-    public static kvConfig: string = '__config';
+    public static dbSystem: string = '__system';
+    public static kvNonce: string = 'nonce'; // address<--->nonce
+    public static kvConfig: string = 'config';
+
+    public static dbUser: string = '__user';
+
     public static s_dbFile: string = 'database';
 
     on(event: 'tipBlock', listener: (chain: Chain, block: BlockHeader) => void): this;
@@ -108,7 +110,10 @@ export class Chain extends EventEmitter {
         return super.on(event, listener);
     }
 
-    protected m_options?: any;
+    protected m_dataDir?: string;
+    protected m_handler?: BaseHandler; 
+    protected m_instanceOptions?: ChainInstanceOptions;
+    protected m_globalOptions?: ChainGlobalOptions;
     private m_state: ChainState = ChainState.none;
     private m_tip?: BlockHeader;
     private m_refSnapshots: string[] = [];
@@ -118,7 +123,7 @@ export class Chain extends EventEmitter {
     private m_blockStorage?: BlockStorage;
     private m_storageManager?: StorageManager;
     private m_pending?: PendingTransactions;
-    protected m_logger?: LoggerInstance;
+    protected m_logger: LoggerInstance;
     private m_pendingHeaders: Array<HeadersEventParams> = new Array();
     private m_pendingBlocks: {
         hashes: Set<string>
@@ -143,10 +148,13 @@ export class Chain extends EventEmitter {
 
     protected m_connSyncMap: Map<string, SyncConnection> = new Map();
 
-    protected m_globalConfig?: GlobalConfig;
+    get globalOptions(): any {
+        const c = this.m_globalOptions;
+        return c;
+    }
 
-    get globalConfig(): GlobalConfig {
-        return this.m_globalConfig!;
+    get logger(): LoggerInstance {
+        return this.m_logger;
     }
 
     get pending(): PendingTransactions {
@@ -161,8 +169,8 @@ export class Chain extends EventEmitter {
         return this.m_blockStorage!;
     }
 
-    get logger(): LoggerInstance {
-        return this.m_logger!;
+    get dataDir(): string {
+        return this.m_dataDir!;
     }
 
     get node(): ChainNode {
@@ -174,36 +182,36 @@ export class Chain extends EventEmitter {
     }
 
     get handler(): BaseHandler {
-        return this.m_options!.handler;
+        return this.m_handler!;
     }
 
     get confirmDepth(): number {
         return this.m_confirmDepth;
     }
 
-    public async initComponents(options: GenesisOptions): Promise<ErrorCode> {
-        if (this.m_db) {
+    get headerStorage(): HeaderStorage {
+        return this.m_headerStorage!;
+    }
+
+    public async initComponents(dataDir: string, handler: BaseHandler): Promise<ErrorCode> {
+        if (this.m_state >= ChainState.init) {
+
             return ErrorCode.RESULT_OK;
         }
-
-        this.m_options = Object.create(options);
-        fs.mkdirpSync(options.dataDir);
-
-        this.m_logger = initLogger(options);
-        this.m_globalConfig = new GlobalConfig(this.m_logger);
-        await this.m_globalConfig.loadConfig(options.dataDir, Chain.kvConfig, Chain.s_dbFile);
+        this.m_dataDir = dataDir;
+        this.m_handler = handler;
 
         this.m_blockStorage = new BlockStorage({
-            logger: this.m_logger,
-            path: options.dataDir,
+            logger: this.m_logger!,
+            path: dataDir,
             blockHeaderType: this._getBlockHeaderType(),
             transactionType: this._getTransactionType()
         });
         await this.m_blockStorage.init();
 
-        this.m_db = await sqlite.open(options.dataDir + '/' + Chain.s_dbFile, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+        this.m_db = await sqlite.open(dataDir + '/' + Chain.s_dbFile, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
         this.m_headerStorage = new HeaderStorage({
-            logger: this.m_logger,
+            logger: this.m_logger!,
             blockHeaderType: this._getBlockHeaderType(),
             db: this.m_db,
             blockStorage: this.m_blockStorage!
@@ -216,9 +224,9 @@ export class Chain extends EventEmitter {
         }
 
         this.m_storageManager = new StorageManager({
-            path: path.join(options.dataDir, 'storage'),
+            path: path.join(dataDir, 'storage'),
             storageType: SqliteStorage,
-            logger: this.m_logger,
+            logger: this.m_logger!,
             headerStorage: this.m_headerStorage!
         });
 
@@ -226,44 +234,103 @@ export class Chain extends EventEmitter {
         if (err) {
             return err;
         }
- 
+        this.m_state = ChainState.init;
         return ErrorCode.RESULT_OK;
     }
 
-    public async initialize(options: ChainOptions): Promise<ErrorCode> {
-        this.m_state = ChainState.syncing;
-        let err = await this.initComponents(options);
-        if (err) {
-            return err;
+    protected _onCheckTypeOptions(typeOptions: ChainTypeOptions): boolean {
+        return true;
+    }
+
+    onCheckGlobalOptions(globalOptions: ChainGlobalOptions): boolean {
+        if (isNullOrUndefined(globalOptions.txlivetime)) {
+            globalOptions.txlivetime = 60 * 60;
+        }
+        return true;
+    }
+
+    public parseInstanceOptions(node: INode, instanceOptions: Map<string, any>): {err: ErrorCode, value?: ChainInstanceOptions} {
+        let value = Object.create(null);
+        value.node = node;
+        return {err: ErrorCode.RESULT_OK, value};
+    }
+
+    public async initialize(instanceOptions: ChainInstanceOptions): Promise<ErrorCode> {
+        if (this.m_state !== ChainState.init) {
+            this.m_logger.error(`chain initialize failed for hasn't initComponent`);
+            return ErrorCode.RESULT_INVALID_STATE;
         }
 
         let genesis = await this.m_headerStorage!.loadHeader(0);
         let gsv = await this.m_storageManager!.getSnapshotView(genesis.header!.hash);
         if (gsv.err) {
+            this.m_logger.error(`chain initialize failed for load genesis snapshot failed ${gsv.err}`);
             return gsv.err;
         }
         this.m_constSnapshots.push(genesis.header!.hash);
+        let dbr = await gsv.storage!.getReadableDataBase(Chain.dbSystem);
+        if (dbr.err) {
+            this.m_logger.error(`chain initialize failed for load system database failed ${dbr.err}`);
+            return dbr.err;
+        }
+        let kvr = await dbr.value!.getReadableKeyValue(Chain.kvConfig);
+        if (kvr.err) {
+            this.m_logger.error(`chain initialize failed for load global config failed ${kvr.err}`);
+            return kvr.err;
+        }
+        let typeOptions: ChainTypeOptions = Object.create(null);
+        let kvgr = await kvr.kv!.get('consensus');
+        if (kvgr.err) {
+            this.m_logger.error(`chain initialize failed for load global config consensus failed ${kvgr.err}`);
+            return kvgr.err;
+        }
+        typeOptions.consensus = kvgr.value! as string;
+        kvgr = await kvr.kv!.lrange('features', 1, -1);
+        if (kvgr.err === ErrorCode.RESULT_OK) {
+            typeOptions.features = kvgr.value! as string[];
+        } else if (kvgr.err === ErrorCode.RESULT_NOT_FOUND) {
+            typeOptions.features = [];
+        } else {
+            this.m_logger.error(`chain initialize failed for load global config features failed ${kvgr.err}`);
+            return kvgr.err;
+        }
+        if (!this._onCheckTypeOptions(typeOptions)) {
+            this.m_logger.error(`chain initialize failed for check type options failed`);
+            return ErrorCode.RESULT_INVALID_BLOCK;
+        }
 
-        this.m_initializePeerCount = options.initializePeerCount ? options.initializePeerCount : this.m_initializePeerCount;
-        this.m_headerReqLimit = options.headerReqLimit ? options.headerReqLimit : this.m_headerReqLimit;
-        this.m_confirmDepth = options.confirmDepth ? options.confirmDepth : this.m_confirmDepth;
+        kvgr = await kvr.kv!.hgetall('global');
+        if (kvgr.err) {
+            this.m_logger.error(`chain initialize failed for load global config global failed ${kvgr.err}`);
+            return kvgr.err;
+        }
+        let globalOptions = Object.create(null);
+        for (let e of kvgr.value!) {
+            globalOptions[e.key] = e.value;
+        }
+        if (!this.onCheckGlobalOptions(globalOptions)) {
+            this.m_logger.error(`chain initialize failed for check global options failed`);
+            return ErrorCode.RESULT_INVALID_BLOCK;
+        }
+        this.m_globalOptions = globalOptions;
+
+        this.m_state = ChainState.syncing;
+        this.m_instanceOptions = Object.create(instanceOptions);
+        this.m_initializePeerCount = instanceOptions.initializePeerCount ? instanceOptions.initializePeerCount : this.m_initializePeerCount;
+        this.m_headerReqLimit = instanceOptions.headerReqLimit ? instanceOptions.headerReqLimit : this.m_headerReqLimit;
+        this.m_confirmDepth = instanceOptions.confirmDepth ? instanceOptions.confirmDepth : this.m_confirmDepth;
         this.m_broadcastDepth = this.m_confirmDepth;
-        this.m_ignoreVerify = options.ignoreVerify ? options.ignoreVerify : this.m_ignoreVerify;
+        this.m_ignoreVerify = instanceOptions.ignoreVerify ? instanceOptions.ignoreVerify : this.m_ignoreVerify;
 
-        this.m_pending = new PendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalConfig!.getConfig('txlivetime')});
+        this.m_pending = new PendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime});
 
-        this.m_node = new ChainNode({
-            node: this.m_options!.node,
-            blockHeaderType: this._getBlockHeaderType(),
-            transactionType: this._getTransactionType(),
-            blockStorage: this.m_blockStorage!,
-            headerStorage: this.m_headerStorage!,
-            storageManager: this.m_storageManager!,
-            logger: this.logger,
-            minOutbound: this.m_options.minOutbound,
-            blockTimeout: this.m_options.blockTimeout,
-            dataDir: this.m_options.dataDir,
-        });
+        let ccn = await this._createChainNode();
+        if (ccn.err) {
+            this.logger.error(`createChainNode error`);
+            return ccn.err;
+        }
+
+        this.m_node = ccn.node!;
 
         this.m_node.on('blocks', (params: BlocksEventParams) => {
             this._addPendingBlocks(params);
@@ -283,7 +350,7 @@ export class Chain extends EventEmitter {
             this._onConnectionError(conn.getRemote());
         });
 
-        err = await this._loadChain();
+        let err = await this._loadChain();
         if (err) {
             return err;
         }
@@ -297,7 +364,7 @@ export class Chain extends EventEmitter {
         }
         err = await new Promise<ErrorCode>(async (resolve) => {
             this.prependOnceListener('tipBlock', () => {
-                this.logger.info(`chain initialized success, tip number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
+                this.m_logger.info(`chain initialized success, tip number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
                 resolve(ErrorCode.RESULT_OK);
             });
         });
@@ -312,6 +379,23 @@ export class Chain extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
+    protected async _createChainNode(): Promise<{err: ErrorCode, node?: ChainNode}> {
+        let node = new ChainNode({
+            node: this.m_instanceOptions!.node,
+            blockHeaderType: this._getBlockHeaderType(),
+            transactionType: this._getTransactionType(),
+            blockStorage: this.m_blockStorage!,
+            headerStorage: this.m_headerStorage!,
+            storageManager: this.m_storageManager!,
+            logger: this.m_logger,
+            minOutbound: this.m_instanceOptions!.minOutbound,
+            blockTimeout: this.m_instanceOptions!.blockTimeout,
+            dataDir: this.m_dataDir!,
+        });
+
+        return {err: ErrorCode.RESULT_OK, node};
+    }
+
     protected async _loadChain(): Promise<ErrorCode> {
         assert(this.m_headerStorage);
         assert(this.m_blockStorage);
@@ -324,7 +408,7 @@ export class Chain extends EventEmitter {
         if (err) {
             return err;
         }
-        this.logger.info(`load chain tip from disk, height:${this.m_tip!.number}, hash:${this.m_tip!.hash}`);
+        this.m_logger.info(`load chain tip from disk, height:${this.m_tip!.number}, hash:${this.m_tip!.hash}`);
         return ErrorCode.RESULT_OK;
     }
 
@@ -334,6 +418,7 @@ export class Chain extends EventEmitter {
             this.m_storageManager!.releaseSnapshotView(blockHash);
         }
         this.m_refSnapshots = [];
+
         let gsv = await this.m_storageManager!.getSnapshotView(tip.hash);
         if (gsv.err) {
             return gsv.err;
@@ -601,7 +686,7 @@ export class Chain extends EventEmitter {
         if (connSync.state === ChainState.syncing) {
             if (request && request.from) {
                 if (request.from !== connSync.lastRequestHeader!) {
-                    this.logger.error(`request ${connSync.lastRequestHeader!} from ${remote} while got headers from ${request.from}`);
+                    this.m_logger.error(`request ${connSync.lastRequestHeader!} from ${remote} while got headers from ${request.from}`);
                     this._banConnection(remote, BAN_LEVEL.forever);
                     return ErrorCode.RESULT_OK;
                 }
@@ -611,7 +696,7 @@ export class Chain extends EventEmitter {
                         this._banConnection(remote, BAN_LEVEL.forever);
                         return ErrorCode.RESULT_OK;
                     }
-                    this.logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${remote} at syncing`);
+                    this.m_logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${remote} at syncing`);
                     let vsh = await this._verifyAndSaveHeaders(headers);
                     // 找不到的header， 或者验证header出错， 都干掉
                     if (vsh.err === ErrorCode.RESULT_NOT_FOUND || vsh.err === ErrorCode.RESULT_INVALID_BLOCK) {
@@ -652,12 +737,12 @@ export class Chain extends EventEmitter {
             } else if (!request) {
                 // 广播来的直接忽略
             } else {
-                this.logger.error(`invalid header request ${request} response when syncing with ${remote}`);
+                this.m_logger.error(`invalid header request ${request} response when syncing with ${remote}`);
                 this._banConnection(remote, BAN_LEVEL.forever);
             }
         } else if (connSync.state === ChainState.synced) {
             if (!request) {
-                this.logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${remote} at synced`);
+                this.m_logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${remote} at synced`);
                 let vsh = await this._verifyAndSaveHeaders(headers);
                 // 验证header出错干掉
                 if (vsh.err === ErrorCode.RESULT_INVALID_BLOCK) {
@@ -678,7 +763,7 @@ export class Chain extends EventEmitter {
                 this.m_node!.requestBlocks({ headers: vsh.toRequest! }, remote);
             } else {
                 // 不是广播来来的都不对
-                this.logger.error(`invalid header request ${request} response when synced with ${remote}`);
+                this.m_logger.error(`invalid header request ${request} response when synced with ${remote}`);
                 this._banConnection(remote, BAN_LEVEL.forever);
             }
         }
@@ -689,7 +774,7 @@ export class Chain extends EventEmitter {
     protected async _addBlock(block: Block, options: { remote?: string, storage?: StorageDumpSnapshot, redoLog?: StorageLogger }): Promise<ErrorCode> {
         // try{
         assert(this.m_headerStorage);
-        this.logger.info(`begin adding block number: ${block.number}  hash: ${block.hash} to chain `);
+        this.m_logger.info(`begin adding block number: ${block.number}  hash: ${block.hash} to chain `);
         let err = ErrorCode.RESULT_OK;
 
         if (options.storage) {
@@ -703,7 +788,7 @@ export class Chain extends EventEmitter {
                 // 加入block之前肯定已经有header了
                 let headerResult = await this.m_headerStorage!.loadHeader(block.hash);
                 if (headerResult.err) {
-                    this.logger.warn(`ignore block for header missing`);
+                    this.m_logger.warn(`ignore block for header missing`);
                     err = headerResult.err;
                     if (err === ErrorCode.RESULT_NOT_FOUND) {
                         err = ErrorCode.RESULT_INVALID_BLOCK;
@@ -713,7 +798,7 @@ export class Chain extends EventEmitter {
                 assert(headerResult.header && headerResult.verified !== undefined);
                 if (headerResult.verified === VERIFY_STATE.verified
                     || headerResult.verified === VERIFY_STATE.invalid) {
-                    this.logger.info(`ignore block for block has been verified as ${headerResult.verified}`);
+                    this.m_logger.info(`ignore block for block has been verified as ${headerResult.verified}`);
                     if (headerResult.verified === VERIFY_STATE.invalid) {
                         err = ErrorCode.RESULT_INVALID_BLOCK;
                     } else {
@@ -723,17 +808,17 @@ export class Chain extends EventEmitter {
                 }
                 headerResult = await this.m_headerStorage!.loadHeader(block.header.preBlockHash);
                 if (headerResult.err) {
-                    this.logger.warn(`ignore block for previous header hash: ${block.header.preBlockHash} missing`);
+                    this.m_logger.warn(`ignore block for previous header hash: ${block.header.preBlockHash} missing`);
                     err = headerResult.err;
                     break;
                 }
                 assert(headerResult.header && headerResult.verified !== undefined);
                 if (headerResult.verified === VERIFY_STATE.notVerified) {
-                    this.logger.info(`ignore block for previous header hash: ${block.header.preBlockHash} hasn't been verified`);
+                    this.m_logger.info(`ignore block for previous header hash: ${block.header.preBlockHash} hasn't been verified`);
                     err = ErrorCode.RESULT_SKIPPED;
                     break;
                 } else if (headerResult.verified === VERIFY_STATE.invalid) {
-                    this.logger.info(`ignore block for previous block has been verified as invalid`);
+                    this.m_logger.info(`ignore block for previous block has been verified as invalid`);
                     this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.invalid);
                     err = ErrorCode.RESULT_INVALID_BLOCK;
                     break;
@@ -751,9 +836,9 @@ export class Chain extends EventEmitter {
 
             // 校验block
             // 如果options.redoLog对象 不为空，就通过redo, 而不是通过tx校验
-            let vbr = await this._verifyBlock(block, options.redoLog);
+            let vbr = await this.verifyBlock(block, options.redoLog);
             if (vbr.err) {
-                this.logger.error(`add block failed for verify failed for ${vbr.err}`);
+                this.m_logger.error(`add block failed for verify failed for ${vbr.err}`);
                 return vbr.err;
             }
             if (!vbr.verified) {
@@ -806,9 +891,10 @@ export class Chain extends EventEmitter {
                     hr.headers = hr.headers!.slice(1);
                 }
                 this.m_node!.broadcast(hr.headers!, { filter: (conn: NodeConnection) => { 
+                    this.m_logger.info(`broadcast to ${conn.getRemote()}: ${!broadcastExcept.has(conn.getRemote())}`);
                     return !broadcastExcept.has(conn.getRemote()); 
                 } });
-                this.logger.info(`broadcast tip headers from number: ${hr.headers![0].number} hash: ${hr.headers![0].hash} to number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
+                this.m_logger.info(`broadcast tip headers from number: ${hr.headers![0].number} hash: ${hr.headers![0].hash} to number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
             }
         }
 
@@ -825,7 +911,7 @@ export class Chain extends EventEmitter {
         for (let result of nextResult.results!) {
             let _block = this.m_blockStorage!.get(result.header.hash);
             if (_block) {
-                this.logger.info(`next block hash ${result.header.hash} is ready`);
+                this.m_logger.info(`next block hash ${result.header.hash} is ready`);
                 this._addPendingBlocks({ block: _block }, true);
             }
         }
@@ -837,7 +923,7 @@ export class Chain extends EventEmitter {
     }
 
     protected async _addVerifiedBlock(block: Block, storage: StorageDumpSnapshot): Promise<ErrorCode> {
-        this.logger.info(`begin add verified block to chain`);
+        this.m_logger.info(`begin add verified block to chain`);
         assert(this.m_headerStorage);
         assert(this.m_tip);
         let cr = await this._compareWork(block.header, this.m_tip!);
@@ -845,10 +931,10 @@ export class Chain extends EventEmitter {
             return cr.err;
         }
         if (cr.result! > 0) {
-            this.logger.info(`begin extend chain's tip`);
+            this.m_logger.info(`begin extend chain's tip`);
             let err = await this.m_headerStorage!.changeBest(block.header);
             if (err) {
-                this.logger.info(`extend chain's tip failed for save to header storage failed for ${err}`);
+                this.m_logger.info(`extend chain's tip failed for save to header storage failed for ${err}`);
                 return err;
             }
             err = await this._onVerifiedBlock(block); 
@@ -859,7 +945,7 @@ export class Chain extends EventEmitter {
         } else {
             let err = await this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.verified);
             if (err) {
-                this.logger.error(`add verified block to chain failed for update verify state to header storage failed for ${err}`);
+                this.m_logger.error(`add verified block to chain failed for update verify state to header storage failed for ${err}`);
                 return err;
             }
         }
@@ -883,12 +969,12 @@ export class Chain extends EventEmitter {
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
-        let executor = new BlockExecutor({logger: this.logger, block, storage, handler: this.m_options.handler, externContext: {}, config: this.m_globalConfig! });
+        let executor = new BlockExecutor({logger: this.m_logger, block, storage, handler: this.m_handler!, externContext: {}, globalOptions: this.m_globalOptions! });
         return { err: ErrorCode.RESULT_OK, executor };
     }
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: any): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
-        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.m_options.handler, externContext: {} });
+        let executor = new ViewExecutor({logger: this.m_logger, header, storage, method, param, handler: this.m_handler!, externContext: {} });
         return { err: ErrorCode.RESULT_OK, executor };
     }
 
@@ -921,11 +1007,12 @@ export class Chain extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _verifyBlock(block: Block, redoLog?: StorageLogger): Promise<{ err: ErrorCode, verified?: boolean, storage?: StorageDumpSnapshot }> {
-        this.logger.info(`begin verify block number: ${block.number} hash: ${block.hash} `);
+    public async verifyBlock(block: Block, redoLog?: StorageLogger): Promise<{ err: ErrorCode, verified?: boolean, storage?: StorageDumpSnapshot }> {
+        this.m_logger.info(`begin verify block number: ${block.number} hash: ${block.hash} `);
+
         let sr = await this.m_storageManager!.createStorage('verify', block.header.preBlockHash);
         if (sr.err) {
-            this.logger.warn(`verify block failed for recover storage to previous block's failed for ${sr.err}`);
+            this.m_logger.warn(`verify block failed for recover storage to previous block's failed for ${sr.err}`);
             return { err: sr.err };
         }
         let result;
@@ -934,7 +1021,7 @@ export class Chain extends EventEmitter {
         
             // 通过redo log 来添加block的内容
             if ( redoLog ) {
-                this.logger.info(`redo log, block[${block.number}, ${block.hash}]`);
+                this.m_logger.info(`redo log, block[${block.number}, ${block.hash}]`);
                 
                 // 把通过网络请求拿到的redoLog 先保存到本地
                 this.m_storageManager!.writeRedoLog(block.hash, redoLog!);
@@ -942,7 +1029,7 @@ export class Chain extends EventEmitter {
                 // 执行redolog
                 let redoError = await redoLog.redoOnStorage(sr.storage!);
                 if (redoError) {
-                    this.logger.info(`redo error ${redoError}`);
+                    this.m_logger.info(`redo error ${redoError}`);
                     result = { err: redoError };
                     break;
                 }
@@ -950,7 +1037,7 @@ export class Chain extends EventEmitter {
                 // 获得storage的hash值
                 let digestResult = await sr.storage!.messageDigest();
                 if ( digestResult.err ) {
-                    this.logger.info(`redo log get storage messageDigest error`);
+                    this.m_logger.info(`redo log get storage messageDigest error`);
                     result = { err: digestResult.err };
                     break;
                 }
@@ -969,7 +1056,7 @@ export class Chain extends EventEmitter {
             if (verifyResult.err) {
                 result = { err: verifyResult.err };
             } else if ( verifyResult.valid ) {
-                this.logger.info(`block verified`);
+                this.m_logger.info(`block verified`);
                 let csr = await this.m_storageManager!.createSnapshot(sr.storage!, block.hash);
                 if (csr.err) {
                     result = { err: csr.err };
@@ -977,7 +1064,7 @@ export class Chain extends EventEmitter {
                     result = { err: ErrorCode.RESULT_OK, verified: true, storage: csr.snapshot! };
                 }
             } else {
-                this.logger.info(`block invalid`);
+                this.m_logger.info(`block invalid`);
                 result = { err: ErrorCode.RESULT_OK, verified: false };
             }
         } while (false);
@@ -987,7 +1074,7 @@ export class Chain extends EventEmitter {
 
     public async addMinedBlock(block: Block, storage: StorageDumpSnapshot) {
         this.m_blockStorage!.add(block);
-        this.logger.info(`miner mined block number:${block.number} hash:${block.hash}`);
+        this.m_logger.info(`miner mined block number:${block.number} hash:${block.hash}`);
         assert(this.m_headerStorage);
         let err = await this.m_headerStorage!.saveHeader(block.header);
         if (!err) {
@@ -1001,15 +1088,6 @@ export class Chain extends EventEmitter {
         if (genesis.number !== 0) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
-        // let err = await this.initComponents();
-        // if (err) {
-        //     return err;
-        // }
-
-        // let ret = await this.getHeader(0);
-        // if (ret.err === ErrorCode.RESULT_OK && ret.header) {
-        //     return ErrorCode.RESULT_OK;
-        // }
         assert(this.m_headerStorage && this.m_blockStorage);
         this.m_blockStorage!.add(genesis);
         let err = await this.m_headerStorage!.createGenesis(genesis.header);
@@ -1027,12 +1105,14 @@ export class Chain extends EventEmitter {
         while (true) {
             let hr = await this.getHeader(arg);
             if (hr.err !== ErrorCode.RESULT_OK) {
+                this.m_logger!.error(`view ${methodname} failed for load header ${arg} failed for ${hr.err}`);
                 retInfo = { err: hr.err };
                 break;
             }
             let header = hr.header!;
             let svr = await this.m_storageManager!.getSnapshotView(header.hash);
             if (svr.err !== ErrorCode.RESULT_OK) {
+                this.m_logger!.error(`view ${methodname} failed for get snapshot ${header.hash} failed for ${svr.err}`);
                 retInfo = { err: svr.err };
                 break;
             }
@@ -1040,6 +1120,7 @@ export class Chain extends EventEmitter {
 
             let nver = await this.newViewExecutor(header, storageView, methodname, param);
             if (nver.err) {
+                this.m_logger!.error(`view ${methodname} failed for create view executor failed for ${nver.err}`);
                 retInfo = { err: nver.err };
                 this.m_storageManager!.releaseSnapshotView(header.hash);
                 break;
@@ -1050,6 +1131,7 @@ export class Chain extends EventEmitter {
                 retInfo = { err: ErrorCode.RESULT_OK, value: ret1.value as T };
                 break;
             }
+            this.m_logger!.error(`view ${methodname} failed for create view executor failed for ${ret1.err}`);
             retInfo = { err: ret1.err };
             break;
         }
@@ -1064,11 +1146,13 @@ export class Chain extends EventEmitter {
     public async getTransactionReceipt(s: string): Promise<{ err: ErrorCode, block?: BlockHeader, tx?: Transaction, receipt?: Receipt }> {
         let ret = await this.m_headerStorage!.txview.get(s);
         if (ret.err !== ErrorCode.RESULT_OK) {
+            this.logger.error(`get transaction receipt ${s} failed for ${ret.err}`);
             return { err: ret.err };
         }
 
         let block = this.getBlock(ret.blockhash!);
         if (!block) {
+            this.logger.error(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
             return { err: ErrorCode.RESULT_NOT_FOUND };
         }
         let tx: Transaction | null = block.content.getTransaction(s);
@@ -1076,7 +1160,7 @@ export class Chain extends EventEmitter {
         if (tx && receipt) {
             return { err: ErrorCode.RESULT_OK, block: block.header, tx, receipt };
         }
-
+        assert(false, `transaction ${s} declared in ${ret.blockhash!} but not found in block`);
         return { err: ErrorCode.RESULT_NOT_FOUND };
     }
 

@@ -10,11 +10,27 @@ export class Version {
     protected m_timestamp: number;
     protected m_peerid: string;
     protected m_genesis: string = '';
-
+    protected m_random: number;
+    
     constructor() {
         this.m_mainVersion = MAIN_VERSION;
         this.m_timestamp = Date.now();
         this.m_peerid = '';
+        this.m_random = 1000000 * Math.random();
+    }
+
+    compare(other: Version): number {
+        if (this.m_timestamp > other.m_timestamp) {
+            return 1;
+        } else if (this.m_timestamp < other.m_timestamp) {
+            return -1;
+        }
+        if (this.m_random > other.m_random) {
+            return 1;
+        } else if (this.m_random > other.m_random) {
+            return -1;
+        }
+        return 0;
     }
 
     set mainversion(v: string) {
@@ -57,12 +73,17 @@ export class Version {
         return ErrorCode.RESULT_OK;
     }
 
-    public encode(writer: BufferWriter): BufferWriter {
-        writer.writeU64(this.m_timestamp);
-        writer.writeVarString(this.m_peerid);
-        writer.writeVarString(this.m_genesis);
-        writer.writeVarString(this.m_mainVersion);
-        return writer;
+    public encode(writer: BufferWriter): ErrorCode {
+        try {
+            writer.writeU64(this.m_timestamp);
+            writer.writeVarString(this.m_peerid);
+            writer.writeVarString(this.m_genesis);
+            writer.writeVarString(this.m_mainVersion);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
+        return ErrorCode.RESULT_OK;
     }
 
     public isSupport(): boolean {

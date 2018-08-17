@@ -1,7 +1,6 @@
 import {ErrorCode} from '../error_code';
 import {Socket} from 'net';
 import {IConnection} from '../net';
-const assert = require('assert');
 
 export class TcpConnection extends IConnection {
     private m_socket: Socket;
@@ -38,6 +37,7 @@ export class TcpConnection extends IConnection {
             this.m_socket.end();
             delete this.m_socket; 
         }
+        this.emit('close', this);
         return Promise.resolve(ErrorCode.RESULT_OK);
     }
 

@@ -5,38 +5,26 @@ import { ErrorCode } from '../error_code';
 import {Workpool} from '../lib/workpool';
 import { BufferWriter } from '../lib/writer';
 
-import { Block, ValueMiner, ValueMinerOptions, Chain, BlockHeader, MinerState, Storage } from '../value_chain';
+import { Block, ValueMiner,  Chain, BlockHeader, Storage, MinerState, ValueMinerInstanceOptions } from '../value_chain';
 
 import { PowBlockHeader } from './block';
 import * as consensus from './consensus';
 import { PowChain } from './chain';
-import {ChainCreator} from '../chain/chain_creator';
+import { LoggerOptions } from '../lib/logger_util';
+
+export type PowMinerInstanceOptions = {coinbase?: string} & ValueMinerInstanceOptions;
 
 export class PowMiner extends ValueMiner {
     private workpool: Workpool;
 
-    constructor(options: ValueMinerOptions) {
+    constructor(options: LoggerOptions) {
         super(options);
         const filename = path.resolve(__dirname, 'pow_worker.js');
         this.workpool = new Workpool(filename, 1);
     }
 
-    protected async _chainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
-        let cc = await chainCreator.createChain(commandOptions, PowChain);
-        if (cc.err) {
-            return {err: cc.err};
-        }
-
-        return {err: ErrorCode.RESULT_OK, chain: cc.chain as PowChain};
-    }
-
-    protected async _genesisChainInstance(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<{err: ErrorCode, chain?: Chain}> {
-        let cc = await chainCreator.createGenesis(commandOptions, PowChain);
-        if (cc.err) {
-            return {err: cc.err};
-        }
-
-        return {err: ErrorCode.RESULT_OK, chain: cc.chain as PowChain};
+    protected _chainInstance(): Chain {
+        return new PowChain({logger: this.m_logger!});
     }
 
     get chain(): PowChain {
@@ -51,8 +39,11 @@ export class PowMiner extends ValueMiner {
         return blockHeader;
     }
 
-    public async initialize(chainCreator: ChainCreator, commandOptions: Map<string, any>): Promise<ErrorCode> {
-        let err = await super.initialize(chainCreator, commandOptions);
+    public async initialize(options: PowMinerInstanceOptions): Promise<ErrorCode> {
+        if (options.coinbase) {
+            this.m_coinbase = options.coinbase;
+        }
+        let err = await super.initialize(options);
         if (err) {
             return err;
         }
@@ -100,7 +91,14 @@ export class PowMiner extends ValueMiner {
 
     private async _calcuteBlockHashWorkpool(blockHeader: PowBlockHeader, nonceRange: { start: number, end: number }, nonce1Range: { start: number, end: number }): Promise<ErrorCode> {
         return new Promise<ErrorCode>((reslove, reject) => {
-            let buffer = blockHeader.encode(new BufferWriter()).render();
+            let writer = new BufferWriter();
+            let err = blockHeader.encode(writer);
+            if (err) {
+                this.m_logger.error(`header encode failed `, blockHeader);
+                reslove(err);
+                return ;
+            }
+            let buffer = writer.render();
             this.workpool.push({data: buffer, nonce: nonceRange, nonce1: nonce1Range}, (code, signal, ret) => {
                 if (code === 0) {
                     let result = JSON.parse(ret);
@@ -111,32 +109,27 @@ export class PowMiner extends ValueMiner {
                 } else if (signal === 'SIGTERM') {
                     reslove(ErrorCode.RESULT_CANCELED);
                 } else {
-                    console.error(`worker error! code: ${code}, ret: ${ret}`);
+                    this.m_logger.error(`worker error! code: ${code}, ret: ${ret}`);
                     reslove(ErrorCode.RESULT_FAILED);
                 }
             });
         });
     }
 
-    protected async _createGenesisBlock(block: Block, storage: Storage, options?: any): Promise<ErrorCode> {
-        let err = await super._createGenesisBlock(block, storage, options);
+    protected async _createGenesisBlock(block: Block, storage: Storage, globalOptions: any, genesisOptions?: any): Promise<ErrorCode> {
+        let err = await super._createGenesisBlock(block, storage, globalOptions, genesisOptions);
         if (err) {
             return err;
         }
-
-        let kvr = await storage.getReadWritableKeyValue(Chain.kvConfig);
-        if (kvr.err) {
-            return kvr.err;
+        let gkvr = await storage.getKeyValue(Chain.dbSystem, Chain.kvConfig);
+        if (gkvr.err) {
+            return gkvr.err;
         }
-
-        assert(options.consensus, 'options must have consensus');
-
-        await kvr.kv!.set('retargetInterval', options!.consensus.retargetInterval);
-        await kvr.kv!.set('targetTimespan', options!.consensus.targetTimespan);
-        await kvr.kv!.set('basicBits', options!.consensus.basicBits);
-        await kvr.kv!.set('limit', options!.consensus.limit);
-
-        (block.header as PowBlockHeader).bits = 520159231;
+        let rpr = await gkvr.kv!.set('consensus', 'pow');
+        if (rpr.err) {
+            return rpr.err;
+        }
+        (block.header as PowBlockHeader).bits = globalOptions.basicBits;
         block.header.updateHash();
         return ErrorCode.RESULT_OK;
     }

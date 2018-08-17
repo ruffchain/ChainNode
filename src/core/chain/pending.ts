@@ -1,6 +1,5 @@
-import {Transaction} from './transaction';
+import {Transaction, BlockHeader} from '../block';
 import {Chain} from './chain';
-import {BlockHeader} from './block';
 import {ErrorCode} from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import {StorageManager, IReadableStorage} from '../storage';
@@ -18,17 +17,13 @@ export class PendingTransactions {
     protected m_curHeader?: BlockHeader;
     protected m_txLiveTime: number;
     protected m_pendingLock: Lock;
-    constructor(options: {storageManager: StorageManager, logger: LoggerInstance, txlivetime?: number}) {
+    constructor(options: {storageManager: StorageManager, logger: LoggerInstance, txlivetime: number}) {
         this.m_transactions = [];
         this.m_orphanTx = new Map();
         this.m_mapNonce = new Map<string, number>();
         this.m_logger = options.logger;
         this.m_storageManager = options.storageManager;
-        if (options.txlivetime) {
-            this.m_txLiveTime = options.txlivetime;
-        } else {
-            this.m_txLiveTime = 60 * 60;
-        }
+        this.m_txLiveTime = options.txlivetime;
         this.m_pendingLock = new Lock();
     }
 
@@ -162,7 +157,12 @@ export class PendingTransactions {
 
     public async getStorageNonce(s: string): Promise<{err: ErrorCode, nonce?: number}> {
         try {
-            let nonceTableInfo = await this.m_storageView!.getReadableKeyValue(Chain.kvNonce);
+            let dbr = await this.m_storageView!.getReadableDataBase(Chain.dbSystem);
+            if (dbr.err) {
+                this.m_logger.error(`get system database failed ${dbr.err}`);
+                return {err: dbr.err};
+            }
+            let nonceTableInfo = await dbr.value!.getReadableKeyValue(Chain.kvNonce);
             if (nonceTableInfo.err) {
                 this.m_logger.error(`getStorageNonce, getReadableKeyValue failed,errcode=${nonceTableInfo.err}`);
                 return {err: nonceTableInfo.err};

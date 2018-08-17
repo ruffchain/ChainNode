@@ -28,11 +28,14 @@ export class ValueTransaction extends Transaction {
         this.m_fee = value;
     }
 
-    protected _encodeHashContent(writer: BufferWriter): BufferWriter {
-        super._encodeHashContent(writer);
+    protected _encodeHashContent(writer: BufferWriter): ErrorCode {
+        let err = super._encodeHashContent(writer);
+        if (err) {
+            return err;
+        }
         writer.writeBigNumber(this.m_value);
         writer.writeBigNumber(this.m_fee);
-        return writer;
+        return ErrorCode.RESULT_OK;
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {

@@ -2,6 +2,7 @@ import {transports, LoggerInstance, Logger} from 'winston';
 export {LoggerInstance} from 'winston';
 import * as path from 'path';
 import * as fs from 'fs-extra';
+const {LogShim} = require('./log_shim');
 
 export type LoggerOptions = {
     logger?: LoggerInstance;
@@ -38,7 +39,8 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
             level: options.loggerOptions.level || 'info',
             transports: loggerTransports
         });
-        return logger;
+        
+        return new LogShim(logger).log;
     } else {
         const loggerTransports = [];
         loggerTransports.push(new transports.Console({
@@ -50,6 +52,6 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
             level: 'info',
             transports: loggerTransports
         });
-        return logger;
+        return new LogShim(logger).log;
     }
 }

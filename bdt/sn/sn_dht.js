@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const {Config, Result: DHTResult, HashDistance} = require('../dht/util.js');
@@ -8,6 +34,8 @@ const HashConfig = Config.Hash;
 const SN_DHT_SERVICE_ID = '4243153e-8d98-4384-8ae0-0ca1802235e2';
 
 const Base = require('../base/base.js');
+const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_INFO = Base.BX_INFO;
 const LOG_WARN = Base.BX_WARN;
@@ -73,10 +101,10 @@ class SNDHT {
         }
     }
 
-    signinServer(isSeed) {
+    signinServer(isSeed, immediately) {
         let isRunningBefore = this.m_snDHT.isRunning();
 
-        this._tryJoinService(isSeed);
+        this._tryJoinService(isSeed, immediately);
         if (!isRunningBefore) {
             this._onStart();
         }
@@ -172,14 +200,12 @@ class SNDHT {
 
         let findFromRecentOnline = () => {
             let timeoutSNs = [];
-            let now = Date.now();
+            let now = TimeHelper.uptimeMS();
             this.m_recentSNMap.forEach((snInfo, snPeerid) => {
                 let cacheTime = now - snInfo.onlineTime;
                 if (cacheTime > this.RECENT_SN_CACHE_TIME) {
                     timeoutSNs.push(snPeerid);
                     return;
-                } else if (cacheTime < 0) {
-                    snInfo.onlineTime = now;
                 }
     
                 let distance2SN = HashDistance.calcDistanceByHash(peeridHash, snInfo.hash);
@@ -297,7 +323,7 @@ class SNDHT {
         }
     }
 
-    _tryJoinService(isSeed) {
+    _tryJoinService(isSeed, immediately) {
         if (this.m_timerJoinService) {
             return;
         }
@@ -306,42 +332,51 @@ class SNDHT {
         let lastOnlineTime = 0; // 最后一次上公网的时间
         const MAX_DISTANCE_SERVICE_PEER = HashDistance.hashBit(HashDistance.MAX_HASH, DEFAULT_SERVICE_SCOPE, Config.Hash.BitCount);
 
+        let limitTimes = 5;
         let recentState = [];
         let refreshState = localPeer => {
             let stat = this.m_fatherDHT.stat().udp;
             let nearDistance = this._getNearSNDistance();
 
+            // 同范围内有其他SN在线，如果没上线则不上线，但是如果已经上线就维持在线
             let state = {
                 distanceOk: nearDistance === 0 || HashDistance.compareHash(nearDistance, MAX_DISTANCE_SERVICE_PEER) > 0, // 距离范围内没有其他SN
                 sentCount: stat.send.pkgs,
                 recvCount: stat.recv.pkgs,
-                question: localPeer.question,
-                answer: localPeer.answer,
+                question: stat.req,
+                answer: stat.resp,
                 RTT: localPeer.RTT,
             };
 
-            if (recentState.length >= 5) {
+            if (recentState.length >= limitTimes) {
                 recentState.shift();
             }
             recentState.push(state);
         }
 
         // 判定是否满足加入DHT的条件
-        let isOk = state => {
-            return  state.distanceOk && // 距离范围满足条件
+        let canOnline = state => {
+            return  state.distanceOk && // 范围内没有其他SN
                     state.sentCount && state.recvCount / state.sentCount > 1 && // 收包率
                     state.answer > 100 && state.question / state.answer > 1 && // QA比
                     state.RTT < 100; // 延迟
         }
 
+        // 判定是否要退出DHT的SN服务；
+        // 判定条件比加入条件宽松，减少上上下下的概率
+        let needOffline = state => {
+            return !state.sentCount || state.recvCount / state.sentCount < 0.98 ||
+                    state.answer <= 100 || state.question / state.answer < 0.98 ||
+                    state.RTT > 150;
+        }
+
         let canJoinDHT = () => {
-            // return true; // 快速启动SN测试<TODO>
-            if (recentState.length < 5) {
+            if (recentState.length < limitTimes) {
                 return false;
             }
 
             for (let state of recentState) {
-                if (!isOk(state)) {
+                if (!canOnline(state)) {
                     return false;
                 }
             }
@@ -349,25 +384,31 @@ class SNDHT {
         }
 
         let needUnjoinDHT = () => {
-            if (recentState.length < 5) {
+            if (recentState.length < limitTimes) {
                 return true;
             }
 
             let noOkCount = 0;
             for (let state of recentState) {
-                if (!isOk(state)) {
+                if (!needOffline(state)) {
                     noOkCount++;
                 }
             }
-            return noOkCount >= 2;
+            return noOkCount / recentState.length >= 0.4;
         }
 
         let refresh = () => {
             let localPeer = this.m_fatherDHT.localPeer;
             refreshState(localPeer);
+            
+            let now = TimeHelper.uptimeMS();
+            
+            if (immediately && now - lastOnlineTime < this.MINI_ONLINE_TIME_MS) {
+                this._joinDHT(isSeed);
+                return;
+            }
 
             if (localPeer.natType === DHTPeer.NAT_TYPE.internet) {
-                let now = Date.now();
                 if (lastOnlineTime === 0) {
                     lastOnlineTime = now;
                 }
@@ -375,12 +416,23 @@ class SNDHT {
                 LOG_INFO(`SN test online:now=${now},lastOnlineTime=${lastOnlineTime}, isJoined=${this.m_isJoinedDHT},nearSNDistance=${this._getNearSNDistance()}`);
                 if (now - lastOnlineTime >= this.MINI_ONLINE_TIME_MS && canJoinDHT()) {
                     // SN上线；
+                    if (limitTimes > 5) {
+                        limitTimes -= 0.5;
+                    }
                     this._joinDHT(isSeed);
                 } else if (needUnjoinDHT()) {
+                    if (this.m_isJoinedDHT) {
+                        limitTimes *= 2;
+                        recentState = [];
+                    }
                     this._unjoinDHT();
                 }
             } else {
                 LOG_INFO(`not internet.natType=${localPeer.natType}`);
+                if (this.m_isJoinedDHT) {
+                    limitTimes *= 2;
+                    recentState = [];
+                }
                 lastOnlineTime = 0;
                 this._unjoinDHT();
             }
@@ -421,7 +473,7 @@ class SNDHT {
             if (params.peerid === this.m_localPeer.peerid) {
                 return;
             }
-            this.m_recentSNMap.set(params.peerid, {onlineTime: Date.now(), hash: HashDistance.hash(params.peerid)});
+            this.m_recentSNMap.set(params.peerid, {onlineTime: TimeHelper.uptimeMS(), hash: HashDistance.hash(params.peerid)});
             this.m_fatherDHT.ping(sourcePeer);
             setImmediate(() => this.m_eventEmitter.emit(SNDHT.Event.SN.online, {peerid: params.peerid}));
         };

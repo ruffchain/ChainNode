@@ -1,12 +1,46 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 "use strict";
 const path = require("path");
 var assert = require("assert");
-const fs = require("fs-extra");
+let fs = null;
 const os = require("os");
 const events = require('events');
 const net = require('net');
 const XMLHttpRequest = null;
 const crypto = require('crypto');
+
+function _fs() {
+    if (!fs) {
+        fs = require("fs-extra");
+    }
+    return fs;
+}
+
 const EVAL_ENABLE = true;
 const BX_UID_TYPE_CORE = "CORE";
 const BX_UID_TYPE_APP = "APP";
@@ -308,13 +342,19 @@ class BLogStaticConfig {
         assert(mainfile);
         const fileInfo = path.parse(mainfile);
         const processConfig = fileInfo.dir + '/' + this.m_configFileName;
-        if (fs.existsSync(processConfig)) {
+        let fsModule = null;
+        try {
+            fsModule = _fs();
+        } catch (error) {
+            return;
+        }
+        if (_fs().existsSync(processConfig)) {
             console.log('will use blog process config:', processConfig);
             this.m_configFile = processConfig;
             return true;
         }
         const globalConfig = this.m_globalDir + '/' + this.m_configFileName;
-        if (fs.existsSync(globalConfig)) {
+        if (_fs().existsSync(globalConfig)) {
             console.log('will use blog global config:', globalConfig);
             this.m_configFile = globalConfig;
             return true;
@@ -325,7 +365,7 @@ class BLogStaticConfig {
         assert(this.m_configFile);
         let ret = false;
         try {
-            const context = fs.readFileSync(this.m_configFile, 'utf8');
+            const context = _fs().readFileSync(this.m_configFile, 'utf8');
             const jsonConfig = JSON.parse(context);
             if (jsonConfig) {
                 this._parse(jsonConfig);
@@ -858,11 +898,11 @@ class LogFileTarget {
         let curIndex = this.m_curFileIndex;
         for (let i = 0; i < this.m_fileMaxCount; ++i) {
             const fullPath = this.m_folder + "/" + this.m_filename + "." + curIndex + ".log";
-            if (!fs.existsSync(fullPath)) {
+            if (!_fs().existsSync(fullPath)) {
                 index = curIndex;
                 break;
             }
-            const stat = fs.lstatSync(fullPath);
+            const stat = _fs().lstatSync(fullPath);
             if (stat.isFile()) {
                 if (!tm) {
                     console.log("init index", curIndex, stat.mtime);
@@ -929,20 +969,20 @@ class AsyncLogFileTarget extends LogFileTarget {
             this.m_fs = null;
             this.m_ready = false;
             this.m_writtenSize = 0;
-            fs.close(fd, () => {
+            _fs().close(fd, () => {
                 console.log("close fd success!", fd);
             });
         }
     }
     _open() {
         try {
-            if (fs.existsSync(this.m_filePath)) {
-                fs.removeSync(this.m_filePath);
+            if (_fs().existsSync(this.m_filePath)) {
+                _fs().removeSync(this.m_filePath);
             }
         } catch(e) {
             console.error('delete log file failed! file=', this.m_filePath, e);
         }
-        fs.open(this.m_filePath, 'w+', (err, fd) => {
+        _fs().open(this.m_filePath, 'w+', (err, fd) => {
             if (err) {
                 console.error("open log file failed: file={0}, err={1}", this.m_path, err);
                 this._onOpenFailed(err);
@@ -962,16 +1002,16 @@ class AsyncLogFileTarget extends LogFileTarget {
             'autoClose': true,
         };
         this.m_fd = fd;
-        this.m_fs = fs.createWriteStream(null, opt);
+        this.m_fs = _fs().createWriteStream(null, opt);
         this.m_ready = true;
         this.m_fs.on('drain', () => {
             this.m_ready = true;
         });
     }
     _onOpenFailed(err) {
-        if (!fs.existsSync(this.m_folder)) {
+        if (!_fs().existsSync(this.m_folder)) {
             console.log("will create dir", this.m_folder);
-            fs.ensureDir(this.m_folder, (err) => {
+            _fs().ensureDir(this.m_folder, (err) => {
                 if (err) {
                     console.error("create dir failed:", this.m_folder);
                     this._stopOpen(err);
@@ -1016,7 +1056,7 @@ class SyncLogFileTarget extends LogFileTarget {
         }
         let ret = true;
         try {
-            this.m_pos += fs.writeSync(this.m_fd, logString + option.lbr, this.m_pos, 'utf8');
+            this.m_pos += _fs().writeSync(this.m_fd, logString + option.lbr, this.m_pos, 'utf8');
         } catch (error) {
             console.log('write log failed:', error, this.m_filePath, logString);
             ret = false;
@@ -1026,7 +1066,7 @@ class SyncLogFileTarget extends LogFileTarget {
     _open() {
         assert(this.m_fd == null);
         try {
-            this.m_fd = fs.openSync(this.m_filePath, 'w+');
+            this.m_fd = _fs().openSync(this.m_filePath, 'w+');
         } catch (error) {
             this.m_fd = null;
             console.error('open file failed:', this.m_filePath, error);
@@ -1047,7 +1087,7 @@ class SyncLogFileTarget extends LogFileTarget {
             this.m_fd = null;
             this.m_writtenSize = 0;
             try {
-                fs.closeSync(fd);
+                _fs().closeSync(fd);
                 console.log("close fd success!", fd);
             } catch (error) {
                 console.error("close fd failed!", fd, error);
@@ -1055,14 +1095,14 @@ class SyncLogFileTarget extends LogFileTarget {
         }
     }
     _onOpenFailed(err) {
-        if (!fs.existsSync(this.m_folder)) {
+        if (!_fs().existsSync(this.m_folder)) {
             console.log("will create dir", this.m_folder);
             try {
-                fs.ensureDirSync(this.m_folder);
+                _fs().ensureDirSync(this.m_folder);
             } catch (err) {
                 console.error("create dir exception:", this.m_folder, err);
             }
-            if (fs.existsSync(this.m_folder)) {
+            if (_fs().existsSync(this.m_folder)) {
                 console.info("create dir success:", this.m_folder);
                 this._open();
             } else {
@@ -2302,21 +2342,21 @@ class CryptoUtility {
 class FileUtility {
     static fsExistsSync(filePath) {
         try {
-            return fs.statSync(filePath);
+            return _fs().statSync(filePath);
         } catch (err) {
             return false;
         }
     }
     static fileExistsSync(filePath) {
         try {
-            return fs.statSync(filePath).isFile();
+            return _fs().statSync(filePath).isFile();
         } catch (err) {
             return false;
         }
     }
     static dirExistsSync(filePath) {
         try {
-            return fs.statSync(filePath).isDirectory();
+            return _fs().statSync(filePath).isDirectory();
         } catch (err) {
             return false;
         }
@@ -2337,7 +2377,7 @@ class FileUtility {
                     }
                     if (!FileUtility.dirExistsSync(pathtmp)) {
                         console.log("makdir: " + pathtmp);
-                        if (!fs.mkdirSync(pathtmp, mode)) {
+                        if (!_fs().mkdirSync(pathtmp, mode)) {
                             return false;
                         }
                     }
@@ -2350,15 +2390,15 @@ class FileUtility {
     }
     static deleteFolderRecursive(dir) {
         if (FileUtility.dirExistsSync(dir)) {
-            fs.readdirSync(dir).forEach(function(file, index) {
+            _fs().readdirSync(dir).forEach(function(file, index) {
                 var curDir = dir + "/" + file;
-                if (fs.lstatSync(curDir).isDirectory()) {
+                if (_fs().lstatSync(curDir).isDirectory()) {
                     FileUtility.deleteFolderRecursive(curDir);
                 } else {
-                    fs.unlinkSync(curDir);
+                    _fs().unlinkSync(curDir);
                 }
             });
-            fs.rmdirSync(dir);
+            _fs().rmdirSync(dir);
         }
     }
     static findSync(root, pattern, recoursive) {
@@ -2367,7 +2407,7 @@ class FileUtility {
             pattern = undefined;
         }
         let files = [];
-        fs.readdirSync(root).forEach(function(file) {
+        _fs().readdirSync(root).forEach(function(file) {
             const fullFileName = path.join(root, file);
             if (FileUtility.dirExistsSync(fullFileName) && recoursive) {
                 files = files.concat(FileUtility.findSync(fullFileName, pattern, recoursive));
@@ -2380,7 +2420,7 @@ class FileUtility {
     }
     static findOnceSync(root, pattern, type, recoursive) {
         if (FileUtility.dirExistsSync(root)) {
-            const files = fs.readdirSync(root);
+            const files = _fs().readdirSync(root);
             for (const i in files) {
                 const fullFileName = path.join(root, files[i]);
                 let exist = FileUtility.fsExistsSync(fullFileName);
@@ -2445,16 +2485,16 @@ class FileUtility {
         try {
             var fd;
             try {
-                fd = fs.openSync(fileName, 'w', 438);
+                fd = _fs().openSync(fileName, 'w', 438);
             } catch (e) {
-                fs.chmodSync(fileName, 438);
-                fd = fs.openSync(fileName, 'w', 438);
+                _fs().chmodSync(fileName, 438);
+                fd = _fs().openSync(fileName, 'w', 438);
             }
             if (fd) {
-                fs.writeSync(fd, content, 0, content.length, 0);
-                fs.closeSync(fd);
+                _fs().writeSync(fd, content, 0, content.length, 0);
+                _fs().closeSync(fd);
             }
-            fs.chmodSync(fileName, attr || 438);
+            _fs().chmodSync(fileName, attr || 438);
         } catch (e) {
             return false;
         }
@@ -2475,17 +2515,17 @@ class FileUtility {
         if (!FileUtility.dirExistsSync(folder)) {
             FileUtility.mkdirsSync(folder);
         }
-        fs.open(filePath, 'w', 438, function(err, fd) {
+        _fs().open(filePath, 'w', 438, function(err, fd) {
             if (err) {
-                fs.chmod(filePath, 438, function(err) {
+                _fs().chmod(filePath, 438, function(err) {
                     if (err) {
                         callback(false);
                         return;
                     }
-                    fs.open(filePath, 'w', 438, function(err, fd) {
-                        fs.write(fd, content, 0, content.length, 0, function(err, written, buffer) {
-                            fs.close(fd, function(err) {
-                                fs.chmod(filePath, attr || 438, function() {
+                    _fs().open(filePath, 'w', 438, function(err, fd) {
+                        _fs().write(fd, content, 0, content.length, 0, function(err, written, buffer) {
+                            _fs().close(fd, function(err) {
+                                _fs().chmod(filePath, attr || 438, function() {
                                     callback(true);
                                 });
                             });
@@ -2494,15 +2534,15 @@ class FileUtility {
                 });
             } else {
                 if (fd) {
-                    fs.write(fd, content, 0, content.length, 0, function(err, written, buffer) {
-                        fs.close(fd, function(err) {
-                            fs.chmod(filePath, attr || 438, function() {
+                    _fs().write(fd, content, 0, content.length, 0, function(err, written, buffer) {
+                        _fs().close(fd, function(err) {
+                            _fs().chmod(filePath, attr || 438, function() {
                                 callback(true);
                             });
                         });
                     });
                 } else {
-                    fs.chmod(filePath, attr || 438, function() {
+                    _fs().chmod(filePath, attr || 438, function() {
                         callback(true);
                     });
                 }
@@ -2510,7 +2550,7 @@ class FileUtility {
         });
     }
 }
-
+/*
 function new_XMLHttpRequest() {
     if (!XMLHttpRequest) {
         XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
@@ -2713,7 +2753,7 @@ class HTTPUtility {
         return address;
     }
 }
-
+*/
 class PathUtility {
     constructor() {}
     static isSeparator(char) {
@@ -3886,7 +3926,7 @@ class BaseLib {
         }
     }
     static _fillUtilities() {
-        const utilities = [CryptoUtility, FileUtility, HTTPUtility, PathUtility, PlatformUtility, StringUtility, TimerUtility];
+        const utilities = [CryptoUtility, FileUtility, /*HTTPUtility, */PathUtility, PlatformUtility, StringUtility, TimerUtility];
         const ignoreKeys = {
             'length': 1,
             'prototype': 1,
@@ -4027,8 +4067,8 @@ class Authentication {
         options = {}) {
         let { filePath } = options;
         if (filePath) {
-            this.private_key = fs.readFileSync(client_private_key, "utf8");
-            this.public_key = fs.readFileSync(client_public_key, "utf8");
+            this.private_key = _fs().readFileSync(client_private_key, "utf8");
+            this.public_key = _fs().readFileSync(client_public_key, "utf8");
         } else {
             this.private_key = client_private_key;
             this.public_key = client_public_key;

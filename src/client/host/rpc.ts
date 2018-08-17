@@ -1,8 +1,7 @@
 import {RPCServer} from '../lib/rpc_server';
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {ErrorCode, ValueChain, INode, GlobalConfig, ChainCreator, ValueMinerOptions, ValueMiner, ValueTransaction, BufferReader, stringify} from '../../core';
-
+import {ErrorCode, Chain, Miner, Transaction, ValueTransaction, BufferReader, toStringifiable, LoggerInstance} from '../../core';
 import { isUndefined } from 'util';
 
 function promisify(f: any) {
@@ -22,9 +21,11 @@ function promisify(f: any) {
 }
 
 export class ChainServer {
-    constructor(chain: ValueChain, miner?: ValueMiner) {
+    private m_logger: LoggerInstance;
+    constructor(logger: LoggerInstance, chain: Chain, miner?: Miner) {
         this.m_chain = chain;
         this.m_miner = miner;
+        this.m_logger = logger;
     }
 
     init(commandOptions: CommandOptions): boolean {
@@ -83,9 +84,10 @@ export class ChainServer {
             } else {
                 let s;
                 try {
-                    s = stringify(cr.value!);
+                    s = toStringifiable(cr.value!, true);
                     cr.value = s;
                 } catch (e) {
+                    this.m_logger.error(`call view ${params} returns ${cr.value!} isn't stringifiable`);
                     cr.err = ErrorCode.RESULT_INVALID_FORMAT;
                     delete cr.value;
                 }
@@ -99,8 +101,15 @@ export class ChainServer {
             if (hr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: hr.err})));
             } else {
+                // 是否返回 block的transactions内容
                 if (params.transactions) {
-                    
+                    let block = await this.m_chain.getBlock(hr.header!.hash);
+                    if ( block ) {
+                        // 处理block content 中的transaction, 然后再响应请求
+                        let transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
+                        let res = {err: ErrorCode.RESULT_OK, block: hr.header!.stringify(), transactions};
+                        await promisify(resp.write.bind(resp)(JSON.stringify(res)));
+                    }
                 } else {
                     await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
                 }
@@ -109,7 +118,7 @@ export class ChainServer {
         });
     }
 
-    private m_chain: ValueChain;
-    private m_miner?: ValueMiner;
+    private m_chain: Chain;
+    private m_miner?: Miner;
     private m_server?: RPCServer;
 }

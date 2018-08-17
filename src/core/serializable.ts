@@ -16,31 +16,33 @@ export interface JSONable {
     stringify(): any;
 }
 
-export function stringify(o: any): any {
+export function toStringifiable(o: any, parsable: boolean = false): any {
     if (isUndefined(o) || isNull(o)) {
         return o;
-    } else if (isNumber(o) || isString(o) || isBoolean(o)) {
+    } else if (isNumber(o) || isBoolean(o)) {
         return o;
+    } else if (isString(o)) {
+        return parsable ? 's' + o : o;
     } else if (o instanceof BigNumber) {
-        return o.toString();
+        return parsable ? 'n' + o.toString() : o.toString();
     } else if (isBuffer(o)) {
-        return o.toString('hex');
+        return parsable ? 'b' + o.toString('hex') : o.toString('hex');
     } else if (isArray(o) || o instanceof Array) {
         let s = [];
         for (let e of o) {
-            s.push(stringify(e));
+            s.push(toStringifiable(e, parsable));
         }
         return s;
     } else if (isObject(o)) {
         let s = Object.create(null);
         for (let k of Object.keys(o)) {
-            s[k] = stringify(o[k]);
+            s[k] = toStringifiable(o[k], parsable);
         }
         return s;
     } else if (o instanceof Map) {
         let s = Object.create(null);
         for (let k of o.keys()) {
-            s[k] = stringify(o.get(k));
+            s[k] = toStringifiable(o.get(k), parsable);
         }
         return s;
     } else {
@@ -48,8 +50,38 @@ export function stringify(o: any): any {
     }
 }
 
+export function fromStringifiable(o: any): any {
+    // let value = JSON.parse(o);
+    function __convertValue(v: any): any {
+        if (isString(v)) {
+            if (v.charAt(0) === 's') {
+                return v.substring(1);
+            } else if (v.charAt(0) === 'b') {
+                return Buffer.from(v.substring(1), 'hex');
+            } else if (v.charAt(0) === 'n') {
+                return new BigNumber(v.substring(1));
+            } else {
+                throw new Error(`invalid parsable value ${v}`);
+            }
+        } else if (isArray(v) || v instanceof Array) {
+            for (let i = 0; i < v.length; ++i) {
+                v[i] = __convertValue(v[i]);
+            }
+            return v;
+        } else if (isObject(v)) {
+            for (let k of Object.keys(v)) {
+                v[k] = __convertValue(v[k]);
+            }
+            return v;
+        } else {
+            return v;
+        }
+    }
+    return __convertValue(o);
+}
+
 export interface Serializable {
-    encode(writer: BufferWriter): BufferWriter;
+    encode(writer: BufferWriter): ErrorCode;
     decode(reader: BufferReader): ErrorCode;
 }
 
@@ -63,17 +95,16 @@ export class SerializableWithHash implements Serializable, JSONable {
 
     protected m_hash: string;
 
-    protected _encodeHashContent(writer: BufferWriter): BufferWriter {
-        return writer;
+    protected _encodeHashContent(writer: BufferWriter): ErrorCode {
+        return ErrorCode.RESULT_OK;
     }
     protected _decodeHashContent(reader: BufferReader): ErrorCode {
         return ErrorCode.RESULT_OK;
     }
 
-    public encode(writer: BufferWriter): BufferWriter {
+    public encode(writer: BufferWriter): ErrorCode {
         // writer.writeHash(this.hash);
-        writer = this._encodeHashContent(writer);
-        return writer;
+        return this._encodeHashContent(writer);
     }
 
     public decode(reader: BufferReader): ErrorCode {

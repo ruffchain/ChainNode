@@ -1,12 +1,12 @@
 import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
-
-import {Block, ValueTransactionContext, ValueEventContext, ValueViewContext, ValueChain, ValueGenesisOptions, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor, ChainOptions} from '../value_chain';
+import {Chain, ChainTypeOptions, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, BaseHandler, ValueChain, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor} from '../value_chain';
 
 import { DposBlockHeader } from './block';
 import * as consensus from './consensus';
 import * as ValueContext from '../value_chain/context';
 import { DposBlockExecutor } from './executor';
+import { LoggerOptions } from '../lib/logger_util';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -33,16 +33,15 @@ const updateMinersSql = 'REPLACE INTO miners (hash, miners) values ($hash, $mine
 const getMinersSql = 'SELECT miners FROM miners WHERE hash=$hash';
 
 export class DposChain extends ValueChain {
-    public async initialize(options: ChainOptions) {
-        let ret = await super.initialize(options);
 
+    constructor(options: LoggerOptions) {
+        super(options);
         // DPOS中，只广播tipheader
         this.m_broadcastDepth = 0;
-        return ret;
     }
 
-    public async initComponents(options: ValueGenesisOptions): Promise<ErrorCode> {
-        let err = await super.initComponents(options);
+    public async initComponents(dataDir: string, handler: BaseHandler): Promise<ErrorCode> {
+        let err = await super.initComponents(dataDir, handler);
         if (err) {
             return err;
         }
@@ -57,7 +56,7 @@ export class DposChain extends ValueChain {
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let kvBalance = (await storage.getReadWritableKeyValue(ValueChain.kvBalance)).kv!;
+        let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
         let externalContext = Object.create(null);
@@ -67,18 +66,21 @@ export class DposChain extends ValueChain {
         externalContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
             return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        
-        let de = new consensus.Context(this.globalConfig, this.logger);
 
+        let dbr = await storage.getReadableDataBase(Chain.dbSystem);
+        if (dbr.err) {
+            return {err: dbr.err};
+        }
+        let de = new consensus.Context(dbr.value!, this.globalOptions, this.logger);
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
-            let vr = await de.vote(storage, from, candiates);
+            let vr = await de.vote(from, candiates);
             if (vr.err) {
                 throw new Error();
             }
             return vr.returnCode!;
         };
         externalContext.mortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
-            let mr = await de.mortgage(storage, from, amount);
+            let mr = await de.mortgage(from, amount);
             if (mr.err) {
                 throw new Error();
             }
@@ -86,7 +88,7 @@ export class DposChain extends ValueChain {
             return mr.returnCode!;
         };
         externalContext.unmortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
-            let mr = await de.unmortgage(storage, from, amount);
+            let mr = await de.unmortgage(from, amount);
             if (mr.err) {
                 throw new Error();
             }
@@ -94,7 +96,7 @@ export class DposChain extends ValueChain {
             return mr.returnCode!;
         };
         externalContext.register = async (from: string): Promise<ErrorCode> => {
-            let mr = await de.registerToCandidate(storage, from);
+            let mr = await de.registerToCandidate(from);
             if (mr.err) {
                 throw new Error();
             }
@@ -102,21 +104,21 @@ export class DposChain extends ValueChain {
             return mr.returnCode!;
         };
         externalContext.getVote = async (): Promise<Map<string, BigNumber> > => {
-            let gvr = await de.getVote(storage);
+            let gvr = await de.getVote();
             if (gvr.err) {
                 throw new Error();
             }
             return gvr.vote!;
         };
         externalContext.getStoke = async (address: string): Promise<BigNumber> => {
-            let gsr = await de.getStoke(storage, address);
+            let gsr = await de.getStoke(address);
             if (gsr.err) {
                 throw new Error();
             }
             return gsr.stoke!;
         };
         externalContext.getCandidates = async (): Promise<string[]> => {
-            let gc = await de.getCandidates(storage);
+            let gc = await de.getCandidates();
             if (gc.err) {
                 throw Error();
             }
@@ -125,7 +127,7 @@ export class DposChain extends ValueChain {
         };
 
         externalContext.getMiners = async (): Promise<string[]> => {
-            let gm = await de.getNextMiners(storage);
+            let gm = await de.getNextMiners();
             if (gm.err) {
                 throw Error();
             }
@@ -133,7 +135,7 @@ export class DposChain extends ValueChain {
             return gm.creators!;
         };
 
-        let executor = new DposBlockExecutor({logger: this.logger, block, storage, handler: this.m_options.handler, externContext: externalContext, config: this.m_globalConfig!});
+        let executor = new DposBlockExecutor({logger: this.logger, block, storage, handler: this.handler, externContext: externalContext, globalOptions: this.globalOptions!});
         return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
     }
 
@@ -141,24 +143,28 @@ export class DposChain extends ValueChain {
         let nvex = await super.newViewExecutor(header, storage, method, param);
 
         let externalContext = nvex.executor!.externContext;
-        let de = new consensus.Context(this.globalConfig, this.logger);
+        let dbr = await storage.getReadableDataBase(Chain.dbSystem);
+        if (dbr.err) {
+            return {err: dbr.err};
+        }
+        let de = new consensus.Context(dbr.value!, this.globalOptions, this.logger);
 
         externalContext.getVote = async (): Promise<Map<string, BigNumber> > => {
-            let gvr = await de.getVote(storage);
+            let gvr = await de.getVote();
             if (gvr.err) {
                 throw new Error();
             }
             return gvr.vote!;
         };
         externalContext.getStoke = async (address: string): Promise<BigNumber> => {
-            let gsr = await de.getStoke(storage, address);
+            let gsr = await de.getStoke(address);
             if (gsr.err) {
                 throw new Error();
             }
             return gsr.stoke!;
         };
         externalContext.getCandidates = async (): Promise<string[]> => {
-            let gc = await de.getCandidates(storage);
+            let gc = await de.getCandidates();
             if (gc.err) {
                 throw Error();
             }
@@ -196,13 +202,12 @@ export class DposChain extends ValueChain {
 
     protected async _calcuteReqLimit(fromHeader: string, limit: number) {
         let hr = await this.getHeader(fromHeader);
-        let reSelectionBlocks = this.globalConfig.getConfig('reSelectionBlocks');
+        let reSelectionBlocks = this.globalOptions!.reSelectionBlocks;
         return reSelectionBlocks - (hr.header!.number % reSelectionBlocks);
     }
 
     public async getMiners(header: DposBlockHeader): Promise<{err: ErrorCode, header?: DposBlockHeader, creators?: string[]}> {
-        let denv = new consensus.ViewContext(this.globalConfig, this.logger);
-        let en = denv.getElectionBlockNumber(header.number);
+        let en = consensus.ViewContext.getElectionBlockNumber(this.globalOptions, header.number);
         let electionHeader: DposBlockHeader;
         if (header.number === en) {
             electionHeader = header;
@@ -230,10 +235,7 @@ export class DposChain extends ValueChain {
     }
 
     protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
-
-        let denv = new consensus.ViewContext(this.globalConfig, this.logger);
-
-        if (block.number !== 0 && block.number % this.globalConfig.getConfig('reSelectionBlocks') !== 0) {
+        if (block.number !== 0 && block.number % this.globalOptions.reSelectionBlocks !== 0) {
             return ErrorCode.RESULT_OK;
         }
 
@@ -241,8 +243,13 @@ export class DposChain extends ValueChain {
         if (gs.err) {
             return gs.err;
         }
-
-        let minersInfo = await denv.getNextMiners(gs.storage!);
+        let dbr = await gs.storage!.getReadableDataBase(Chain.dbSystem);
+        if (dbr.err) {
+            return dbr.err;
+        }
+        let denv = new consensus.ViewContext(dbr.value!, this.globalOptions, this.m_logger!);
+        let minersInfo = await denv.getNextMiners();
+        this.storageManager.releaseSnapshotView(block.hash);
         if (minersInfo.err) {
             return minersInfo.err;
         }
@@ -255,7 +262,18 @@ export class DposChain extends ValueChain {
         }
     }
 
+    onCheckGlobalOptions(globalOptions: any): boolean {
+        if (!super.onCheckGlobalOptions(globalOptions)) {
+            return false;
+        }
+        return consensus.onCheckGlobalOptions(globalOptions);
+    }
+
     protected _getBlockHeaderType() {
         return DposBlockHeader;
+    }
+
+    protected _onCheckTypeOptions(typeOptions: ChainTypeOptions): boolean {
+        return typeOptions.consensus === 'dpos';
     }
 }

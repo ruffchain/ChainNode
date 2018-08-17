@@ -4,7 +4,6 @@ import {ErrorCode} from '../error_code';
 import {Block, Transaction, Receipt, Storage} from '../chain';
 import {BaseHandler, TxListener, BlockHeightListener} from './handler';
 import {EventExecutor, TransactionExecutor} from './transaction';
-import {GlobalConfig} from '../chain/global_config';
 import { LoggerInstance } from '../lib/logger_util';
 
 export type BlockExecutorOptions = {
@@ -13,7 +12,7 @@ export type BlockExecutorOptions = {
     handler: BaseHandler, 
     logger: LoggerInstance,
     externContext: any,
-    config: GlobalConfig
+    globalOptions: any
 };
 
 export class BlockExecutor {
@@ -22,7 +21,7 @@ export class BlockExecutor {
     protected m_block: Block;
     protected m_externContext: any;
     protected m_logger: LoggerInstance;
-    protected m_globalConfig: GlobalConfig;
+    protected m_globalOptions: any;
     constructor(options: BlockExecutorOptions) {
         this.m_storage = options.storage;
         this.m_handler = options.handler;
@@ -35,7 +34,7 @@ export class BlockExecutor {
                 value: this.m_logger
             }
         );
-        this.m_globalConfig = options.config;
+        this.m_globalOptions = options.globalOptions;
     }
 
     public get externContext(): any {
@@ -46,8 +45,8 @@ export class BlockExecutor {
         return new TransactionExecutor(l, tx, this.m_logger);
     }
     
-    protected _newEventExecutor(l: BlockHeightListener, b: boolean): EventExecutor {
-        return new EventExecutor(l, b, this.m_logger);
+    protected _newEventExecutor(l: BlockHeightListener): EventExecutor {
+        return new EventExecutor(l, this.m_logger);
     }
  
     public async execute(): Promise<ErrorCode> {      
@@ -66,18 +65,19 @@ export class BlockExecutor {
     } 
 
     protected async _execute(block: Block): Promise<ErrorCode> {
+        this.m_logger.info(`begin execute block ${block.number}`);
         this.m_storage.createLogger();
-        let err = await this._executeEvent(true);
+        let err = await this._executePreBlockEvent();
         if (err) {
             this.m_logger.error(`blockexecutor execute begin_event failed,errcode=${err},blockhash=${block.hash}`);
             return err;
         }
         let ret = await this._executeTx();
         if (ret.err) {
-            this.m_logger.error(`blockexecutor execute method failed,errcode=${err},blockhash=${block.hash}`);
+            this.m_logger.error(`blockexecutor execute method failed,errcode=${ret.err},blockhash=${block.hash}`);
             return ret.err;
         }
-        err = await this._executeEvent(false);
+        err = await this._executePostBlockEvent();
         if (err) {
             this.m_logger.error(`blockexecutor execute end_event failed,errcode=${err},blockhash=${block.hash}`);
             return err;
@@ -92,10 +92,33 @@ export class BlockExecutor {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _executeEvent(bBeforeBlock: boolean): Promise<ErrorCode> {
-        let listeners = await this.m_handler.getBlockHeightListeners(this.m_block.number);
+    protected async _executePreBlockEvent(): Promise<ErrorCode> {
+        if (this.m_block.number === 0) {
+            // call initialize
+            if (this.m_handler.genesisListener) {
+                let exec = this._newEventExecutor(this.m_handler.genesisListener);
+                let ret = await exec.execute(this.m_block.header, this.m_storage, this.m_externContext);
+                if (ret.err || ret.returnCode) {
+                    this.m_logger.error(`handler's genesisListener execute failed`);
+                    return ErrorCode.RESULT_EXCEPTION;
+                }
+            }
+        }
+        let listeners = await this.m_handler.getPreBlockListeners(this.m_block.number);
         for (let l of listeners) {
-            let exec = this._newEventExecutor(l!, bBeforeBlock);
+            let exec = this._newEventExecutor(l);
+            let ret = await exec.execute(this.m_block.header, this.m_storage, this.m_externContext);
+            if (ret.err) {
+                return ret.err;
+            }
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
+    protected async _executePostBlockEvent(): Promise<ErrorCode> {
+        let listeners = await this.m_handler.getPostBlockListeners(this.m_block.number);
+        for (let l of listeners) {
+            let exec = this._newEventExecutor(l);
             let ret = await exec.execute(this.m_block.header, this.m_storage, this.m_externContext);
             if (ret.err) {
                 return ret.err;

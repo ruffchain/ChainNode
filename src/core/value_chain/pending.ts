@@ -1,4 +1,4 @@
-import {PendingTransactions, TransactionWithTime} from '../chain';
+import {PendingTransactions, TransactionWithTime, Chain} from '../chain';
 import { ErrorCode } from '../error_code';
 import {ValueTransaction} from './transaction';
 import {BigNumber} from 'bignumber.js';
@@ -8,7 +8,11 @@ export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();
 
     public async addTransaction(tx: ValueTransaction): Promise<ErrorCode> {
-        let balance: BigNumber = await this.getBalance(tx.address as string);
+        let br = await this.getBalance(tx.address as string);
+        if (br.err) {
+            return br.err;
+        }
+        let balance = br.value!;
         let totalUse: BigNumber = tx.value;
         if (balance.lt(totalUse.plus(tx.fee))) {
             this.m_logger.error(`addTransaction failed, need fee ${tx.fee.toString()} but balance ${balance.toString()}`);
@@ -20,52 +24,65 @@ export class ValuePendingTransactions extends PendingTransactions {
             return err;
         }
 
-        await this.updateBalance(tx.address as string, balance.minus(totalUse));
-
-        return ErrorCode.RESULT_OK;
+        return this._updateBalance(tx.address as string, balance.minus(totalUse));
     }
 
-    protected async getStorageBalance(s: string): Promise<BigNumber> {
+    protected async getStorageBalance(s: string): Promise<{err: ErrorCode, value?: BigNumber}> {
         try {
-            let kvr = await this.m_storageView!.getReadableKeyValue(ValueChain.kvBalance);
+            let dbr = await this.m_storageView!.getReadableDataBase(Chain.dbSystem);
+            if (dbr.err) {
+                return {err: dbr.err};
+            }
+            let kvr = await dbr.value!.getReadableKeyValue(ValueChain.kvBalance);
             if (kvr.err !== ErrorCode.RESULT_OK) {
-                return new BigNumber(0);
+                return {err: kvr.err};
             }
             let ret = await kvr.kv!.get(s);
-            if (ret.err !== ErrorCode.RESULT_OK) {
-                return new BigNumber(0);
+            if (!ret.err) {
+                return ret;
+            } else if (ret.err === ErrorCode.RESULT_NOT_FOUND) {
+                return {err: ErrorCode.RESULT_OK, value: new BigNumber(0)};
+            } else {
+                return {err: ret.err};
             }
-            return new BigNumber(ret.value as string);
+            
         } catch (error) {
             this.m_logger.error(`getStorageBalance error=${error}`);
-            return new BigNumber(0);
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
     // 获取pending中的balance
-    protected async getBalance(s: string): Promise<BigNumber> {
+    protected async getBalance(s: string): Promise<{ err: ErrorCode, value?: BigNumber}> {
         if (this.m_balance.has(s)) {
-            return this.m_balance.get(s) as BigNumber;
+            return { err: ErrorCode.RESULT_OK, value: this.m_balance.get(s)};
         }
-        return await this.getStorageBalance(s);
+        return this.getStorageBalance(s);
     }
 
     protected async checkSmallNonceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<ErrorCode> {
         if (txNew.fee.gt(txOld.fee)) {
-            await this.updateBalance(txNew.address as string, (await this.getBalance(txNew.address as string)).plus(txOld.value).minus(txNew.value).plus(txOld.fee).minus(txNew.fee));
-            return ErrorCode.RESULT_OK;
+            let br = await this.getBalance(txNew.address as string);
+            if (br.err) {
+                return br.err;
+            }
+            return this._updateBalance(txNew.address as string, br.value!.plus(txOld.value).minus(txNew.value).plus(txOld.fee).minus(txNew.fee));
         }
 
         return ErrorCode.RESULT_FEE_TOO_SMALL;
     }
 
-    protected async updateBalance(address: string, v: BigNumber) {
-        let b: BigNumber = await this.getStorageBalance(address);
-        if (b.isEqualTo(v) && this.m_balance.has(address)) {
+    protected async _updateBalance(address: string, v: BigNumber): Promise<ErrorCode> {
+        let br = await this.getStorageBalance(address);
+        if (br.err) {
+            return br.err;
+        }
+        if (br.value!.isEqualTo(v) && this.m_balance.has(address)) {
             this.m_balance.delete(address);
         } else {
             this.m_balance.set(address, v);
         }
+        return ErrorCode.RESULT_OK;
     }
 
     protected addToQueue(txTime: TransactionWithTime) {

@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const net = require('net');
@@ -312,20 +338,8 @@ const algorithm = {
 }
 
 const TimeHelper = {
-    createTimeUpdateDetector(deviation, expectInterval) {
-        let lastTime = Date.now();
-        return interval => {
-            interval = interval || expectInterval;
-            let now = Date.now();
-            let nowString = new Date(now);
-            let lastTimeString = new Date(lastTime);
-            let delta = now - lastTime;
-            lastTime = now;
-            if (delta < interval - deviation || delta > interval + deviation) {
-                return [now, delta - interval];
-            }
-            return [now, 0];
-        }
+    uptimeMS() {
+        return Math.round(process.uptime() * 1000);
     },
 }
 
@@ -347,11 +361,13 @@ const HashDistance = {
         let md5 = Crypto.createHash('md5');
         md5.update(key);
         let md5Hash = md5.digest();
-        let hash = md5Hash.readUInt32BE(0);
-        if (bitCount === 16) {
-            hash = md5Hash.readUInt16BE(0);
+        if (bitCount === 32) {
+            let hash = md5Hash.readUInt32BE(0);
+            return algorithm.UInt(hash & (~HashDistance.HIGH_BIT_MASK));
+        } else {
+            let hash = md5Hash.readUInt16BE(0);
+            return algorithm.UInt(hash & (~HashDistance.HIGH_BIT_MASK16));
         }
-        return algorithm.UInt(hash & (~HashDistance.HIGH_BIT_MASK));
     },
     
     checkHash(key) {
@@ -440,6 +456,9 @@ const HashDistance = {
 
     // 仅仅用于在网络上得到两个理论上应该相等的hash值，这时候不检查最高位
     checkEqualHash(hash1, hash2) {
+        if (typeof hash1 !== 'number' || typeof hash2 !== 'number') {
+            return false;
+        }
         return ((hash1 ^ hash2) & (~HashDistance.HIGH_BIT_MASK)) == 0; // +-0
     },
 
@@ -480,6 +499,7 @@ const HashDistance = {
     HASH_BIT_COUNT: 32,
     HASH_MASK: 0xFFFFFFFF,//((1 << HASH_BIT_COUNT) - 1);
     HIGH_BIT_MASK: 0x80000000,//(1 << (HASH_BIT_COUNT - 1));
+    HIGH_BIT_MASK16: 0x8000,//(1 << (HASH_BIT_COUNT - 1));
     MAX_HASH: 0xFFFFFFFF, // HASH_MASK
 };
 
@@ -487,7 +507,7 @@ const HashDistance = {
 // 前置条件：不会短时间内产生溢出导致新序列号归0后再次追上旧的还生效的序列号
 const SequenceU32 = {
     random() {
-        return Math.floor(((Date.now() + Math.random() * 10000000) % 65535) * 32768);
+        return Math.floor(((Date.now() + Math.random() * 20160809) % 0xED89) * 32768);
     },
 
     compare(seq1, seq2) {

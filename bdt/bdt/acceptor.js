@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 "use strict";
 const EventEmitter = require('events');
 const assert = require('assert');
@@ -20,7 +46,7 @@ class BDTAcceptor extends EventEmitter {
         this.m_stack = stack;
         this.m_remoteMap = {};
         this.m_state = BDTAcceptor.STATE.init;
-        this.m_vport = options.vport;
+        this.m_vport = parseInt(options.vport);
 
         this.m_options = {
             // 是否允许半开连接：
@@ -78,12 +104,15 @@ class BDTAcceptor extends EventEmitter {
         return this.m_vport;
     }
 
-    _onPackage(decoder, remoteSender) {
+    _onPackage(decoder, remoteSender, isDynamic) {
         let header = decoder.header;
         if (header.cmdType === BDTPackage.CMD_TYPE.calledReq
             || header.cmdType === BDTPackage.CMD_TYPE.syn) {
             if (this.m_state !== BDTAcceptor.STATE.listening) {
                 return ;
+            }
+            if (typeof decoder.body.src !== 'string' || decoder.body.src.length === 0) {
+                return;
             }
             let err = BDT_ERROR.success;
             let remote = {
@@ -94,18 +123,13 @@ class BDTAcceptor extends EventEmitter {
             };
             let connection = this._getConnectionByRemote(remote);
             if (!connection) {
-                let remote = {
-                    peerid: decoder.body.src,
-                    peeridHash: header.src.peeridHash,
-                    vport: header.src.vport,
-                    sessionid: header.sessionid,
-                };
                 [connection, err] = this._createConnection(remote);
                 if (err) {
                     return ;
                 }
+                setImmediate(() => this.emit(BDTAcceptor.EVENT.accept, connection));
             }
-            connection._onPackage(decoder, remoteSender);
+            connection._onPackage(decoder, remoteSender, isDynamic);
         } else {
             assert(false, 'should not reach here.');
         } 
@@ -135,7 +159,7 @@ class BDTAcceptor extends EventEmitter {
         if (!portMap) {
             return null;
         }
-        return portMap[remote.vport];
+        return portMap[remote.sessionid];
     }
 
     _refRemote(remote, connection) {
@@ -145,8 +169,8 @@ class BDTAcceptor extends EventEmitter {
             portMap = {};
             remoteMap[remote.peerid] = portMap;
         }
-        assert(!portMap[remote.vport]);
-        portMap[remote.vport] = connection;
+        assert(!portMap[remote.sessionid]);
+        portMap[remote.sessionid] = connection;
     }
 
     _unrefRemote(remote, connection) {
@@ -155,8 +179,8 @@ class BDTAcceptor extends EventEmitter {
         if (!portMap) {
             return;
         }
-        if (portMap[remote.vport] === connection) {
-            delete portMap[remote.vport];
+        if (portMap[remote.sessionid] === connection) {
+            delete portMap[remote.sessionid];
         }
         if (!Object.keys(portMap).length) {
             delete remoteMap[remote.peerid];
@@ -164,7 +188,7 @@ class BDTAcceptor extends EventEmitter {
         if (this.m_state === BDTAcceptor.STATE.closing) {
             if (!Object.keys(remoteMap).length) {
                 this.m_stack._unrefPort(this.m_vport, this);
-                this.m_state === BDTAcceptor.STATE.closed;
+                this.m_state = BDTAcceptor.STATE.closed;
                 setImmediate(()=>{this.emit(BDTAcceptor.EVENT.close);});
             }
         }
@@ -172,7 +196,7 @@ class BDTAcceptor extends EventEmitter {
 
     _onConnection(connection) {
         // connection.removeAllListeners(BDTConnection.EVENT.error);
-        this.emit(BDTAcceptor.EVENT.connection, connection);
+        setImmediate(() => this.emit(BDTAcceptor.EVENT.connection, connection));
     }
 
     /* events
@@ -188,8 +212,9 @@ BDTAcceptor.STATE = {
 }
 
 BDTAcceptor.EVENT = {
+    accept: 'accept', // 对方正在尝试连接，还没成功，一般调试阶段用
     connection: 'connection',
-    close: 'close'
+    close: 'close',
 }
 
 module.exports = BDTAcceptor;

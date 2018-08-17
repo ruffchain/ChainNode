@@ -1,8 +1,9 @@
 import {ErrorCode} from '../error_code';
 import {IConnection, NodeConnection, INode} from '../net';
 import {BdtConnection} from './connection';
-const P2P = require('../../../../bdt/p2p/p2p');
-const {NetHelper} = require('../../../../bdt/base/util.js');
+import { randomBytes } from 'crypto';
+const P2P = require('../../../bdt/p2p/p2p');
+const {NetHelper} = require('../../../bdt/base/util.js');
 
 export class BdtNode extends INode {
     private m_options: any;
@@ -15,6 +16,7 @@ export class BdtNode extends INode {
     // vport 只是提供给bdt connect的一个抽象，可以不用在调用时传入
     // 先定死， bdt connect 和 listen都先用这个
     private m_vport: number = 3000;
+    private m_skipList: string[] = [];
 
     // 初始化传入tcp port和udp port，传入0就不监听对应协议
     // @param options { 
@@ -33,6 +35,8 @@ export class BdtNode extends INode {
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
 
+        this.m_skipList.push(options.peerid);
+        this.m_skipList.push(this.m_options.snPeer.peerid);
     }
 
     public async init() {
@@ -94,42 +98,22 @@ export class BdtNode extends INode {
     // 在测试阶段这种方法实现比较及时, 后面可能考虑用会dht中的randomPeers
     async randomPeers(count: number): Promise<{ err: ErrorCode, peers: string[] }> {
         let dhtPeerid  = this.m_snPeerid;
-        let res = await this.m_dht.findPeer(this.m_peerid);
+        let res = await this.m_dht.findPeer(randomBytes(8).toString('hex'));
         // 过滤掉自己和种子peer
-        let peers: any = res.n_nodes.filter((val: any) => {
-            return val.id !== this.m_peerid && val.id !== dhtPeerid;
+        let peers: any = res.peerlist.filter((val: any) => {
+            if (this.m_skipList.includes(val.peerid)) {
+                return false;
+            }
+            let ready = val.getAdditionalInfo('ready');
+            // console.log(peer.peerid, 'ready', ready)
+            if ( ready !== 1 ) {
+                return false;
+            }
+            return true;
         });
-
-        // 试一下这些节点能不能握手
-        const ops = peers.map((val: any, key: any) => {
-            return new Promise((resolve) => {
-                // console.log('handshake', val.id)
-                this.m_dht.handshake({
-                    peerid: val.id,
-                    eplist: val.eplist
-                }, null, (result: number, peer: any) => {
-                    // 如果节点不能握手， 应该是已经实际下线， 剔除掉
-                    if ( result !== 0 ) {
-                        delete peers[key];
-                    } else {
-                        // 节点握手成功， 但是没有ready(没有listen), 这时候不应该去尝试connect peer
-                        // 所以 ready 不等于1的节点也剔除掉
-                        let ready = peer.getAdditionalInfo('ready');
-                        // console.log(peer.peerid, 'ready', ready)
-                        if ( ready !== 1 ) {
-                            delete peers[key];
-                        }
-                    }
-                    resolve();
-                });
-            });
-        });
-        // 处理握手promise
-        await Promise.all(ops);
-        // console.log('peers',peers)
 
         // 过滤 peers 中undefined(已经被剔除)
-        let peerids = peers.filter((val: any) => val).map((val: any) => val.id);
+        let peerids = peers.filter((val: any) => val).map((val: any) => val.peerid);
 
         // 如果peer数量比传入的count多， 需要随机截取
         if ( peerids.length > count ) {

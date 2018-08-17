@@ -1,11 +1,9 @@
-import {ErrorCode} from '../error_code';
-
 class ClassNotfiy {
     protected m_resolve: any;
     protected m_reject: any;
     constructor(resolve: any, reject: any) {
         this.m_resolve = resolve;
-        this.m_reject = reject
+        this.m_reject = reject;
     }
 
     get resolve(): any {
@@ -16,7 +14,6 @@ class ClassNotfiy {
         return this.m_reject;
     }
 }
-
 
 export class Lock {
     protected m_busy: boolean;
@@ -29,7 +26,7 @@ export class Lock {
         if (this.m_busy) {
             return new Promise((resolve, reject) => {
                 this.m_list.push(new ClassNotfiy(resolve, reject));
-            })
+            });
         }
         this.m_busy = true;
         return Promise.resolve(true);

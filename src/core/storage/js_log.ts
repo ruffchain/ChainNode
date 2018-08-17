@@ -1,7 +1,7 @@
 import { ErrorCode } from '../error_code';
-import * as BaseLogger from './logger';
+import {StorageLogger} from './logger';
 import {BufferReader, BufferWriter} from '../serializable';
-import {StorageTransaction, IWritableKeyValue, IReadWritableStorage} from './storage';
+import {StorageTransaction, IReadWritableKeyValue, IReadWritableStorage, IWritableDatabase} from './storage';
 
 class TransactionLogger implements StorageTransaction {
     constructor(private owner: JStorageLogger) {
@@ -24,9 +24,48 @@ class TransactionLogger implements StorageTransaction {
     }
 }
 
-class KeyValueLogger implements IWritableKeyValue {
+class KeyValueLogger implements IReadWritableKeyValue {
     constructor(private owner: JStorageLogger, private name: string) {
         
+    }
+
+    get(key: string): Promise<{ err: ErrorCode, value?: any }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+
+    hexists(key: string, field: string): Promise<{err: ErrorCode, value?: boolean}> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+
+    hget(key: string, field: string): Promise<{ err: ErrorCode, value?: any }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+    hmget(key: string, fields: string[]): Promise<{ err: ErrorCode, value?: any[] }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+    hlen(key: string): Promise<{ err: ErrorCode, value?: number }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+    hkeys(key: string): Promise<{ err: ErrorCode, value?: string[] }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+    hvalues(key: string): Promise<{ err: ErrorCode, value?: any[] }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+
+    hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+
+    lindex(key: string, index: number): Promise<{ err: ErrorCode, value?: any }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+
+    llen(key: string): Promise<{ err: ErrorCode, value?: number }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
+    }
+    lrange(key: string, start: number, stop: number): Promise<{ err: ErrorCode, value?: any[] }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
     }
     
     async set(key: string, value: any): Promise<{ err: ErrorCode }> {
@@ -43,9 +82,9 @@ class KeyValueLogger implements IWritableKeyValue {
         this.owner.appendLog(`await ${this.name}.hmset(${JSON.stringify(key)}, ${JSON.stringify(fields)}, ${JSON.stringify(values)});`);
         return {err: ErrorCode.RESULT_OK};
     }
-    async hclean(key: string): Promise<ErrorCode> {
+    async hclean(key: string): Promise<{err: ErrorCode}> {
         this.owner.appendLog(`await ${this.name}.hclean(${JSON.stringify(key)});`);
-        return ErrorCode.RESULT_OK;
+        return {err: ErrorCode.RESULT_OK};
     }
 
     public async hdel(key: string, field: string): Promise<{err: ErrorCode}> {
@@ -90,20 +129,46 @@ class KeyValueLogger implements IWritableKeyValue {
         return {err: ErrorCode.RESULT_OK};
     }
     async lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }> {
-        this.owner.appendLog(`await ${this.name}.hset(${JSON.stringify(key)}, ${index});`);
+        this.owner.appendLog(`await ${this.name}.lremove(${JSON.stringify(key)}, ${index});`);
         return {err: ErrorCode.RESULT_OK};
     }
 }
 
-export class JStorageLogger implements BaseLogger.StorageLogger {
+class DatabaseLogger implements IWritableDatabase {
+    constructor(readonly owner: JStorageLogger, readonly name: string) {
+
+    }
+
+    private m_nextVal: number = 0;
+
+    private _kvVal(): string {
+        let val = `${this.name}kv${this.m_nextVal}`;
+        ++this.m_nextVal;
+        return val;
+    }
+
+    async createKeyValue(name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> {
+        let val = this._kvVal();
+        this.owner.appendLog(`let ${val} = (await ${this.name}.createKeyValue(${JSON.stringify(name)})).kv;`);
+        return {err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val)};
+    }
+
+    async getReadWritableKeyValue(name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> {
+        let val = this._kvVal();
+        this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValue(${JSON.stringify(name)})).kv;`);
+        return {err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val)};
+    }
+}
+
+export class JStorageLogger implements StorageLogger {
     constructor() {
         this.m_log = '';
     }
     private m_log: string = '';
     private m_nextVal: number = 0;
 
-    private _kvVal(): string {
-        let val = `kv${this.m_nextVal}`;
+    private _dbVal(): string {
+        let val = `db${this.m_nextVal}`;
         ++this.m_nextVal;
         return val;
     }
@@ -118,9 +183,9 @@ export class JStorageLogger implements BaseLogger.StorageLogger {
         });
     }
 
-    encode(writer: BufferWriter): BufferWriter {
+    encode(writer: BufferWriter): ErrorCode {
         writer.writeVarString(this.m_log);
-        return writer;
+        return ErrorCode.RESULT_OK;
     }
 
     decode(reader: BufferReader): ErrorCode {
@@ -140,19 +205,19 @@ export class JStorageLogger implements BaseLogger.StorageLogger {
         this.m_log += log;
     }
 
-    async createKeyValue(name: string): Promise<{err: ErrorCode, kv?: IWritableKeyValue}> {
-        let val = this._kvVal();
-        this.appendLog(`let ${val} = (await storage.createKeyValue(${JSON.stringify(name)})).kv;`);
-        return {err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this, val)};
+    async createDatabase(name: string): Promise <{err: ErrorCode, value?: IWritableDatabase}> {
+        let val = this._dbVal();
+        this.appendLog(`let ${val} = (await storage.createKeyValue(${JSON.stringify(name)})).value;`);
+        return {err: ErrorCode.RESULT_OK, value: new DatabaseLogger(this, val)};
+    }
+
+    async getReadWritableDatabase(name: string): Promise <{err: ErrorCode, value?: IWritableDatabase}> {
+        let val = this._dbVal();
+        this.appendLog(`let ${val} = (await storage.getReadWritableDatabase(${JSON.stringify(name)})).value;`);
+        return {err: ErrorCode.RESULT_OK, value: new DatabaseLogger(this, val)};
     }
 
     async beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }> {
         return {err: ErrorCode.RESULT_OK, value: new TransactionLogger(this)};
-    }
-
-    async getReadWritableKeyValue(name: string): Promise<{err: ErrorCode, kv?: IWritableKeyValue}> {
-        let val = this._kvVal();
-        this.appendLog(`let ${val} = (await storage.getReadWritableKeyValue(${JSON.stringify(name)})).kv;`);
-        return {err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this, val)};
     }
 }

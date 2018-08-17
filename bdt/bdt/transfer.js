@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 "use strict";
 const EventEmitter = require('events');
 const baseModule = require('../base/base');
@@ -9,6 +35,20 @@ const BDT_ERROR = packageModule.BDT_ERROR;
 const BDTSendBuffer = require('./send_buffer');
 const assert = require('assert');
 const SequenceU32 = BaseUtil.SequenceU32;
+const TimeHelper = BaseUtil.TimeHelper;
+
+const _DEBUG = false;
+
+let md5 = null;
+if (_DEBUG) {
+    md5 = buffer => {
+        const Crypto = require('crypto');
+        let md5 = Crypto.createHash('md5');
+        md5.update(buffer);
+        let md5Hash = md5.digest();
+        return md5Hash.readUInt32BE(0);
+    }
+}
 
 const AckType = {
     ack: 1,
@@ -63,7 +103,7 @@ class BDTSendQueue {
         }
         encoder.header.seq = this.m_connection._nextSeq(encoder.dataLength + 1);
         let stub = {
-            sentTime: Date.now(),
+            sentTime: TimeHelper.uptimeMS(),
             limitAckSeq: encoder.nextSeq, // 要在limitAckSeq被确认之前ack，否则应当择机重传
             sackCount: 0, // 该包后续分包被ack的数量
             package: encoder,
@@ -197,29 +237,20 @@ class BDTSendQueue {
         _doSACK(this.m_waitResend);
     }
 
-    resendWaitAck(timeout, opt, onResent) {
-        let now = opt.now || Date.now();
-        let timeRevise = opt.timeRevise || 0;
+    resendWaitAck(timeout, onResent) {
+        let now = TimeHelper.uptimeMS();
         let count = 0;
         let index = 0;
         let isTimeout = () => {
-            let out = false;
             for (; index < this.m_waitAck.length; index++) {
                 let stub = this.m_waitAck[index];
                 assert(stub.sentTime > 0, `sentTime:${stub.sentTime}`);
-                stub.sentTime += timeRevise;
-                if (out) {
-                    continue;
-                }
                 let diff = now - stub.sentTime;
-                if (diff > timeout || diff < 0) {
-                    out = true;
-                    if (!timeRevise) {
-                        break;
-                    }
+                if (diff > timeout) {
+                    return true;
                 }
             }
-            return out;
+            return false;
         }
 
         if (!isTimeout()) {
@@ -233,7 +264,7 @@ class BDTSendQueue {
             assert(stub.sentTime > 0, `sentTime:${stub.sentTime}`);
             
             let diff = now - stub.sentTime;
-            if (diff > rtoMin || diff < 0) {
+            if (diff > rtoMin) {
                 stub.lastSentTime = stub.sentTime;
                 stub.sentTime = now;
                 stub.limitAckSeq = stub.package.nextSeq;
@@ -266,7 +297,7 @@ class BDTSendQueue {
             return 0;
         }
 
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let lastResendIndex = 0;
         for (lastResendIndex = 0; lastResendIndex < this.m_waitResend.length; lastResendIndex++) {
             let stub = this.m_waitResend[lastResendIndex];
@@ -298,7 +329,7 @@ class BDTSendQueue {
         let _send = stub => {
             stub.package.header.isResend = true;
             stub.lastSentTime = stub.sentTime;
-            stub.sendTime = Date.now();
+            stub.sentTime = TimeHelper.uptimeMS();
             stub.limitAckSeq = SequenceU32.add(this.maxWaitAckSeq, 1);
             stub.sackCount = 0;
             this.m_transfer._postPackage(stub.package);
@@ -334,7 +365,7 @@ class BDTRecvQueue {
         this.m_pending = [];
         this.m_lastAckSeq = 0;
         this.m_quickAckCount = opt.quickAckCount;
-        this.m_lastRecvTime = Date.now();
+        this.m_lastRecvTime = TimeHelper.uptimeMS();
         this.m_ato = opt.ackTimeoutMax;
     }
 
@@ -488,17 +519,14 @@ class BDTRecvQueue {
     }
 
     _updateAto() {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let lastRecvTime = this.m_lastRecvTime;
         const opt = this.m_connection.stack._getOptions();
         const atoMin = opt.ackTimeoutMin;
         const atoMax = opt.ackTimeoutMax;
 
         this.m_lastRecvTime = now;
-        if (now <= this.m_lastRecvTime) {
-            this.m_ato = atoMin;
-            return;
-        }
+
         const delta = now - lastRecvTime;
         const halfATOMin = atoMin / 2;
 
@@ -552,7 +580,7 @@ class Reno {
 
     onAck(ackedSize, pkgStub, sendQueue, ackPkg) {
         if (ackedSize > 0) {
-            let now = Date.now();
+            let now = TimeHelper.uptimeMS();
             if (!pkgStub.package.header.isResend || now - pkgStub.lastSentTime > this.m_rto) {
                 let rtt = now - pkgStub.sentTime;
                 const alpha = 1/8;
@@ -682,11 +710,9 @@ class BDTTransfer {
         
         this.m_cc = new Reno(this.m_connection);
         
-        let timeUpdateDetect = BaseUtil.TimeHelper.createTimeUpdateDetector(opt.timeoutDeviation, opt.resendInterval);
         this.m_resendTimer = setInterval(()=>{
-            const [now, timeRevise] = timeUpdateDetect();
             let resendSize = 0;
-            const count = this.m_sendQueue.resendWaitAck(this.m_cc.rto, {now, timeRevise}, stub => {
+            const count = this.m_sendQueue.resendWaitAck(this.m_cc.rto, stub => {
                 if (resendSize === 0) {
                     this._hasAck();
                     this.m_cc.onOvertime();
@@ -789,12 +815,13 @@ class BDTTransfer {
                 }
             }
 
-            // <TODO> DEBUG
-            if (decoder.body && decoder.body.debug) {
-                let now = Date.now();
-                blog.debug(`recv data: senttime:${decoder.body.debug.time},now:${now},consum:${now-decoder.body.debug.time},seq:${decoder.header.seq},ackType:${ackType}`);
-                if (ackType !== AckType.data) {
-                    blog.debug(`recv data-ack: remote.cc:${JSON.stringify(decoder.body.debug)}`);
+            if (_DEBUG) {
+                if (decoder.body && decoder.body.debug) {
+                    let now = Date.now();
+                    blog.debug(`recv data: senttime:${decoder.body.debug.time},now:${now},consum:${now-decoder.body.debug.time},seq:${decoder.header.seq},ackType:${ackType}`);
+                    if (ackType !== AckType.data) {
+                        blog.debug(`recv data-ack: remote.cc:${JSON.stringify(decoder.body.debug)}`);
+                    }
                 }
             }
 
@@ -832,6 +859,18 @@ class BDTTransfer {
                 _doAck(true);
                 return ;
             }
+
+            if (_DEBUG) {
+                if (decoder.body.debug && decoder.body.debug.length) {
+                    assert(decoder.data.length === decoder.body.debug.length, `${decoder.body.debug.length}|${decoder.data.length}`);
+                }
+                if (decoder.body.debug && decoder.body.debug.md5) {
+                    let data = decoder.data || Buffer.concat([]);
+                    let decoderMD5 = md5(data);
+                    assert(decoderMD5 === decoder.body.debug.md5, `${decoder.body.debug.md5}|${decoderMD5}|${data.toString('hex')}`);
+                }
+            }
+
             let unpend = recvQueue.addPackage(decoder);
             if (unpend) {
                 _doAck(false);
@@ -883,19 +922,21 @@ class BDTTransfer {
             encoder.header.finalAck = true;
         }
 
-        // <TODO> DEBUG
-        encoder.body.debug = {
-            cwnd: this.m_cc.cwnd,
-            rto: this.m_cc.rto,
-            srtt: this.m_cc.srtt,
-            state: this.m_cc.m_state,
-            ssthresh: this.m_cc.m_ssthresh,
-            flightSize: this.m_sendQueue.flightSize,
-            sentSeq: this.m_sendQueue.sentSeq,
-            ackSeq: this.m_sendQueue.ackSeq,
-            sendBuffer: this.m_sendBuffer.curSize,
-            ato: this.m_recvQueue.ato,
+        if (_DEBUG) {
+            encoder.body.debug = {
+                cwnd: this.m_cc.cwnd,
+                rto: this.m_cc.rto,
+                srtt: this.m_cc.srtt,
+                state: this.m_cc.m_state,
+                ssthresh: this.m_cc.m_ssthresh,
+                flightSize: this.m_sendQueue.flightSize,
+                sentSeq: this.m_sendQueue.sentSeq,
+                ackSeq: this.m_sendQueue.ackSeq,
+                sendBuffer: this.m_sendBuffer.curSize,
+                ato: this.m_recvQueue.ato,
+            }
         }
+
         this._postPackage(encoder);
     }
 
@@ -970,11 +1011,11 @@ class BDTTransfer {
     _finalAck() {
         const opt = this.m_connection.stack._getOptions();
         let ackTimeout = Math.max(this.m_cc.srtt, opt.ackTimeoutMax);
-        let lastAckTime = Date.now();
+        let lastAckTime = TimeHelper.uptimeMS();
 
         let timer = setInterval(() => {
-            let now = Date.now();
-            if (now - lastAckTime >= ackTimeout || lastAckTime > now) {
+            let now = TimeHelper.uptimeMS();
+            if (now - lastAckTime >= ackTimeout) {
                 ackTimeout <<= 1;
                 lastAckTime = now;
                 this._ackImmediately(true);
@@ -987,7 +1028,7 @@ class BDTTransfer {
             },
 
             onAcked: () => {
-                lastAckTime = Date.now();
+                lastAckTime = TimeHelper.uptimeMS();
             },
 
             close: () => {
@@ -1007,8 +1048,14 @@ class BDTTransfer {
         }
 
         // <TODO> DEBUG
-        pkg.body.debug = pkg.body.debug || {};
-        pkg.body.debug.time = Date.now();
+        if (_DEBUG) {
+            pkg.body.debug = pkg.body.debug || {};
+            pkg.body.debug.time = Date.now();
+            let data = pkg.data;
+            pkg.body.debug.length = data.length;
+            pkg.body.debug.md5 = md5(data);
+            pkg.change();
+        }
         
         this.m_connection._postPackage(pkg);
         this._hasAck();

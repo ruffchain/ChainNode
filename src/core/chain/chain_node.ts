@@ -5,10 +5,7 @@ import {ErrorCode} from '../error_code';
 import {LoggerInstance, initLogger, LoggerOptions} from '../lib/logger_util';
 import { StorageManager, StorageLogger, StorageDumpSnapshot, JStorageLogger } from '../storage';
 
-import {Transaction} from './transaction';
-import {BlockContent, BlockHeader, Block} from './block';
-import { BlockStorage } from './block_storage';
-import { VERIFY_STATE, HeaderStorage } from './header_storage';
+import {Transaction, BlockContent, BlockHeader, Block, BlockStorage, VERIFY_STATE, HeaderStorage} from '../block';
 
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
@@ -22,6 +19,7 @@ export enum SYNC_CMD_TYPE {
     getBlock = CMD_TYPE.userCmd + 2,
     block = CMD_TYPE.userCmd + 3,
     tx = CMD_TYPE.userCmd + 5,
+    end = CMD_TYPE.userCmd + 6,
 }
 
 export type ChainNodeOptions = {
@@ -32,6 +30,15 @@ export type ChainNodeOptions = {
     minOutbound?: number;
     nodeCacheSize?: number;
     dataDir: string;
+};
+
+export type  ChainNodeOptionsEx = {
+    blockHeaderType: new () => BlockHeader;
+    transactionType: new () => Transaction;
+    blockStorage: BlockStorage, 
+    headerStorage: HeaderStorage, 
+    storageManager: StorageManager,
+    logger: LoggerInstance
 };
 
 type RequestingBlockConnection = {
@@ -63,14 +70,7 @@ export enum BAN_LEVEL {
 }
 
 export class ChainNode extends EventEmitter {
-    constructor(options: ChainNodeOptions & {
-        blockHeaderType: new () => BlockHeader;
-        transactionType: new () => Transaction;
-        blockStorage: BlockStorage, 
-        headerStorage: HeaderStorage, 
-        storageManager: StorageManager,
-        logger: LoggerInstance}
-    ) {
+    constructor(options: ChainNodeOptions & ChainNodeOptionsEx) {
         super();
         // net/node
         this.m_node = options.node;
@@ -144,6 +144,10 @@ export class ChainNode extends EventEmitter {
         await this.m_node.init();
     }
 
+    public get logger(): LoggerInstance {
+        return this.m_logger;
+    }
+
     public get node(): INode {
         return this.m_node;
     }
@@ -187,7 +191,9 @@ export class ChainNode extends EventEmitter {
                 }
             }
             for (let pid of willConnPeerids) {
-                return false;
+                if (pid === peerid) {
+                    return false;
+                }
             }
 
             return true;
@@ -216,16 +222,54 @@ export class ChainNode extends EventEmitter {
                 return result.err;
             }
         }
+        
+        return await this.connectTo(willConnPeerids, callback);
+    }
+
+    public async connectTo(willConnPeerids: string[], callback?: (count: number) => void): Promise<ErrorCode> {
         if (willConnPeerids.length === 0) {
+            if (callback) {
+                callback(0);
+            }
             return ErrorCode.RESULT_OK;
         }
+
+        let canUse: (peerid: string) => boolean = (peerid: string): boolean => {
+            if (this.m_nodeStorage.isBan(peerid)) {
+                return false;
+            }
+
+            let outConns: NodeConnection[] = this.m_node.getOutbounds();
+            for (let outConn of outConns) {
+                if (outConn.getRemote() === peerid) {
+                    return false;
+                }
+            }
+
+            for (let pid of this.m_connectingPeerids) {
+                if (pid === peerid) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
  
-        this.m_connectingCount += willConnPeerids.length;
         let ops = [];
         for (let peer of willConnPeerids) {
-            this.m_connectingPeerids.push(peer);
-            ops.push(this.m_node.connectTo(peer));
+            if (canUse(peer)) {
+                this.m_connectingPeerids.push(peer);
+                ops.push(this.m_node.connectTo(peer));
+            }
         }
+        if (ops.length === 0) {
+            if (callback) {
+                callback(0);
+            }
+            return ErrorCode.RESULT_OK;
+        }
+        let count: number = ops.length;
+        this.m_connectingCount += count;
         let deleteFrom: (pid: string, pidArray: string[]) => void = (pid: string, pidArray: string[]) => {
             for (let i = 0; i < pidArray.length; i++) {
                 if (pidArray[i] === pid) {
@@ -235,7 +279,7 @@ export class ChainNode extends EventEmitter {
             }
         };
         Promise.all(ops).then((results) => {
-            this.m_connectingCount -= willConnPeerids.length;
+            this.m_connectingCount -= count;
             let connCount = 0;
             for (let r of results) {
                 deleteFrom(r.peerid, this.m_connectingPeerids);
@@ -280,7 +324,11 @@ export class ChainNode extends EventEmitter {
         if (content[0] instanceof BlockHeader) {
             let hwriter = new BufferWriter();
             for (let header of content) {
-                header.encode(hwriter);
+                let err = header.encode(hwriter);
+                if (err) {
+                    this.m_logger.error(`encode header ${header.hash} failed`);
+                    return err;
+                }
             }
             let raw = hwriter.render();
             pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, {count: content.length}, raw.length);
@@ -288,7 +336,11 @@ export class ChainNode extends EventEmitter {
         } else if (content[0] instanceof Transaction) {
             let hwriter = new BufferWriter();
             for (let tx of content) {
-                tx.encode(hwriter);
+                let err = tx.encode(hwriter);
+                if (err) {
+                    this.m_logger.error(`encode transaction ${tx.hash} failed`);
+                    return err;
+                }
             }
             let raw = hwriter.render();
             pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.tx, {count: content.length}, raw.length);
@@ -542,6 +594,7 @@ export class ChainNode extends EventEmitter {
     }
 
     public banConnection(remote: string, level: BAN_LEVEL) {
+        this.m_logger.warn(`banned peer ${remote} for ${level}`);
         this.m_nodeStorage.ban(remote, level);
         this.m_node.banConnection(remote);
         this._onRemoveConnection(remote);
@@ -771,7 +824,11 @@ export class ChainNode extends EventEmitter {
             assert(false, `${this.m_node.peerid} cannot get Block ${req.hash} from blockStorage`);
             return ErrorCode.RESULT_OK;
         }
-        block.encode(bwriter);
+        let err = block.encode(bwriter);
+        if (err) {
+            this.m_logger.error(`encode block ${block.hash} failed`);
+            return err;
+        }
         let rawBlocks = bwriter.render();
 
         // 如果请求参数里设置了redoLog,  则读取redoLog, 合并在返回的包里
@@ -779,7 +836,11 @@ export class ChainNode extends EventEmitter {
             let redoLogWriter = new BufferWriter();
             // 从本地文件中读取redoLog, 处理raw 拼接在block后
             let redoLog = this.m_storageManager.getRedoLog(req.hash);
-            redoLog!.encode(redoLogWriter);
+            err = redoLog!.encode(redoLogWriter);
+            if (err) {
+                this.m_logger.error(`encode redolog ${req.hash} failed`);
+                return err;
+            }
             let redoLogRaw = redoLogWriter.render();
 
             let dataLength = rawBlocks.length + redoLogRaw.length;
@@ -895,7 +956,11 @@ export class ChainNode extends EventEmitter {
                     break;
                 }
                 for (let h of hsr.headers!) {
-                    h.encode(hwriter);
+                    let err = h.encode(hwriter);
+                    if (err) {
+                        this.m_logger.error(`encode header ${h.hash} failed`);
+                        respErr = ErrorCode.RESULT_NOT_FOUND;
+                    }
                 }
             } while (false);
             

@@ -9,7 +9,7 @@ export class ViewContext {
 
     async getBalance(address: string): Promise<BigNumber> {
         let retInfo = await this.kvBalance.get(address);
-        return retInfo.err === ErrorCode.RESULT_OK ? new BigNumber(retInfo.value as string) : new BigNumber(0);
+        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
     }
 }
 
@@ -23,13 +23,13 @@ export class Context extends ViewContext {
         if (fromTotal.lt(amount)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
-        await (this.kvBalance as IReadWritableKeyValue).set(from, fromTotal.minus(amount).toString());
-        await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount).toString());
+        await (this.kvBalance as IReadWritableKeyValue).set(from, fromTotal.minus(amount));
+        await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount));
         return ErrorCode.RESULT_OK;
     }
 
     async issue(to: string, amount: BigNumber): Promise<ErrorCode> {
-        let sh = await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount).toString());
+        let sh = await (this.kvBalance as IReadWritableKeyValue).set(to, (await this.getBalance(to)).plus(amount));
         return ErrorCode.RESULT_OK;
     }
 }

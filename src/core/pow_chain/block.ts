@@ -50,17 +50,33 @@ export class PowBlockHeader extends ValueBlockHeader {
         this.m_nonce1 = nonce;
     }
 
-    protected _encodeHashContent(writer: BufferWriter): BufferWriter {
-        writer = super._encodeHashContent(writer);
-        writer.writeU32(this.m_bits);
-        return writer;
+    protected _encodeHashContent(writer: BufferWriter): ErrorCode {
+        let err = super._encodeHashContent(writer);
+        if (err) {
+            return err;
+        }
+        try {
+            writer.writeU32(this.m_bits);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
+        return ErrorCode.RESULT_OK;
     }
 
-    public encode(writer: BufferWriter): BufferWriter {
-        writer = super.encode(writer);
-        writer.writeU32(this.m_nonce);
-        writer.writeU32(this.m_nonce1);
-        return writer;
+    public encode(writer: BufferWriter): ErrorCode {
+        let err = super.encode(writer);
+        if (err) {
+            return err;
+        }
+        try {
+            writer.writeU32(this.m_nonce);
+            writer.writeU32(this.m_nonce1);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        
+        return ErrorCode.RESULT_OK;
     }
 
     protected _decodeHashContent(reader: BufferReader): ErrorCode {
@@ -109,7 +125,11 @@ export class PowBlockHeader extends ValueBlockHeader {
     }
 
     public verifyPOW(): boolean {
-        let content: Buffer = this.encode(new BufferWriter()).render();
+        let writer = new BufferWriter();
+        if (this.encode(writer)) {
+            return false;
+        }
+        let content: Buffer = writer.render();
         return consensus.verifyPOW(digest.hash256(content), this.m_bits);
     }
 

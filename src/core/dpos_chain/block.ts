@@ -33,9 +33,9 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
             return {err: ErrorCode.RESULT_OK};
         }
         // 不能偏离太远
-        let src = Math.trunc(offset / chain.globalConfig.getConfig('blockInterval'));
-        let min = Math.trunc((offset - chain.globalConfig.getConfig('maxBlockIntervalOffset')) / chain.globalConfig.getConfig('blockInterval'));
-        let max = Math.trunc((offset + chain.globalConfig.getConfig('maxBlockIntervalOffset')) / chain.globalConfig.getConfig('blockInterval'));
+        let src = Math.trunc(offset / chain.globalOptions.blockInterval);
+        let min = Math.trunc((offset - chain.globalOptions.maxBlockIntervalOffset) / chain.globalOptions.blockInterval);
+        let max = Math.trunc((offset + chain.globalOptions.maxBlockIntervalOffset) / chain.globalOptions.blockInterval);
         if (src === min && src === max) {
             return {err: ErrorCode.RESULT_OK, index: src};
         } else if (src !== min) {

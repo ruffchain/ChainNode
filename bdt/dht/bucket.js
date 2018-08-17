@@ -1,9 +1,37 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const Base = require('../base/base.js');
 const {Config, HashDistance, RandomGenerator, EndPoint} = require('./util.js');
 const Peer = require('./peer.js');
 const assert = require('assert');
+const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_INFO = Base.BX_INFO;
 const LOG_WARN = Base.BX_WARN;
@@ -47,6 +75,14 @@ class Bucket {
         if (peer.peerid === this.m_localPeer.peerid) {
             //return {peer:this.m_localPeer.peerid, isNew: false, discard: false};
             peer = this.m_localPeer;
+        }
+
+        let now = TimeHelper.uptimeMS();
+        if (isReceived) {
+            this.m_localPeer.lastRecvTime = now;
+            if (peer.address && peer.address.protocol === EndPoint.PROTOCOL.udp) {
+                this.m_localPeer.lastRecvTimeUDP = now;
+            }
         }
 
         let discard = false;
@@ -111,15 +147,15 @@ class Bucket {
     findClosestPeers(peerid, {excludePeerids = null, count = BucketConfig.FindPeerCount, maxDistance = HashDistance.MAX_HASH} = {}) {
         let hash = HashDistance.checkHash(peerid);
         let {subBucket, index} = this._findBucket(hash);
-        let foundPeerList = subBucket.findClosestPeers(hash, {excludePeerids, count});
+        let foundPeerList = subBucket.findClosestPeers(hash, {excludePeerids, count, maxDistance});
 
         for (let i = index + 1; foundPeerList.length < count && i < this.m_buckets.length; i++) {
-            let peerList = this.m_buckets[i].findClosestPeers(hash, {excludePeerids, count: count - foundPeerList.length});
+            let peerList = this.m_buckets[i].findClosestPeers(hash, {excludePeerids, count: count - foundPeerList.length, maxDistance});
             foundPeerList.push(...peerList);
         }
 
         for (let i = index - 1; foundPeerList.length < count && i >= 0; i--) {
-            let peerList = this.m_buckets[i].findClosestPeers(hash, {excludePeerids, count: count - foundPeerList.length});
+            let peerList = this.m_buckets[i].findClosestPeers(hash, {excludePeerids, count: count - foundPeerList.length, maxDistance});
             foundPeerList.push(...peerList);
         }
         return foundPeerList;
@@ -297,7 +333,7 @@ class SubBucket {
             }
         }
 
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         if (isSent) {
             targetPeer.lastSendTime = now;
         }
@@ -319,8 +355,10 @@ class SubBucket {
                 let isAddressUpdate = !targetPeer.address || // 原PEER的address是空
                                     !targetPeer.isOnline(this.m_bucket.TIMEOUT_MS) || // 原PEER已经不在线
                                     !targetPeer.address.__recvTime || // 原PEER的address接收时间没设定
-                                    now - targetPeer.address.__recvTime >= Config.Package.Timeout || // 原PEER的address接收时间已超时，主要防止一个PEER有UDP和TCP地址，TCP一般后抵达，会覆盖原UDP地址
-                                    (peer.address.protocol === EndPoint.PROTOCOL.udp && targetPeer.address.protocol === EndPoint.PROTOCOL.tcp); // 用UDP地址替换TCP地址
+                                    peer.address.protocol === EndPoint.PROTOCOL.udp || // UDP直接覆盖
+                                    (peer.address.protocol === EndPoint.PROTOCOL.tcp && // 优先用UDP，要用TCP替换UDP，必须等之前的UDP地址超时
+                                        targetPeer.address.protocol === EndPoint.PROTOCOL.udp && 
+                                        now - targetPeer.address.__recvTime >= Config.Package.Timeout);
                 if (isAddressUpdate) {
                     targetPeer.address = peer.address;
                 }
@@ -367,7 +405,6 @@ class SubBucket {
             return;
         }
         
-        let now = Date.now();
         // timeout
         for (let i = this.m_peerList.length - 1; i >= 0; i--) {
             let peer = this.m_peerList[i];
@@ -399,7 +436,7 @@ class SubBucket {
                 continue;
             }
             let curPeerDistance = HashDistance.calcDistanceByHash(curPeer.hash, hash);
-            if (HashDistance.compareHash(curPeerDistance, maxDistance) > 0) {
+            if (HashDistance.compareHash(curPeerDistance, maxDistance) >= 0) {
                 continue;
             }
 

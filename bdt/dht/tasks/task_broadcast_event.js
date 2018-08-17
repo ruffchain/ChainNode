@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const Base = require('../../base/base.js');
@@ -8,6 +34,8 @@ const {ResendControlor} = require('../package_sender.js');
 const {Peer} = require('../peer.js');
 const Bucket = require('../bucket.js');
 const DHTCommandType = DHTPackage.CommandType;
+const BaseUtil = require('../../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_TRACE = Base.BX_TRACE;
 const LOG_INFO = Base.BX_INFO;
@@ -95,7 +123,7 @@ class BroadcastEventTask extends Task {
             respPackage.common.packageID = cmdPackage.common.packageID;
             respPackage.common.ackSeq = cmdPackage.common.seq;
             respPackage.body = {taskid: cmdPackage.body.taskid};
-            if (cmdPackage.body.r_hashbits) {
+            if (cmdPackage.body.r_hashbits && typeof cmdPackage.body.r_hashbits === 'number') {
                 let remotePeerHash = remotePeer.hash || HashDistance.hash(remotePeer.peerid);
                 let mask = HashDistance.moveRight(HashDistance.HASH_MASK, cmdPackage.body.r_hashbits);
                 let maxDistance = HashDistance.or(remotePeerHash, mask);
@@ -137,8 +165,12 @@ class BroadcastEventTask extends Task {
         onPeerArrived(remotePeer);
 
         if (cmdPackage.cmdType === DHTCommandType.BROADCAST_EVENT_RESP &&
-            cmdPackage.body.r_nodes) {
-                cmdPackage.body.r_nodes.forEach(peerid => onPeerArrived({peerid, eplist: []}));
+            cmdPackage.body.r_nodes && Array.isArray(cmdPackage.body.r_nodes)) {
+                cmdPackage.body.r_nodes.forEach(peerid => {
+                    if (typeof peerid === 'string' && peerid.length > 0) {
+                        onPeerArrived({peerid, eplist: []})
+                    }
+                });
         }
 
         if (cmdPackage.cmdType === DHTCommandType.BROADCAST_EVENT_RESP) {
@@ -166,7 +198,7 @@ class BroadcastEventTask extends Task {
             taskid: this.m_id,
             event: this.m_eventName,
             source: {peerid: this.m_sourcePeer.peerid, eplist: this.m_sourcePeer.eplist},
-            timeout: (this.deadline - Date.now()),
+            timeout: Math.max(this.deadline - TimeHelper.uptimeMS(), 809),
             r_hashbits: (Config.Bucket.BucketCount >>> 2), // 对方返回触达节点范围太大很难命中本地发送列表
         };
 
@@ -184,7 +216,7 @@ class BroadcastEventTask extends Task {
     }
 
     _broadcast(limitCount) {
-        this.m_package.body.timeout = this.deadline - Date.now();
+        this.m_package.body.timeout = Math.max(this.deadline - TimeHelper.uptimeMS(), 809);
 
         let sendCount = 0;
         let timeoutPeerids = [];

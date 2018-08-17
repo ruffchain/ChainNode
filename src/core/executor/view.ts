@@ -37,7 +37,7 @@ export class ViewExecutor {
     }
 
     protected async prepareContext(blockHeader: BlockHeader, storage: IReadableStorage, externContext: any): Promise<any> {
-        let kv =  (await storage.getReadableKeyValue(Chain.kvUser)).kv!;
+        let database = (await storage.getReadableDataBase(Chain.dbUser)).value!;
         let context = Object.create(externContext);
         // context.getNow = (): number => {
         //     return blockHeader.timestamp;
@@ -68,7 +68,7 @@ export class ViewExecutor {
         Object.defineProperty(
             context, 'storage', {
                 writable: false,
-                value: kv
+                value: database
             } 
         );
 
@@ -89,6 +89,7 @@ export class ViewExecutor {
         let context = await this.prepareContext(this.m_header, this.m_storage, this.m_externContext);
        
         try {
+            this.m_logger.info(`will execute view method ${this.m_method}, params ${JSON.stringify(this.m_param)}`);
             let v: any = await fcall(context, this.m_param);
             return {err: ErrorCode.RESULT_OK, value: v};
         } catch (error) {

@@ -4,160 +4,176 @@ import * as fs from 'fs-extra';
 
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {ValueChain, ChainOptions, INode, GlobalConfig, ChainCreator, ValueMinerOptions, ValueMiner, ErrorCode} from '../../core';
-import handler = require('../handler');
+import {INode, initChainCreator, initLogger} from '../../core';
 
 import {ChainServer} from './rpc';
-import { initLogger } from '../../core/lib/logger_util';
-
-type ConsensusInstance = {
-    chain: (commandOptions: CommandOptions) => Promise<ValueChain|undefined>;
-    miner: (options: ValueMinerOptions, commandOptions: CommandOptions) => ValueMiner|undefined;
-    create: (command: CommandOptions) => any|undefined;
-};
 
 type NetInstance = (commandOptions: CommandOptions) => INode|undefined;
 
-class ChainHost {
+export class ChainHost {
     constructor() {
         
     }
 
     public async initMiner(commandOptions: CommandOptions): Promise<boolean> {
-        let cc = await this.create(commandOptions, false);
-        if (cc.err) {
-            console.error(`create miner failed! err ${cc.err}`);
+        let dataDir = this._parseDataDir(commandOptions);
+        if (!dataDir) {
             return false;
         }
-
-        let ci = this.m_consensus.get(cc.consensus!);
-        if (!ci) {
-            console.error(`invalid consensus: ${cc.consensus}`);
+        let logger = this._parseLogger(dataDir, commandOptions);
+        let creator = initChainCreator({logger});
+        let cr = await creator.createMinerInstance(dataDir);
+        if (cr.err) {
             return false;
         }
-        let minerOptions: ValueMinerOptions = {};
-        minerOptions.coinbase = commandOptions.get('coinbase');
-        this.m_miner = ci.miner(minerOptions, commandOptions);
-
-        let ct: ChainCreator = new ChainCreator();
-        let err = await this.m_miner!.initialize(ct, commandOptions);
+        let node = this._parseNode(commandOptions);
+        if (!node) {
+            return false;
+        }
+        let pr = cr.miner!.parseInstanceOptions(node, commandOptions);
+        if (pr.err) {
+            return false;
+        }
+        let err = await cr.miner!.initialize(pr.value!);
         if (err) {
-            console.log(`miner initialize failed, err ${err}`);
             return false;
         }
-        this.m_chain = this.m_miner!.chain;
-        this.m_server = new ChainServer(this.m_chain!, this.m_miner);
+        this.m_server = new ChainServer(logger, cr.miner!.chain!, cr.miner!);
         this.m_server.init(commandOptions);
         return true;
     }
 
     public async initPeer(commandOptions: CommandOptions): Promise<boolean> {
-        let cc = await this.create(commandOptions, false);
-        if (cc.err) {
-            console.error(`create peer failed! err ${cc.err}`);
+        let dataDir = this._parseDataDir(commandOptions);
+        if (!dataDir) {
             return false;
         }
-
-        let ci = this.m_consensus.get(cc.consensus!);
-        if (!ci) {
-            console.error(`invalid consensus: ${cc.consensus}`);
+        let logger = this._parseLogger(dataDir, commandOptions);
+        let creator = initChainCreator({logger});
+        let cr = await creator.createChainInstance(dataDir);
+        if (cr.err) {
             return false;
         }
-        
-        this.m_chain = await ci.chain(commandOptions);
-        
-        this.m_server = new ChainServer(this.m_chain!, this.m_miner);
+        let node = this._parseNode(commandOptions);
+        if (!node) {
+            return false;
+        }
+        let pr = cr.chain!.parseInstanceOptions(node, commandOptions);
+        if (pr.err) {
+            return false;
+        }
+        let err = await cr.chain!.initialize(pr.value!);
+        if (err) {
+            return false;
+        }
+        this.m_server = new ChainServer(logger, cr.chain!);
         this.m_server.init(commandOptions);
         return true;
     }
 
+    private static CREATE_TIP = `command: createGenesis --package [packageDir] --dataDir [dataDir] --[genesisConfig] [genesisConfig] --[externalHandler]`;
+
     public async createGenesis(commandOptions: CommandOptions): Promise<boolean> {
-        fs.emptyDirSync(commandOptions.get('dataDir'));
-
-        let cc = await this.create(commandOptions, true);
-        if (cc.err) {
-            console.error(`create chain for genesis failed! err ${cc.err}`);
+        if (!commandOptions.get('package')) {
+            console.error(ChainHost.CREATE_TIP);
             return false;
         }
-
-        let ci = this.m_consensus.get(cc.consensus!);
-        if (!ci) {
-            console.error(`invalid consensus: ${cc.consensus}`);
+        let _package = commandOptions.get('package');
+        if (!path.isAbsolute(_package)) {
+            _package = path.join(process.cwd(), _package);
+        } 
+        if (!commandOptions.get('dataDir')) {
+            console.error(ChainHost.CREATE_TIP);
             return false;
         }
-        let options: any = ci!.create(commandOptions);
-        options.txlivetime = commandOptions.has('txlivetime') ? commandOptions.get('txlivetime') : 60 * 60 ;
-        
-        let minerOptions: ValueMinerOptions = {};
-        minerOptions.coinbase = commandOptions.get('coinbase');
-        this.m_miner = ci.miner(minerOptions, commandOptions);
-
-        let ct: ChainCreator = new ChainCreator();
-        let err = await this.m_miner!.create(ct, commandOptions, options);
-        
-        console.log(`create genesis finished with error code: ${err}`);
-        return !err;
-    }
-
-    protected async create(commandOptions: CommandOptions, bGenesis: boolean): Promise<{ err: ErrorCode, consensus?: string }> {
-        if (!bGenesis) {
-            if (commandOptions.get('net')) {
-                let ni = this.m_net.get(commandOptions.get('net'));
-                if (!ni) {
-                    console.error('invalid net');
-                    return { err: ErrorCode.RESULT_INVALID_PARAM };
-                }
-                commandOptions.set('node', ni(commandOptions));
-            }
-            if (!commandOptions.get('node')) {
-                console.error('no net');
-                return { err: ErrorCode.RESULT_INVALID_PARAM };
-            }
+        let dataDir = commandOptions.get('dataDir');
+        if (!path.isAbsolute(dataDir)) {
+            dataDir = path.join(process.cwd(), dataDir);
         }
-
-        if (!this._loadHandler(commandOptions.get('handler'))) {
-            console.error(`load handler error`);
-            return { err: ErrorCode.RESULT_INVALID_PARAM };
-        }
-
-        commandOptions.set('handler', handler);
-        let consensus = null;
-        if (bGenesis) {
-            consensus = commandOptions.get('consensus');
+        if (!fs.existsSync(dataDir)) {
+            fs.ensureDirSync(dataDir);
         } else {
-            let config: GlobalConfig = new GlobalConfig(initLogger({loggerOptions: {console: true}}));
-            let configPath;
-            if (commandOptions.has('forceClean') || !fs.pathExistsSync(commandOptions.get('dataDir'))) {
-                if (!commandOptions.get('genesis')) {
-                    console.error('no genesis param with forceClean or invalid dataDir');
-                    return {err: ErrorCode.RESULT_INVALID_PARAM};
-                }
-                configPath = commandOptions.get('genesis');
+            if (commandOptions.get('forceClean')) {
+                fs.removeSync(dataDir);
             } else {
-                configPath = commandOptions.get('dataDir');
+                console.error(`dataDir already exsits`);
+                return false;
             }
-
-            let err = await config.loadConfig(configPath, ValueChain.kvConfig, ValueChain.s_dbFile);
-            if (err) {
-                console.error(`loadConfig from ${configPath} error, err ${err}`);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
+        }
+        let logger = this._parseLogger(dataDir, commandOptions);
+        let creator = initChainCreator({logger});
+        let genesisOptions;
+        if (commandOptions.get('genesisConfig')) {
+            let _path = commandOptions.get('genesisConfig');
+            if (!path.isAbsolute(_path)) {
+                _path = path.join(process.cwd(), _path);
             }
-
-            consensus = config.getConfig('consensus');
+            genesisOptions = fs.readJsonSync(_path);
         }
-
-        if (!consensus) {
-            console.error('no consensus');
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+        let cr = await creator.createGenesis(_package, dataDir, genesisOptions, commandOptions.get('externalHandler'));
+        if (cr.err) {
+            return false;
         }
-        return {err: ErrorCode.RESULT_OK, consensus};
+        return true;
     }
 
-    public registerConsensus(consensus: string, instance: ConsensusInstance) {
-        this.m_consensus.set(consensus, instance);
+    protected _parseLogger(dataDir: string, commandOptions: CommandOptions): any {
+        let loggerOptions = Object.create(null);
+        loggerOptions.console = false;
+        loggerOptions.level = 'error';
+        if (commandOptions.get('loggerConsole')) {
+            loggerOptions.console = true;
+        }
+        if (commandOptions.get('loggerLevel')) {
+            loggerOptions.level = commandOptions.get('loggerLevel');
+        }
+        let loggerPath = path.join(dataDir, 'log');
+        fs.ensureDir(loggerPath);
+        loggerOptions.file = {root: loggerPath};
+        return initLogger({loggerOptions});
     }
 
-    private m_consensus: Map<string, ConsensusInstance> = new Map();
+    protected _parseNode(commandOptions: CommandOptions): INode|undefined  {
+        if (commandOptions.get('net')) {
+            let ni = this.m_net.get(commandOptions.get('net'));
+            if (!ni) {
+                console.error('invalid net');
+                return undefined;
+            }
+            return ni(commandOptions);
+        }
+    }
+
+    protected _parseDataDir(commandOptions: CommandOptions): string|undefined {
+        let dataDir = commandOptions.get('dataDir');
+        if (!dataDir) {
+            return undefined;
+        }
+        if (!path.isAbsolute(dataDir)) {
+            dataDir = path.join(process.cwd(), dataDir);
+        }
+        if (commandOptions.has('forceClean')) {
+            fs.removeSync(dataDir); 
+        }
+        
+        if (fs.pathExistsSync(dataDir)) {
+            return dataDir;
+        } else {
+            fs.ensureDirSync(dataDir);
+        }
+
+        if (!commandOptions.get('genesis')) {
+            console.error('no genesis');
+            return undefined;
+        }
+        let _path = commandOptions.get('genesis');
+        if (!path.isAbsolute(_path)) {
+            _path = path.join(process.cwd(), _path);
+        }
+        fs.copySync(_path, dataDir);   
+        
+        return dataDir;
+    }
 
     public registerNet(net: string, instance: NetInstance) {
         this.m_net.set(net, instance);
@@ -165,19 +181,5 @@ class ChainHost {
 
     private m_net: Map<string, NetInstance> = new Map();
 
-    protected _loadHandler(_path: string): boolean {
-        try {
-            require(path.join(process.cwd(), _path));
-        } catch (e) {
-            console.error(`handler error: ${e.message}`);
-            return false;
-        }
-        return true;
-    }
-
-    protected m_chain?: ValueChain;
-    protected m_miner?: ValueMiner;
     protected m_server?: ChainServer;
 }
-
-export = new ChainHost();

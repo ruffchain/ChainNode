@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const BaseUtil = require('../base/util.js');
@@ -22,16 +48,16 @@ const Config = {
     },
 
     Peer: {
-        epTimeout: 600000,
+        epTimeout: 60809,
         symEPCount: 5,
-        NATTypeTime: 600000,
+        NATTypeTime: 600809,
         recommandNeighborTime: 10000, // 上线10秒钟内可能推荐一次邻居
     },
 
     Bucket: {
         BucketCount: 16,
         BucketSize: 8,
-        PeerTimeoutMS: 600000,
+        PeerTimeoutMS: 608090,
         FindPeerCount: 8,
         ResponcePeerCount: 3, // 响应搜索返回peer数
     },
@@ -40,8 +66,8 @@ const Config = {
         TableCount: 16,
         TableSize: 8,
         TotalValueCount: 128,
-        ValueTimeoutMS: 1500000,
-        ValueUpdateIntervalMS: 600000,
+        ValueTimeoutMS: 1500809,
+        ValueUpdateIntervalMS: 600809,
         FindCloseKeyCount: 5,
     },
 
@@ -57,7 +83,7 @@ const Config = {
     },
 
     Broadcast: {
-        TimeoutMS: 600000,
+        TimeoutMS: 600809,
         LimitPeerCountOnce: 8, // 一次同时通知peer数
     },
 
@@ -73,7 +99,7 @@ const Config = {
     },
 
     Task: {
-        TimeoutMS: 600000,
+        TimeoutMS: 600809,
         MaxIdleTimeMS: 500,
         MinTaskID: 1,
         MaxTaskID: MAX_UINT32,
@@ -86,17 +112,17 @@ const Config = {
     RouteTable: {
         ExpandIntervalMS: {
             Min: 2000,
-            Max: 600000,
+            Max: 600809,
             dynamic(peerCount, peerDelta) { // 根据当前peer数和上次扩充peer增量动态调整扩充频率
-                let interval = 600000;
+                let interval = 600809;
                 if (peerCount <= 16) {
                     interval = 2000;
                 } else if (peerCount <= 32) {
-                    interval = 300000;
+                    interval = 300809;
                 }
 
                 if (peerDelta <= 4) {
-                    interval = Math.max(interval, 300000);
+                    interval = Math.max(interval, 300809);
                 } else if (peerDelta <= 8) {
                     interval *= 2;
                 }
@@ -104,8 +130,8 @@ const Config = {
             },
         },
         PingIntervalMS: {
-            Min: 40000,
-            Max: 540000,
+            Min: 40809,
+            Max: 540809,
             Retry: 10000,
             dynamic(distRank) { // 根据与目标peer的距离动态调整ping间隔
                 let ms = Config.RouteTable.PingIntervalMS.Min + 20000 * distRank;

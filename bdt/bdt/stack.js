@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 "use strict";
 const EventEmitter = require('events');
 const dgram = require('dgram');
@@ -5,7 +31,9 @@ const {BDT_ERROR, BDTPackage} = require('./package');
 const {PingClient, MultiSNPingClient} = require('./pingclient');
 const baseModule = require('../base/base');
 const blog = baseModule.blog;
-const {EndPoint, SequenceU32} = require('../base/util');
+const {EndPoint, SequenceU32, TimeHelper} = require('../base/util');
+const assert = require('assert');
+const DynamicSocket = require('./dynamic_socket');
 
 class BDTStack extends EventEmitter {
     constructor(peerid, eplist, mixSocket, peerFinder, options) {
@@ -43,6 +71,8 @@ class BDTStack extends EventEmitter {
         this.m_mixSocket = mixSocket;
         this.m_peerFinder = peerFinder;
         this.m_eplist = eplist;
+
+        this.m_dynamicSocket = null;
 
         this.m_options = {
             // udp mtu
@@ -97,18 +127,27 @@ class BDTStack extends EventEmitter {
             pingTimeout: 12*25*1000,
             // ping包可延迟时间
             pingDelay: 500,
+            // ping包丢失间隔
+            pingLostTimeout: 2000,
             // 初始搜索上线SN时间间隔，SN为空
-            searchSNIntervalInit: 10000,
+            searchSNIntervalInit: 10809,
             // 连接过程搜索上线SN时间间隔，SN不为空，但都还没上线
-            searchSNIntervalConnecting: 30000,
+            searchSNIntervalConnecting: 30809,
             // 搜索上线SN时间间隔
-            searchSNInterval: 600000,
-            // 测试下线SN的时间间隔
-            tryOfflineSNInterval: 30000,
+            searchSNInterval: 608090,
             // 查找对方SN失败后再次尝试间隔
             tryFindSNInterval: 1000,
-            // 超时误差，用于检测系统时间更新，避免过长或过短超时
-            timeoutDeviation: 500,
+            // 连接SN数量限制
+            snLimit: 3,
+
+            // 最小动态端口
+            minDynamicPort: 40809,
+            // 最大动态端口
+            maxDynamicPort: 60809,
+            // 动态端口死亡周期
+            dynamicPortDeadTime: 3600809,
+            // 扩展动态端口数量
+            dynamicExpand: 3,
         };
         if (options) {
             Object.assign(this.m_options, options);
@@ -186,6 +225,10 @@ class BDTStack extends EventEmitter {
                     return;
                 }
                 this.m_vportConnectionMap = {};
+                if (this.m_dynamicSocket) {
+                    this.m_dynamicSocket.destroy();
+                    this.m_dynamicSocket = null;
+                }
                 this.m_state = BDTStack.STATE.closed;
                 this.emit(BDTStack.EVENT.close);
                 resolve();
@@ -197,7 +240,7 @@ class BDTStack extends EventEmitter {
             }
             for (let [sessionid, connection] of Object.entries(this.m_sessionConnectMap)) {
                 connection.once('close', () => tryFinalClose());
-                connection.close();
+                connection.close(true);
             }
         });
     }
@@ -216,6 +259,7 @@ class BDTStack extends EventEmitter {
             this._initSessionid();
             blog.debug(`[BDT]: stack random start vport to ${this.m_lastvport}`);
 
+            this._initDynamicSocket();
             this.m_state = BDTStack.STATE.created;
             setImmediate(() => this.emit(BDTStack.EVENT.create));
             
@@ -236,42 +280,15 @@ class BDTStack extends EventEmitter {
             return;
         }
         let remoteSender = BDTPackage.createSender(this.m_mixSocket, socket, [EndPoint.toString(remote)]);
-        if (header.cmdType === BDTPackage.CMD_TYPE.pingResp) {
-            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from sn`);
-            if (this.m_state === BDTStack.STATE.created) {
-                this.m_pingClient._onPackage(decoder, remoteSender);
-            }
-        } else if (header.cmdType > BDTPackage.CMD_TYPE.pingResp) {
-            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from ${header.src.peeridHash}:${header.src.vport} ${remote.address}:${remote.port} to ${header.dest.vport}, seq:${header.seq}, ackseq:${header.ackSeq}, flags:${header.flags}`);
-            if (header.cmdType >= BDTPackage.CMD_TYPE.syn) {
-                this._updateRemoteCache(header.src.peeridHash, remoteSender);
-            }
-
-            let entry = null;
-            if (header.cmdType === BDTPackage.CMD_TYPE.calledReq ||
-                header.cmdType === BDTPackage.CMD_TYPE.syn) {
-                if (decoder.body.dest === this.peerid) {
-                    entry = this.m_vportAcceptorMap[header.dest.vport];
-                }
-            } else if (header.cmdType === BDTPackage.CMD_TYPE.synAck) {
-                if (decoder.body.dest === this.m_peerid) {
-                    entry = this.m_vportConnectionMap[header.dest.vport];
-                }
-            } else {
-                entry = this.m_sessionConnectMap[header.sessionid];
-            }
-            if (entry) {
-                entry._onPackage(decoder, remoteSender);
-            }
-        }
+        return this._packageProcess(decoder, remoteSender, false);
     }
    
     _initVPort() {
-        this.m_lastvport = Math.floor(1025 + (65535 - 1025) * Math.random(0, 1));
+        this.m_lastvport = Math.floor(1025 + 60809 * Math.random(0, 1));
     }
    
     _initSessionid() {
-        this.m_lastSessionid = Math.floor(1025 + (0x7FFFFFFF - 1025) * Math.random(0, 1));
+        this.m_lastSessionid = Math.floor(160809 + (0x133A129 - 160809) * Math.random(0, 1));
     }
 
     _genSessionid(connection) {
@@ -388,7 +405,7 @@ class BDTStack extends EventEmitter {
         let cache = this.m_remoteCache;
         cache[peeridHash] = {
             sender: sender,
-            time: Date.now()
+            time: TimeHelper.uptimeMS()
         };
     }
 
@@ -407,8 +424,8 @@ class BDTStack extends EventEmitter {
         if (!cache) {
             return null;
         }
-        let delta = Date.now() - cache.time;
-        if (delta > this.m_options.remoteCacheTimeout || delta < 0) {
+        let delta = TimeHelper.uptimeMS() - cache.time;
+        if (delta > this.m_options.remoteCacheTimeout) {
             delete this.m_remoteCache[peeridHash];
             return null;
         }
@@ -427,6 +444,73 @@ class BDTStack extends EventEmitter {
 
     _findPeer(peerid) {
         return this.m_peerFinder.findPeer(peerid);
+    }
+
+    _peerFinder() {
+        return this.m_peerFinder;
+    }
+
+    _getDynamicSocket() {
+        return this.m_dynamicSocket;
+    }
+
+    _initDynamicSocket() {
+        let options = {
+            minPort: this.m_options.minDynamicPort,
+            maxPort: this.m_options.maxDynamicPort,
+            portDeadTime: this.m_options.dynamicPortDeadTime,
+        };
+
+        let dynamicProcess = (socket, decoder, remoteAddr, localAddr) => {
+            let header = decoder.header;
+            if (header.dest.peeridHash !== this.m_peeridHash) {
+                return;
+            }
+            let remoteSender = BDTPackage.createSender(this.m_dynamicSocket, socket, [EndPoint.toString(remoteAddr)]);
+            return this._packageProcess(decoder, remoteSender, true);
+        }
+        this.m_dynamicSocket = new DynamicSocket(dynamicProcess, options);
+    }
+
+    _packageProcess(decoder, remoteSender, isDynamic) {
+        let header = decoder.header;
+        let remote = EndPoint.toAddress(remoteSender.remoteEPList[0]);
+        if (header.cmdType === BDTPackage.CMD_TYPE.pingResp) {
+            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from sn`);
+            if (this.m_state === BDTStack.STATE.created) {
+                this.m_pingClient._onPackage(decoder, remoteSender);
+            }
+        } else if (header.cmdType > BDTPackage.CMD_TYPE.pingResp) {
+            blog.debug(`[BDT]: stack recv ${BDTPackage.CMD_TYPE.toString(header.cmdType)} package from ${header.src.peeridHash}:${header.src.vport} ${remote.address}:${remote.port} to ${header.dest.vport}, seq:${header.seq}, ackseq:${header.ackSeq}, flags:${header.flags}`);
+            if (header.cmdType >= BDTPackage.CMD_TYPE.syn) {
+                this._updateRemoteCache(header.src.peeridHash, remoteSender);
+            }
+
+            let entry = null;
+            if (header.cmdType === BDTPackage.CMD_TYPE.calledReq ||
+                header.cmdType === BDTPackage.CMD_TYPE.syn) {
+                if (decoder.body && decoder.body.dest === this.peerid) {
+                    entry = this.m_vportAcceptorMap[header.dest.vport];
+                }
+            } else if (header.cmdType === BDTPackage.CMD_TYPE.synAck) {
+                if (decoder.body && decoder.body.dest === this.m_peerid) {
+                    entry = this.m_vportConnectionMap[header.dest.vport];
+                    // 可能用相同端口先后发起了多次连接，用sessionid区分旧连接的过时包
+                    if (entry && decoder.body.sessionid) {
+                        if (parseInt(decoder.body.sessionid) !== entry.local.sessionid) {
+                            entry = null;
+                        } else {
+                            assert(entry.remote.peerid === decoder.body.src && entry.remote.vport === header.src.vport);
+                        }
+                    }
+                }
+            } else {
+                entry = this.m_sessionConnectMap[header.sessionid];
+            }
+            if (entry) {
+                entry._onPackage(decoder, remoteSender, isDynamic);
+            }
+        }
     }
 }
 

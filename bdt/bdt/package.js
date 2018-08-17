@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 "use strict";
 const msgpack = require('msgpack-lite');
 const baseModule = require('../base/base');
@@ -85,8 +111,8 @@ class BDTPackageDecoder {
         }
         if (header.headerLength + header.bodyLength !== header.totalLength) {
             // this.m_data = Buffer.from(this.m_buffer, header.bodyLength + header.headerLength);
-            assert(this.m_buffer.length >= this.m_header.totalLength, `pkg.length=${this.m_header.totalLength},buffer.length=${this.m_buffer.length}`);
-            this.m_data = this.m_buffer.slice(this.m_offset  + header.headerLength + header.bodyLength, header.totalLength);
+            assert(this.m_buffer.length - this.m_offset >= this.m_header.totalLength, `pkg.length=${this.m_header.totalLength},buffer.length=${this.m_buffer.length},offset=${this.m_offset}`);
+            this.m_data = this.m_buffer.slice(this.m_offset + header.headerLength + header.bodyLength, header.totalLength);
         }
         return BDT_ERROR.success;
     }
@@ -207,6 +233,10 @@ class BDTPackageEncoder {
             this.m_body = {};
         }
         return this.m_body;
+    }
+
+    get data() {
+        return Buffer.concat(this.m_data);
     }
 
     addData(buffers) {
@@ -373,7 +403,7 @@ class BDTPackageSender {
 
         let onPreSendInner = (packageBuffer, remoteAddr, socket, protocol) => {
             let localAddr = null;
-            if (protocol === this.m_mixSocket.PROTOCOL.udp) {
+            if (protocol === EndPoint.PROTOCOL.udp) {
                 localAddr = socket.address();
             } else {
                 localAddr = {
@@ -426,10 +456,19 @@ class BDTPackageSender {
 
     addRemoteEPList(addEPList) {
         let epSet = new Set(this.m_remoteEPList);
-        addEPList.forEach(ep => epSet.add(ep));
+        let count = epSet.size;
+        let newEPList = [];
+        addEPList.forEach(ep => {
+            epSet.add(ep);
+            if (epSet.size !== count) {
+                count = epSet.size;
+                newEPList.push(ep);
+            }
+        });
         if (epSet.size !== this.m_remoteEPList.length) {
             this.m_remoteEPList = [...epSet];
         }
+        return newEPList;
     }
 
     get isResend() {

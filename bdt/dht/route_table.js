@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const {Config, RandomGenerator, EndPoint} = require('./util.js');
@@ -5,6 +31,9 @@ const DHTPackage = require('./packages/package.js');
 const Base = require('../base/base.js');
 const Peer = require('./peer.js');
 const assert = require('assert');
+const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
+
 const LOG_WARN = Base.BX_WARN;
 const LOG_INFO = Base.BX_INFO;
 
@@ -34,7 +63,7 @@ class RouteTable {
 
     onRecvPackage(cmdPackage, socket, remotePeer, remoteAddress) {
         if (!EndPoint.isNAT(remoteAddress)) {
-            this.m_time4LastPackageFromInternet = Date.now();
+            this.m_time4LastPackageFromInternet = TimeHelper.uptimeMS();
         }
     }
 
@@ -44,18 +73,14 @@ class RouteTable {
     }
 
     _expand() {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let maxInterval = this._maxExpandInterval();
-
-        if (isFinite(this.m_nextExpandTime) && this.m_nextExpandTime - now > maxInterval) {
-            this.m_nextExpandTime = now;
-        }
 
         if (this.m_nextExpandTime <= now) {
             this.m_nextExpandTime = Infinity;
             this.m_peerCountLastExpand = this.m_bucket.peerCount;
             this.m_taskExecutor.findPeer(RouteTable._randomPeerid(), false,
-                () => this.m_nextExpandTime = Date.now() + this._maxExpandInterval()
+                () => this.m_nextExpandTime = TimeHelper.uptimeMS() + this._maxExpandInterval()
             );
         }
     }
@@ -70,7 +95,7 @@ class RouteTable {
     // 全锥形NAT，只要近期有对外recv包即可维持穿透，维持相对长时间的ping间隔测试其他在线状态
     // 公网Peer不需要维持穿透状态，只要定时测试其他peer在线状态即可
     _pingAllTimeoutPeers() {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let pingPackage = null;
         let pingInterval4NATType = RouteTableConfig.PingIntervalMS.Max; // 按本地peer网络环境定制ping频率，置0表示要按需求动态调整
         let localPeer = this.m_bucket.localPeer;
@@ -124,9 +149,11 @@ class RouteTable {
                 pingPackage = this.m_packageFactory.createPackage(DHTPackage.CommandType.PING_REQ);
             }
             // 太长时间没有收到UDP包，也没有发出UDP包，忽略之前发送路由缓存，对该peer所有地址发送一遍
-            let ignoreCache = (now - peer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Max &&
-                now - peer.lastSendTimeUDP >= RouteTableConfig.PingIntervalMS.Max / 2);
-            this.m_packageSender.sendPackage(peer, pingPackage, ignoreCache, false, RouteTableConfig.PingIntervalMS.Retry);
+            let ignoreCache = (now - localPeer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Retry &&
+                                now - localPeer.lastSendTimeUDP >= RouteTableConfig.PingIntervalMS.Retry) || 
+                            (now - peer.lastRecvTimeUDP >= RouteTableConfig.PingIntervalMS.Max &&
+                                now - peer.lastSendTimeUDP >= RouteTableConfig.PingIntervalMS.Retry);
+            this.m_packageSender.sendPackage(peer, pingPackage, ignoreCache, RouteTableConfig.PingIntervalMS.Retry);
             pingCount++;
         }
 

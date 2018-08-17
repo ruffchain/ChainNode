@@ -1,3 +1,4 @@
+import { isNullOrUndefined } from 'util';
 const BN = require('bn.js');
 import { PowBlockHeader } from './block';
 import { Chain } from '../chain';
@@ -20,6 +21,22 @@ export const INT32_MAX = 0xffffffff;
 
 // //最小难度
 // export const limit = new BN('0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', 'hex');
+
+export function onCheckGlobalOptions(globalOptions: any): boolean {
+    if (isNullOrUndefined(globalOptions.retargetInterval)) {
+        return false;
+    }
+    if (isNullOrUndefined(globalOptions.targetTimespan)) {
+        return false;
+    }
+    if (isNullOrUndefined(globalOptions.basicBits)) {
+        return false;
+    }
+    if (isNullOrUndefined(globalOptions.limit)) {
+        return false;
+    }
+    return true;
+}
 
 /**
  * Convert a compact number to a big number.
@@ -112,19 +129,19 @@ export function verifyPOW(hash: Buffer, bits: number): boolean {
 export function retarget(prevbits: number, actualTimespan: number, chain: Chain): number {
     let target = fromCompact(prevbits);
 
-    if (actualTimespan < (chain.globalConfig.getConfig('targetTimespan') / 4 | 0)) {
-        actualTimespan = chain.globalConfig.getConfig('targetTimespan') / 4 | 0;
+    if (actualTimespan < (chain.globalOptions.targetTimespan / 4 | 0)) {
+        actualTimespan = chain.globalOptions.targetTimespan / 4 | 0;
     }
 
-    if (actualTimespan > chain.globalConfig.getConfig('targetTimespan') * 4) {
-        actualTimespan = chain.globalConfig.getConfig('targetTimespan') * 4;
+    if (actualTimespan > chain.globalOptions.targetTimespa * 4) {
+        actualTimespan = chain.globalOptions.targetTimespan * 4;
     }
 
     target.imuln(actualTimespan);
-    target.idivn(chain.globalConfig.getConfig('targetTimespan'));
+    target.idivn(chain.globalOptions.targetTimespan);
 
-    if (target.gt(chain.globalConfig.getConfig('limit'))) {
-        return chain.globalConfig.getConfig('basicBits');
+    if (target.gt(new BN(chain.globalOptions.limit, 'hex'))) {
+        return chain.globalOptions.basicBits;
     }
         
     return toCompact(target);
@@ -133,7 +150,7 @@ export function retarget(prevbits: number, actualTimespan: number, chain: Chain)
 export async function getTarget(header: PowBlockHeader, chain: Chain): Promise<{err: ErrorCode, target?: number}> {
     // Genesis
     if (header.number === 0) {
-        return {err: ErrorCode.RESULT_OK, target: chain.globalConfig.getConfig('basicBits')};
+        return {err: ErrorCode.RESULT_OK, target: chain.globalOptions.basicBits};
     }
     let prevRet = await chain.getHeader(header.preBlockHash);
     // Genesis
@@ -142,12 +159,12 @@ export async function getTarget(header: PowBlockHeader, chain: Chain): Promise<{
     }
 
     // Do not retarget
-    if ((header.number + 1) % chain.globalConfig.getConfig('retargetInterval') !== 0) {
+    if ((header.number + 1) % chain.globalOptions.retargetInterval !== 0) {
         return {err: ErrorCode.RESULT_OK, target: (prevRet.header as PowBlockHeader).bits};
     }
 
     // Back 2 weeks
-    const height = header.number - (chain.globalConfig.getConfig('retargetInterval') - 1);
+    const height = header.number - (chain.globalOptions.retargetInterval - 1);
     assert(height >= 0);
 
     let hr = await chain.getHeader(height);
@@ -156,7 +173,7 @@ export async function getTarget(header: PowBlockHeader, chain: Chain): Promise<{
         assert(hr.header);
         retargetFrom = hr.header as PowBlockHeader;
     } else if (hr.err === ErrorCode.RESULT_NOT_FOUND) {
-        let ghr = await chain.getHeader(header, -(chain.globalConfig.getConfig('retargetInterval') - 1));
+        let ghr = await chain.getHeader(header, -(chain.globalOptions.retargetInterval - 1));
         if (ghr.err) {
             return {err: ghr.err};
         }

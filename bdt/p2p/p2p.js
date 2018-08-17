@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const EventEmitter = require('events');
@@ -223,7 +249,7 @@ class P2P extends EventEmitter {
         return this.m_mixSocket;
     }
 
-    eplist() {
+    get eplist() {
         let eplist = null;
         if (this.m_listenerEPList) {
             eplist = new Set(this.m_listenerEPList);
@@ -233,19 +259,19 @@ class P2P extends EventEmitter {
             eplist = this.m_mixSocket.eplist;
         }
 
-        return eplist
+        return eplist;
     }
 
     // 如果要通过dht网络检索peer，要调用joinDHT加入dht网络
     // dhtEntryPeers: [{peerid: xxx, eplist:[ep, ...]}]， ep: 'family-num(4|6)@ip@port@protocol(u|t)'
     // asSeedSNInDHT: 如果启动了SN服务，标识是否要作为种子SN写入DHT网络
-    joinDHT(dhtEntryPeers, asSeedSNInDHT) {
+    joinDHT(dhtEntryPeers, asSeedSNInDHT, options) {
         if (!this.m_mixSocket) {
             blog.warn('[P2P]: you should create p2p instance with <P2P.create>, and wait the operation finish.');
         }
 
         if (!this.m_dht) {
-            let eplist = this.eplist()
+            let eplist = this.eplist;
 
             this.m_dht = new DHT(this.m_mixSocket, {peerid: this.m_peerid, eplist});
             this.m_dht.once(DHT.EVENT.stop, () => {
@@ -259,7 +285,7 @@ class P2P extends EventEmitter {
             }
 
             if (this.m_snService) {
-                this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT);
+                this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, options.joinDHTImmediately);
             }
         }
 
@@ -310,7 +336,7 @@ class P2P extends EventEmitter {
 
         this.m_peerFinder = new PeerFinder(this.m_snPeer, this.m_dht);
 
-        let eplist = this.eplist()
+        let eplist = this.eplist;
 
         this.m_bdtStack = BDT.newStack(this.m_peerid, eplist, this.m_mixSocket, this.m_peerFinder, options);
         this.m_bdtStack.once(BDT.Stack.EVENT.create, () => setImmediate(() => this.emit(P2P.EVENT.BDTStackCreate)));
@@ -339,7 +365,7 @@ class P2P extends EventEmitter {
         setImmediate(() => this.emit(P2P.EVENT.SNStart));
 
         if (this.m_dht) {
-            this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT);
+            this.m_snService.signinDHT(this.m_dht, asSeedSNInDHT, options.joinDHTImmediately);
         }
 
         this.m_snService.once(SN.EVENT.stop, () => {
@@ -472,6 +498,7 @@ class P2P extends EventEmitter {
         /**
          * // 记录最后5个包的概略信息，用于出现错误时追踪
             if (!socket.__trace.lastCmds) {
+                socket.__trace.__cmd_flag = 0x20160809;
                 socket.__trace.lastCmds = [];
             }
             header.bufferSize = bufferArray.totalByteLength;
@@ -481,6 +508,7 @@ class P2P extends EventEmitter {
             socket.__trace.lastCmds.push(header);
             if (socket.__trace.lastCmds.length > 5) {
                 socket.__trace.lastCmds.shift();
+                delete socket.__trace.__cmd_flag;
             }
          */
 
@@ -498,7 +526,7 @@ class P2P extends EventEmitter {
                 return [MixSocket.ERROR.dataCannotParsed, 0];
             }
             let decoder = BDT.Package.createDecoder(buffer);
-            if ( decoder.decodeHeader() ) {
+            if (decoder.decodeHeader()) {
                 return [MixSocket.ERROR.dataCannotParsed, totalLength];
             }
 
@@ -530,6 +558,7 @@ class P2P extends EventEmitter {
                 let socket = this.m_mixSocket;
                 this.m_mixSocket = null;
                 socket.close();
+                socket.__flag_closed = 0x20160809;
             }
             this.m_isClosing = false;
         }
@@ -545,6 +574,47 @@ P2P.EVENT = {
     SNStop: 'SNStop',
 };
 
+function debug(options = {}) {
+    let level = null;
+    switch(options.level) {
+        case 'all':
+            level = baseModule.BLOG_LEVEL_ALL;
+            break;
+        case 'trace':
+            level = baseModule.BLOG_LEVEL_TRACE;
+            break;
+        case 'debug':
+            level = baseModule.BLOG_LEVEL_DEBUG;
+            break;
+        case 'info':
+            level = baseModule.BLOG_LEVEL_INFO;
+            break;
+        case 'warn':
+            level = baseModule.BLOG_LEVEL_WARN;
+            break;
+        case 'error':
+            level = baseModule.BLOG_LEVEL_ERROR;
+            break;
+        case 'check':
+            level = baseModule.BLOG_LEVEL_CHECK;
+            break;
+        case 'fatal':
+            level = baseModule.BLOG_LEVEL_FATAL;
+            break;
+        case 'off':
+            level = baseModule.BLOG_LEVEL_OFF;
+            break;
+        default:
+            level = baseModule.BLOG_LEVEL_OFF;
+    }
+
+    BX_SetLogLevel(level);
+
+    if (typeof options.file_dir == 'string'  && options.file_dir.length > 0) {
+        baseModule.BX_EnableFileLog(path.resolve(options.file_dir), options.file_name, '.log');
+        baseModule.blog.enableConsoleTarget(false);
+    }
+}
 
 /**
  * 启动BDT协议栈基本流程：
@@ -574,45 +644,5 @@ module.exports = {
     ERROR: BDT.ERROR,
 
     // so that caller can close the log of bdt
-    debug: (options = {}) => {
-        let level = null;
-        switch(options.level) {
-            case 'all':
-                level = baseModule.BLOG_LEVEL_ALL;
-                break;
-            case 'trace':
-                level = baseModule.BLOG_LEVEL_TRACE;
-                break;
-            case 'debug':
-                level = baseModule.BLOG_LEVEL_DEBUG;
-                break;
-            case 'info':
-                level = baseModule.BLOG_LEVEL_INFO;
-                break;
-            case 'warn':
-                level = baseModule.BLOG_LEVEL_WARN;
-                break;
-            case 'error':
-                level = baseModule.BLOG_LEVEL_ERROR;
-                break;
-            case 'check':
-                level = baseModule.BLOG_LEVEL_CHECK;
-                break;
-            case 'fatal':
-                level = baseModule.BLOG_LEVEL_FATAL;
-                break;
-            case 'off':
-                level = baseModule.BLOG_LEVEL_OFF;
-                break;
-            default:
-                level = baseModule.BLOG_LEVEL_OFF;
-        }
-
-        BX_SetLogLevel(level);
-
-        if ( typeof options.file_dir == 'string'  && options.file_dir.length >0 ) {
-            baseModule.BX_EnableFileLog(path.resolve(options.file_dir), options.file_name, '.log');
-            baseModule.blog.enableConsoleTarget(false);
-        }
-    }
+    debug: debug,
 };

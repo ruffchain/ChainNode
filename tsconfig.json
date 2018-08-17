@@ -4,12 +4,12 @@
         "target": "ES2017",
         "strict": true,
         "inlineSourceMap": true,
-        "outDir": "dist",
+        "outDir": "dist/blockchain-sdk",
         "types": [
             "node"
         ]
     },
     "include": [
-        "src/**/*","demo/**/*","bdt/**/*"
+        "src/**/*","demo/**/*","ruff/**/*"
     ]
 }

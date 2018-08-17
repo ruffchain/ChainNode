@@ -1,9 +1,35 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const EventEmitter = require('events');
 const dgram = require('dgram');
 const net = require('net');
-const {EndPoint} = require('../base/util.js');
+const {EndPoint, TimeHelper} = require('../base/util.js');
 const assert = require('assert');
 const baseModule = require('../base/base');
 const blog = baseModule.blog;
@@ -276,6 +302,7 @@ class MixSocket extends EventEmitter {
         }
 
         this.m_paceSender.push(pkg, eplist, options);
+        return MixSocket.ERROR.success;
     }
 
     _sendImmediate(pkg, eplist, options) {
@@ -328,6 +355,10 @@ class MixSocket extends EventEmitter {
 
         let sendCount = 0;
         let sendTo = (pkg, remoteAddr, sendingSocket, protocol) => {
+            if (!remoteAddr) {
+                return;
+            }
+
             let getSendingBuffer = () => {
                 let buffer = pkg;
                 if (onPreSend) {
@@ -433,11 +464,11 @@ class MixSocket extends EventEmitter {
             }
         }
 
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         // UDP接收时间更新一小段，当TCP和UDP接收时间接近时，能优先使用UDP
         let udpPriorRecvTime = connection => {
             let lastRecvTime = connection.lastRecvTime;
-            if (connection.protocol === EndPoint.PROTOCOL.udp) {
+            if (lastRecvTime && connection.protocol === EndPoint.PROTOCOL.udp) {
                 lastRecvTime += this.m_options.udpPriorMS;
             }
             return lastRecvTime;
@@ -473,35 +504,36 @@ class MixSocket extends EventEmitter {
                 }
             }
 
-            if (lastRecvConnection.connection.lastRecvTime > 0) {
+            // 在缓存里没找到合适的连接，或者只找到了无效的UDP连接，就在UDP监听soket里搜索匹配的socket；
+            // 对TCP来说，一个socket只有一个连接，按socket发送数据，只能从缓存里搜索，不管有没有超时，都必须使用
+            if (lastRecvConnection.connection.lastRecvTime < 0 ||
+                (lastRecvConnection.connection.protocol === EndPoint.PROTOCOL.udp && !this._isConnectionValid(lastRecvConnection.connection, now))) {
+
+                    for ( let [localEP, udpListener] of this.m_udpListeners ) {
+                        let localAddr = EndPoint.toAddress(localEP);
+                        assert(localAddr);
+                        if (udpListener.socket === socket) {
+                            for (let remoteEP of eplist) {
+                                let remoteAddr = EndPoint.toAddress(remoteEP);
+                                if (remoteAddr &&
+                                    (!remoteAddr.family || !localAddr.family || remoteAddr.family === localAddr.family) &&
+                                    remoteAddr.protocol === MixSocket.PROTOCOL.udp) {
+                                    sendTo(pkg, remoteAddr, socket, remoteAddr.protocol);
+                                }
+                            }
+                            break;
+                        }
+                    }
+            }
+
+            // 如果从缓存里找到连接，在其上面发送一次
+            if (sendCount === 0 && lastRecvConnection.connection.lastRecvTime >= 0) {
                 sendTo(pkg,
                     EndPoint.toAddress(lastRecvConnection.remoteEP),
                     socket,
                     lastRecvConnection.connection.protocol);
             }
-
-            if (sendCount > 0) {
-                return MixSocket.ERROR.success;
-            }
-
-            for ( let [localEP, udpListener] of this.m_udpListeners ) {
-                let localAddr = EndPoint.toAddress(localEP);
-                if (udpListener.socket === socket) {
-                    for (let remoteEP of eplist) {
-                        let remoteAddr = EndPoint.toAddress(remoteEP);
-                        if ((!remoteAddr.family || !localAddr.family || remoteAddr.family === localAddr.family) &&
-                            remoteAddr.protocol === MixSocket.PROTOCOL.udp) {
-                            sendTo(pkg, EndPoint.toAddress(remoteEP), socket, remoteAddr.protocol);
-                        }
-                    }
-                    break;
-                }
-            }
-
-            if (sendCount > 0) {
-                return MixSocket.ERROR.success;
-            }
-            return MixSocket.ERROR.socketNotFound;
+            return sendCount > 0? MixSocket.ERROR.success : MixSocket.ERROR.socketNotFound;
         }
 
         if (!ignoreCache) {
@@ -517,8 +549,8 @@ class MixSocket extends EventEmitter {
                     lastRecvConnection.connection = connection;
                 }
             }
-            // 缓存中找到相关信息
-            if (now - lastRecvConnection.connection.lastRecvTime < this.m_options.socketIdle) {
+            // 缓存中找到相关有效信息
+            if (this._isConnectionValid(lastRecvConnection.connection, now)) {
                 return sendTo(pkg,
                     EndPoint.toAddress(lastRecvConnection.remoteEP),
                     lastRecvConnection.connection.socket,
@@ -533,11 +565,15 @@ class MixSocket extends EventEmitter {
         eplist.forEach(remoteEP => {
             // @var object
             let remoteAddr = EndPoint.toAddress(remoteEP);
+            if (!remoteAddr) {
+                return;
+            }
 
             // check if udp address
-            if ( EndPoint.isUDP(remoteAddr) ) {
+            if (EndPoint.isUDP(remoteAddr)) {
                 this.m_udpListeners.forEach((listener, localEP) => {
                     let localAddr = EndPoint.toAddress(localEP);
+                    assert(localAddr);
                     if (remoteAddr.family && localAddr.family && localAddr.family !== remoteAddr.family) {
                         return;
                     }
@@ -546,9 +582,9 @@ class MixSocket extends EventEmitter {
             }
 
             // check if tcp address
-            if ( EndPoint.isTCP(remoteAddr) ) {
+            if (EndPoint.isTCP(remoteAddr)) {
                 let cacheConnection = findLastRecvConnection(remoteEP, MixSocket.PROTOCOL.tcp);
-                if (now - cacheConnection.lastRecvTime < this.m_options.socketIdle) {
+                if (!this._isConnectionTimeout(cacheConnection, now)) {
                     sendTo(pkg, remoteAddr, cacheConnection.socket, cacheConnection.protocol);
                     return;
                 } else {
@@ -665,10 +701,14 @@ class MixSocket extends EventEmitter {
                     port: curPort,
                     protocol: MixSocket.PROTOCOL.udp,
                 }
-                const socket = dgram.createSocket({type: localAddr.family === EndPoint.FAMILY.IPv4 ? 'udp4': 'udp6', reuseAddr: true});
+                const socket = dgram.createSocket({type: localAddr.family === EndPoint.FAMILY.IPv4 ? 'udp4': 'udp6'/*, reuseAddr: true*/});
                 socket.once('listening', () => {
                     socket.on('message', (msg, rinfo) => {
-                        let remoteAddr = rinfo;
+                        let remoteAddr = {
+                            address: rinfo.address,
+                            port: rinfo.port,
+                            family: rinfo.family,
+                        };
                         remoteAddr.protocol = MixSocket.PROTOCOL.udp;
                         let {connection} = this._updateRouteTable(socket, remoteAddr, MixSocket.PROTOCOL.udp);
                         setImmediate(() => this._udpMessage(connection, msg.slice(0, rinfo.size), remoteAddr, localAddr));
@@ -772,7 +812,7 @@ class MixSocket extends EventEmitter {
     }
 
     _updateRouteTable(socket, remoteAddr, protocol, isRecv = true) {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let remoteEP = EndPoint.toString(remoteAddr);
         let routeTable = this.m_routeTable.get(remoteEP);
         if (!routeTable) {
@@ -794,7 +834,8 @@ class MixSocket extends EventEmitter {
         let newConnection = {
             socket,
             protocol,
-            lastRecvTime: now, // 新连接recv/send时间都更新一下
+            startTime: now,
+            lastRecvTime: isRecv? now : 0,
             lastSendTime: now,
         };
         if (protocol === MixSocket.PROTOCOL.tcp) {
@@ -810,10 +851,20 @@ class MixSocket extends EventEmitter {
         return {connection: newConnection, isNew: true, routeTable};
     }
 
+    // 超时连接：在很长一段时间内没收到收据包，如果是新建连接（从没收到过数据包），从连接建立时间计算
+    _isConnectionTimeout(connection, time) {
+        return (time || TimeHelper.uptimeMS()) - (connection.lastRecvTime || connection.startTime) >= this.m_options.socketIdle;
+    }
+
+    // 有效连接：在一定时间段内收到过数据包，新建连接是无效的，因为对方可能就是不在线
+    _isConnectionValid(connection, time) {
+        return (time || TimeHelper.uptimeMS()) - connection.lastRecvTime < this.m_options.socketIdle;
+    }
+
     // 清理路由表
     // 允许传入 自定义的清理connection的方法
     _cleanRouteTable(cleanConnection = null) {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
 
         if ( !cleanConnection ) {
             cleanConnection = connections => {
@@ -821,10 +872,11 @@ class MixSocket extends EventEmitter {
                     let connection = connections[i];
                     // 如果超过 设定时间 没有收到新包
                     // 就把connection 清除, 并发送'end'
-                    if (now - connection.lastRecvTime >= this.m_options.socketIdle) {
+                    if (this._isConnectionTimeout(connection, now)) {
                         connections.splice(i, 1);
                         if (connection.protocol === MixSocket.PROTOCOL.tcp) {
                             connection.socket.destroy();
+                            connection.___timeout_flag = 0x133A129;
                         }
                     } else {
                         i++;
@@ -837,7 +889,7 @@ class MixSocket extends EventEmitter {
         Array.from(this.m_routeTable).filter(val => {
             const [, routeTable] = val;
             cleanConnection(routeTable.connections);
-            return routeTable.connections.length === 0
+            return routeTable.connections.length === 0;
         }).forEach(val => {
             const [remoteEP] = val;
             this.m_routeTable.delete(remoteEP);
@@ -859,6 +911,7 @@ class MixSocket extends EventEmitter {
         clientSocket.__trace = {
             nextSeq: 0,
             pendingSeqList: [],
+            identify: 20160809,
         };
         clientSocket.on('data', buffer => {
             if (!clientSocket.destroyed) {
@@ -886,7 +939,8 @@ class MixSocket extends EventEmitter {
         let cleanConnection = connections => {
             for (let i = 0; i < connections.length;) {
                 if (connections[i].socket === socket) {
-                    connections.splice(i, 1);
+                    let con = connections.splice(i, 1);
+                    con.___close_flag = 0x133A129;
                 } else {
                     i++;
                 }
@@ -928,7 +982,7 @@ class MixSocket extends EventEmitter {
     }
 
     _connectTCP(remoteAddr, localAddr, isReuseListener) {
-        let localEP = localAddr? EndPoint.toString(localAddr, EndPoint.PROTOCOL.tcp) : '4@0.0.0.0@0@t';
+        let localEP = localAddr? EndPoint.toString(localAddr, EndPoint.PROTOCOL.tcp) : `4@${EndPoint.CONST_IP.zeroIPv4}@0@t`;
         let remoteEP = EndPoint.toString(remoteAddr);
         let connectionKey = `${localEP}-${remoteEP}`;
         let callbacks = null;
@@ -1056,7 +1110,7 @@ if (require.main === module) {
         let tcpProcess1 = (socket, bufferArray, remoteAddr, localAddr) => {
             let buffer = null;
             if (bufferArray.length === 1) {
-                buffer =bufferArray[0];
+                buffer = bufferArray[0];
             } else {
                 buffer = Buffer.concat(bufferArray);
             }

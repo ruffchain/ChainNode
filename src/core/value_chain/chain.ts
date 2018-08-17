@@ -1,8 +1,9 @@
 import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
+import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 
 import { Storage } from '../storage';
-import { TransactionContext, EventContext, ViewContext, GenesisOptions, ChainOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor} from '../chain';
+import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor} from '../chain';
 import { ValueBlockHeader } from './block';
 import { ValueTransaction } from './transaction';
 import { ValueBlockExecutor} from './executor';
@@ -23,16 +24,16 @@ export type ValueViewContext = {
     getBalance: (address: string) => Promise<BigNumber>;
 } & ViewContext;
 
-export type ValueGenesisOptions = GenesisOptions;
-export type ValueChainOptions = ChainOptions;
+export type ValueChainGlobalOptions = ChainGlobalOptions;
+export type ValueChainInstanceOptions = ChainInstanceOptions;
 
 export class ValueChain extends Chain {
-    constructor() {
-        super();
+    constructor(options: LoggerOptions) {
+        super(options);
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let kvBalance = (await storage.getReadWritableKeyValue(ValueChain.kvBalance)).kv!;
+        let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.Context(kvBalance);
         let externContext = Object.create(null);
         externContext.getBalance = (address: string): Promise<BigNumber> => {
@@ -41,18 +42,19 @@ export class ValueChain extends Chain {
         externContext.transferTo = (address: string, amount: BigNumber): Promise<ErrorCode> => {
             return ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.m_options.handler, externContext, config: this.m_globalConfig!});
+        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.handler, externContext, globalOptions: this.m_globalOptions!});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
-        let kvBalance = (await storage.getReadableKeyValue(ValueChain.kvBalance)).kv!;
+        let dbSystem = (await storage.getReadableDataBase(Chain.dbSystem)).value!;
+        let kvBalance = (await dbSystem.getReadableKeyValue(ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.ViewContext(kvBalance);
         let externContext = Object.create(null);
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
-        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.m_options.handler, externContext});
+        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.handler, externContext});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
@@ -65,7 +67,7 @@ export class ValueChain extends Chain {
     }
 
     // 存储每个address的money，其中有一个默认的系统账户
-    public static kvBalance: string = '__balance'; // address<--->blance
+    public static kvBalance: string = 'balance'; // address<--->blance
 
     public static sysAddress: string = '0';
 }

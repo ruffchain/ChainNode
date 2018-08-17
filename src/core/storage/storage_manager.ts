@@ -7,8 +7,8 @@ import { isString } from 'util';
 import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 
-import {IStorageSnapshotManager, StorageSnapshotManagerOptions, StorageDumpSnapshot} from './dump_snapshot';
-import {IReadableStorage, IReadWritableStorage, Storage, StorageOptions} from './storage';
+import {StorageSnapshotManagerOptions, StorageDumpSnapshot} from './dump_snapshot';
+import {IReadableStorage, Storage, StorageOptions} from './storage';
 import {SnapshotManager} from './log_snapshot_manager';
 import {StorageLogger} from './logger';
 
@@ -52,6 +52,10 @@ export class StorageManager {
         return csr;
     }
 
+    public async getSnapshot(blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
+        return await this.m_snapshotManager.getSnapshot(blockHash);
+    }
+
     public async createStorage(name: string, from?: Storage|string): Promise<{err: ErrorCode, storage?: Storage}> {
         let storage = new this.m_storageType({
             filePath: path.join(this.m_path, name),
@@ -60,10 +64,13 @@ export class StorageManager {
         await storage.remove();
         let err: ErrorCode;
         if (!from) {
+            this.m_logger.info(`create storage ${name}`);
             err = await storage.init();
         } else if (isString(from)) {
+            this.m_logger.info(`create storage ${name} from snapshot ${from}`);
             let ssr = await this._getSnapshotStorage(from);
             if (ssr.err) {
+                this.m_logger.error(`get snapshot failed for ${from}`);
                 err = ssr.err;
             } else {
                 fs.copyFileSync(ssr.storage!.filePath, storage.filePath);
@@ -71,12 +78,15 @@ export class StorageManager {
                 err = await storage.init();
             }
         } else if (from instanceof Storage) {
+            this.m_logger.info(`create storage ${name} from snapshot ${storage.filePath}`);
             fs.copyFileSync(from.filePath, storage.filePath);
             err = await storage.init();
         } else {
+            this.m_logger.error(`create storage ${name} with invalid from ${from}`);
             return {err: ErrorCode.RESULT_INVALID_PARAM};
         }
         if (err) {
+            this.m_logger.error(`create storage ${name} failed for ${err}`); 
             return {err};
         }
         return {err: ErrorCode.RESULT_OK, storage};
@@ -149,7 +159,7 @@ export class StorageManager {
         this.m_snapshotManager.writeRedoLog(blockHash, log);
     }
 
-    public async releaseSnapshotView(blockHash: string) {
+    public async releaseSnapshotView(blockHash: string): Promise<void> {
         let stub = this.m_views.get(blockHash);
         if (stub) {
             --stub.ref;

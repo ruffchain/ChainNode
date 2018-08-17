@@ -277,7 +277,6 @@ export class Encoding {
         return write64(dst, num, off, true);
     }
 
-
     /**
      * Read a varint.
      * @param {Buffer} data
@@ -360,15 +359,18 @@ export class Encoding {
      */
 
     static sizeVarint(num: number) {
-        if (num < 0xfd)
+        if (num < 0xfd) {
             return 1;
+        }
 
-        if (num <= 0xffff)
+        if (num <= 0xffff) {
             return 3;
-
-        if (num <= 0xffffffff)
+        }
+            
+        if (num <= 0xffffffff) {
             return 5;
-
+        }
+        
         return 9;
     }
 
@@ -395,9 +397,10 @@ export class Encoding {
             // num = (num << 7) | (ch & 0x7f);
             num = (num * 0x80) + (ch & 0x7f);
 
-            if ((ch & 0x80) === 0)
+            if ((ch & 0x80) === 0) {
                 break;
-
+            }
+                
             enforce(num !== MAX_SAFE_INTEGER, off, 'Number exceeds 2^53-1');
             num++;
         }
@@ -420,8 +423,10 @@ export class Encoding {
 
         for (; ;) {
             tmp[len] = (num & 0x7f) | (len ? 0x80 : 0x00);
-            if (num <= 0x7f)
+            if (num <= 0x7f) {
                 break;
+            }
+                
             // num = (num >>> 7) - 1;
             num = ((num - (num % 0x80)) / 0x80) - 1;
             len++;
@@ -447,8 +452,10 @@ export class Encoding {
 
         for (; ;) {
             size++;
-            if (num <= 0x7f)
+            if (num <= 0x7f) {
                 break;
+            }
+               
             // num = (num >>> 7) - 1;
             num = ((num - (num % 0x80)) / 0x80) - 1;
         }
@@ -519,9 +526,10 @@ export class Encoding {
      */
 
     static sizeVarString(str: string, enc?: string) {
-        if (typeof str !== 'string')
+        if (typeof str !== 'string') {
             return Encoding.sizeVarBytes(str);
-
+        }
+            
         const len = Buffer.byteLength(str, enc);
 
         return Encoding.sizeVarint(len) + len;
@@ -535,8 +543,10 @@ export class Encoding {
 function isSafe(hi: number, lo: number) {
     if (hi < 0) {
         hi = ~hi;
-        if (lo === 0)
+        if (lo === 0) {
             hi += 1;
+        }
+            
     }
 
     return (hi & 0xffe00000) === 0;

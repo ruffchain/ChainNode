@@ -1,7 +1,8 @@
 let XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
+import {LoggerInstance} from '../../core';
 export class RPCClient {
     private m_url: string;
-    constructor(serveraddr: string, port: number) {
+    constructor(serveraddr: string, port: number, private logger: LoggerInstance ) {
         this.m_url = 'http://' + serveraddr + ':' + port + '/rpc';
     }
 
@@ -10,10 +11,10 @@ export class RPCClient {
             funName,
             args: funcArgs
         };
+        this.logger.info(`RPCClient send request ${sendObj.funName}, params ${JSON.stringify(sendObj.args)}`);
         const xmlhttp = new XMLHttpRequest();
         xmlhttp.onreadystatechange = () => {
             if (xmlhttp.readyState === 4) {
-
                 if (xmlhttp.status === 200) {
                     let strResp = xmlhttp.responseText;
                     onComplete(strResp, xmlhttp.status);

@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const EventEmitter = require('events');
@@ -9,6 +35,8 @@ const DHTPackage = require('./packages/package.js');
 const Peer = require('./peer.js');
 const DHTCommandType = DHTPackage.CommandType;
 const assert = require('assert');
+const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_TRACE = Base.BX_TRACE;
 const LOG_INFO = Base.BX_INFO;
@@ -110,8 +138,9 @@ class PackageSender extends EventEmitter {
             return null;
         }
 
-        let now = Date.now();
-        
+        let now = TimeHelper.uptimeMS();
+        let localPeer = this.m_bucket.localPeer;
+
         cmdPackage.fillCommon(localPeerInfo, peer, recommandNodes);
         if (!DHTCommandType.isResp(cmdPackage.cmdType)) {
             cmdPackage.common.packageID = g_sendStat.genPackageID();
@@ -133,8 +162,10 @@ class PackageSender extends EventEmitter {
             }
             
             peer.lastSendTime = now;
+            localPeer.lastSendTime = now;
             if (remoteAddr.protocol === EndPoint.PROTOCOL.udp) {
                 peer.lastSendTimeUDP = now;
+                localPeer.lastSendTimeUDP = now;
             }
 
             g_sendStat._onPkgSend(cmdPackage, buffer, peer, remoteAddr);
@@ -155,21 +186,21 @@ PackageSender.Events = {
 let RESENDER_ID = 1;
 let g_resenderMap = new Map();
 function removeTimeoutResender() {
-    let now = Date.now();
-    if (g_resenderMap.size > 1024) {
+    let now = TimeHelper.uptimeMS();
+    if (g_resenderMap.size > 809) {
         // 先把超时包去掉
         let timeoutResenders = [];
         g_resenderMap.forEach((resender, id) => {
             if (resender.isTimeout() || 
                 resender.isFinish() || 
-                now - resender.lastSendTime > 600000) {
+                now - resender.lastSendTime > 600809) {
 
                 resender.abort();
                 timeoutResenders.push(id);
             }
         });
 
-        if (g_resenderMap.size > 1024) {
+        if (g_resenderMap.size > 809) {
             g_resenderMap.forEach((resender, id) => {
                 if (resender.tryTimes > 2) {
                     resender.abort();
@@ -218,7 +249,7 @@ class ResendControlor {
     }
 
     onSend() {
-        this.m_lastSendTime = Date.now();
+        this.m_lastSendTime = TimeHelper.uptimeMS();
         this.m_tryTimes++;
         if (this.m_tryTimes >= 2) {
             this.m_interval *= 2;
@@ -226,7 +257,7 @@ class ResendControlor {
     }
 
     needResend() {
-        return !this.isTimeout() && Date.now() >= this.lastSendTime + this.m_interval;
+        return !this.isTimeout() && TimeHelper.uptimeMS() >= this.lastSendTime + this.m_interval;
     }
 
     isTimeout() {
@@ -306,7 +337,7 @@ class SendStat {
     }
 
     onPackageGot(cmdPackage, remotePeer, remoteAddr, localAddr) {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
 
         if (DHTCommandType.isResp(cmdPackage.cmdType)) {
             // update RTT
@@ -317,7 +348,7 @@ class SendStat {
                     let tracer = this.m_packageTracer[i];
                     if (tracer.id === packageID) {
                         this.m_packageTracer.splice(0, i + 1);
-                        let rtt = Date.now() - tracer.time;
+                        let rtt = now - tracer.time;
                         remotePeer.updateRTT(rtt);
                         this.m_bucket.localPeer.updateRTT(rtt);
                         break;
@@ -354,7 +385,7 @@ class SendStat {
 
     _onPkgSend(cmdPackage, buffer, remotePeer, remoteAddr) {
         if (!EndPoint.isNAT(remoteAddr)) {
-            let now = Date.now();
+            let now = TimeHelper.uptimeMS();
             let cmdType = cmdPackage.cmdType;
             if (cmdType === DHTCommandType.PACKAGE_PIECE_REQ) {
                 cmdType = (DHTCommandType.PACKAGE_PIECE_REQ << 16) | cmdPackage.__orignalCmdType;
@@ -388,7 +419,7 @@ class SendStat {
 
     _clearTimeoutTracer() {
         // 清理超时记录
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         let timeoutPeerids = [];
         this.m_peerTracer.forEach((t, peerid) => {
             if (now - t[t.length - 1].time >= Config.Package.Timeout) {

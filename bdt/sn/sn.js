@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const EventEmitter = require('events');
@@ -9,6 +35,7 @@ const ResendQueue = require('./resend_queue.js');
 const PeerInfoCache = require('./peerinfo_cache.js');
 const SNDHT = require('./sn_dht.js');
 const SequenceU32 = BaseUtil.SequenceU32;
+const TimeHelper = BaseUtil.TimeHelper;
 
 const LOG_INFO = Base.BX_INFO;
 const LOG_WARN = Base.BX_WARN;
@@ -110,12 +137,12 @@ class SN extends EventEmitter {
             resendTimes: 5,
             resendQueueLimit: 4098,
             peerCacheLimit: 4098,
-            peerCacheTimeout: 60000,
+            peerCacheTimeout: 60809,
             pingDelay: 500,
 
-            minOnlineTime2JoinDHT: 24 * 3600000, // 要启动SN，必须在线一天
-            recentSNCacheTime: 120000, // 新上线其他SN保留2分钟，在此期间通知合适的peer在它上面上线
-            refreshSNDHTInterval: 600000, // 更新DHT状态周期
+            minOnlineTime2JoinDHT: 24 * 3600809, // 要启动SN，必须在线一天
+            recentSNCacheTime: 120809, // 新上线其他SN保留2分钟，在此期间通知合适的peer在它上面上线
+            refreshSNDHTInterval: 600809, // 更新DHT状态周期
         };
 
         if (options) {
@@ -162,7 +189,8 @@ class SN extends EventEmitter {
     }
     
     // isSeed标识该SN节点是否作为SN网络中的种子SN，当客户端节点没有任何SN节点信息时可以从DHT网络中得到这类节点
-    signinDHT(dht, isSeed) {
+    // 当immediately置true时，立即加入DHT，跨过考核时间，但如果长时间性能不达标也会被下线
+    signinDHT(dht, isSeed, immediately) {
         if (!this.m_snDHT) {
             let options = {
                 minOnlineTime2JoinDHT: this.m_options.minOnlineTime2JoinDHT,
@@ -171,7 +199,7 @@ class SN extends EventEmitter {
             };
             this.m_snDHT = new SNDHT(dht, options);
         }
-        this.m_snDHT.signinServer(isSeed);
+        this.m_snDHT.signinServer(isSeed, immediately);
     }
 
     signoutDHT() {
@@ -211,7 +239,7 @@ class SN extends EventEmitter {
         encoder.encode();
         this.m_server.send(
             encoder.buffer,
-            [ BaseUtil.EndPoint.toString(remote) ],
+            [BaseUtil.EndPoint.toString(remote)],
             {
                 ignoreCache: false,
                 socket,
@@ -224,12 +252,14 @@ class SN extends EventEmitter {
         if(resendPackgeId && remote.protocol === BaseUtil.EndPoint.PROTOCOL.udp) {
             this.m_resendQueue.addPackage(resendPackgeId, encoder.buffer, this.m_server, remote, this.m_options.resendInterval, this.m_options.resendTimes, null);
         }
+
         LOG_INFO(`[SN]: package ${BDTPackage.CMD_TYPE.toString(cmdPackage.header.cmdType)}(seq = ${cmdPackage.header.seq}) is sendto ${remote.address}: ${remote.port}`);
     }
 
     _processPingReq(socket, cmdPackage, remote) {
         LOG_INFO(`peer(${cmdPackage.body.peerid}:${BaseUtil.EndPoint.toString(remote)}) online.sessionid:${cmdPackage.header.sessionid}`);
-        if(cmdPackage.body == null) {
+        if(cmdPackage.body == null || 
+            typeof cmdPackage.body.peerid !== 'string' || cmdPackage.body.peerid.length === 0) {
             LOG_WARN('[SN]: processPingReq error, body is null');
             return Result.FAILED;
         }
@@ -282,11 +312,12 @@ class SN extends EventEmitter {
 
             // Public network ep
             let wlanEPString = BaseUtil.EndPoint.toString(remote)
-            eplist.push(wlanEPString)
 
             // eplist remove duplicate
-            eplist = Array.from(new Set(eplist))
-
+            let epSet = new Set(eplist);
+            epSet.delete(wlanEPString);
+            eplist = [...epSet];
+            eplist.unshift(wlanEPString);
 
             LOG_INFO(`[SN]: UPDATE info,peerid: ${peerid} ,eplist: ${eplist.toString()}`);
 
@@ -305,7 +336,7 @@ class SN extends EventEmitter {
         return Result.SUCCESS;
     }
     
-    _broadcastCallMessage(destPeerAddress, destPeerid, srcPeerid, srcPeerEplist, callReq) {
+    _broadcastCallMessage(destPeerAddress, destPeerid, srcPeerid, srcPeerEplist, callReq, dynamicEPList) {
         let calledReq = this.m_packageHelper.createPackage(BDTPackage.CMD_TYPE.calledReq);
         let calledHeader = calledReq.header;
         calledHeader.seq = callReq.header.seq;
@@ -324,6 +355,10 @@ class SN extends EventEmitter {
             dest: destPeerid,
             eplist: Array.from(srcPeerEplist),
         };
+
+        if (dynamicEPList && dynamicEPList.length > 0) {
+            calledBody.dynamics = dynamicEPList;
+        }
         calledReq.body = calledBody;
     
         let resendPackageId = ResendQueue.genPackageID(BDTPackage.CMD_TYPE.calledReq, callReq.header.src.peeridHash, calledHeader.seq);
@@ -331,8 +366,10 @@ class SN extends EventEmitter {
     }
     
     _processCallReq(socket, cmdPackage, remote) {
-        if(cmdPackage.body == null) {
-            LOG_WARN('[SN]: body is null');
+        if(cmdPackage.body == null ||
+            typeof cmdPackage.body.src !== 'string' || cmdPackage.body.src.length === 0 ||
+            typeof cmdPackage.body.dest !== 'string' || cmdPackage.body.dest.length === 0) {
+            LOG_WARN('[SN]: body is error');
             return Result.FAILED;
         }
     
@@ -352,7 +389,9 @@ class SN extends EventEmitter {
 
         LOG_INFO(`[SN]: call remote peer, ${srcPeerid} -> ${destPeerid}`);
         
-        let sendCallResp = (result, eplist, lastUpdateTime) => {
+        let now = TimeHelper.uptimeMS();
+
+        let sendCallResp = (result, eplist, dynamicEPList, lastUpdateTime) => {
             LOG_INFO(`[SN]: will send call resp, result:${result}, ${srcPeerid} -> ${destPeerid}`);
     
             let respBody = {
@@ -362,7 +401,10 @@ class SN extends EventEmitter {
                 };
             if (eplist) {
                 respBody.eplist = Array.from(eplist);
-                respBody.time = lastUpdateTime || 0;
+                respBody.time = (lastUpdateTime? now - lastUpdateTime : -1);
+            }
+            if (dynamicEPList && dynamicEPList.length > 0) {
+                respBody.dynamics = dynamicEPList;
             }
 
             let nearSN = this.m_snDHT.getNearSN(destPeerid, true);
@@ -414,15 +456,48 @@ class SN extends EventEmitter {
         let wlanEPString = BaseUtil.EndPoint.toString(remote);
         if (destPeerInfo) {
             this.m_stat.hits++;
+            let destEPSet = new Set([...destPeerInfo.eplist.keys()]);
+            let dynamicEPList = null;
+
+            // 追加被动方为该连接专门构造的动态地址
+            let dynamics = destPeerInfo.dynamics.get(srcPeerid);
+            if (dynamics) {
+                let dynamicEPSet = dynamics.get(reqHeader.sessionid);
+                if (dynamicEPSet) {
+                    dynamicEPList = [];
+                    dynamicEPSet.forEach(ep => {
+                        if (!destEPSet.has(ep)) {
+                            dynamicEPList.push(ep);
+                        }
+                    })
+                }
+            }
+
+            let destAddressEP = BaseUtil.EndPoint.toString(destPeerInfo.address);
+            destEPSet.delete(destAddressEP);
+            let destEPArray = [destAddressEP, ...destEPSet];
+
             let srcPeerInfo = this.m_peerCache.getPeerInfo(srcPeerid);
+
+            let srcEPList = reqBody.eplist || [];
+            let srcDynamicEPList = [];
+            if (!reqBody.isDynamic) {
+                srcEPList.push(wlanEPString);
+            } else {
+                srcDynamicEPList.push(wlanEPString);
+            }
+            this.m_peerCache.update(srcPeerid, {
+                    info: srcPeerInfo? srcPeerInfo.info : null,
+                    eplist: srcEPList,
+                }, remote);
+
             if (srcPeerInfo) {
-                srcPeerInfo.eplist.set(wlanEPString, Date.now());
-                this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerInfo.peerid, srcPeerInfo.eplist.keys(), cmdPackage);
-                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys(), destPeerInfo.lastUpdateTime);
+                this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerInfo.peerid, [...srcEPList, ...srcPeerInfo.eplist.keys()], cmdPackage, srcDynamicEPList);
+                sendCallResp(Result.SUCCESS, destEPArray, dynamicEPList, destPeerInfo.lastUpdateTime);
                 return Result.SUCCESS;
             } else {
-                this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerid, [wlanEPString], cmdPackage);
-                sendCallResp(Result.SUCCESS, destPeerInfo.eplist.keys(), destPeerInfo.lastUpdateTime);
+                this._broadcastCallMessage(destPeerInfo.address, destPeerInfo.peerid, srcPeerid, srcEPList, cmdPackage, srcDynamicEPList);
+                sendCallResp(Result.SUCCESS, destEPArray, dynamicEPList, destPeerInfo.lastUpdateTime);
                 return Result.SUCCESS;
             }
             LOG_INFO(`Found dest peer(${srcPeerid}-${destPeerid}) from sn`);
@@ -477,10 +552,42 @@ class SN extends EventEmitter {
         return Result.SUCCESS;
     }
     
-    _processCalledResp(socket, cmdPackage,remote) {
+    _processCalledResp(socket, cmdPackage, remote) {
+        if(cmdPackage.body == null ||
+            typeof cmdPackage.body.src !== 'string' || cmdPackage.body.src.length === 0 ||
+            typeof cmdPackage.body.dest !== 'string' || cmdPackage.body.dest.length === 0) {
+            LOG_WARN('[SN]: body is error');
+            return Result.FAILED;
+        }
+
         let header = cmdPackage.header;
         let calledReqPackageId = ResendQueue.genPackageID(BDTPackage.CMD_TYPE.calledReq, header.dest.peeridHash, header.ackSeq);
         this.m_resendQueue.confirmPackage(calledReqPackageId);
+
+        let srcPeerInfo = this.m_peerCache.getPeerInfo(cmdPackage.body.src);
+        if (!srcPeerInfo) {
+            return Result.SUCCESS;
+        }
+
+        let wlanEPString = BaseUtil.EndPoint.toString(remote);
+        if (cmdPackage.body.sessionid && cmdPackage.body.isDynamic) {
+            let sessionid = parseInt(cmdPackage.body.sessionid)
+            let destDynamic = srcPeerInfo.dynamics.get(cmdPackage.body.dest);
+            if (!destDynamic) {
+                destDynamic = new Map();
+                srcPeerInfo.dynamics.set(cmdPackage.body.dest, destDynamic);
+            }
+            let epSet = destDynamic.get(sessionid);
+            if (!epSet) {
+                epSet = new Set([wlanEPString]);
+                destDynamic.set(sessionid, epSet);
+            } else {
+                epSet.add(wlanEPString);
+            }
+        } else {
+            this.m_peerCache.update(cmdPackage.body.src, {info: srcPeerInfo.info, eplist: [wlanEPString]}, remote);
+        }
+
         return Result.SUCCESS;
     }
 

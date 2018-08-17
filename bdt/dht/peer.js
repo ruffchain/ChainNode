@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const {HashDistance, Config, EndPoint} = require('./util.js');
@@ -6,6 +32,7 @@ const ServiceDescriptor = require('./service_descriptor.js');
 
 const Base = require('../base/base.js');
 const BaseUtil = require('../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 const assert = require('assert');
 
 const LOG_INFO = Base.BX_INFO;
@@ -17,7 +44,7 @@ const LOG_ERROR = Base.BX_ERROR;
 
 class Peer {
     constructor({peerid, eplist, natType = NAT_TYPE.unknown, onlineDuration = 0, services = null, additionalInfo = null, hash = null, RTT = 0}) {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
         this.m_peerid = peerid;
         this.m_eplist = new Set(eplist || []);
         assert(typeof peerid === 'string' && peerid.length > 0, `${peerid}`);
@@ -95,7 +122,7 @@ class Peer {
     }
 
     get onlineDuration() {
-        let duration = Math.ceil(Date.now() / 1000 - this.m_onlineTime);
+        let duration = Math.ceil(TimeHelper.uptimeMS() / 1000 - this.m_onlineTime);
         return duration > 1? duration : 1;
     }
 
@@ -262,13 +289,11 @@ class Peer {
     
     // 一段时间内收到过包才认为它在线
     isOnline(limitMS) {
-        this._correctTime();
-        return Date.now() - this.m_lastRecvTime < limitMS;
+        return TimeHelper.uptimeMS() - this.m_lastRecvTime < limitMS;
     }
 
     // 发出包后一段时间内没有收到包认为它超时
     isTimeout(limitMS) {
-        this._correctTime();
         return this.m_lastSendTime - this.m_lastRecvTime > limitMS;
     }
     
@@ -306,16 +331,6 @@ class Peer {
         return Math.floor(interval);
     }
 
-    _correctTime() {
-        let now = Date.now();
-        if (this.m_lastRecvTime > now) {
-            this.m_lastRecvTime = now;
-        }
-        if (this.m_lastSendTime > now) {
-            this.m_lastSendTime = now;
-        }
-    }
-
     _setAdditionalInfo(newValue) {
         if (!newValue) {
             this.m_additionalInfo = null;
@@ -328,8 +343,9 @@ class Peer {
         // 只删除udp的0地址, 保留tcp
         let zeroEPList = [];
         for (let ep of this.m_eplist.keys()) {
-            const { protocol } = EndPoint.toAddress(ep);
-            if (EndPoint.isZero(ep) && protocol == EndPoint.PROTOCOL.udp) {
+            let addr = EndPoint.toAddress(ep);
+            if (!addr ||
+                (EndPoint.isZero(addr) && addr.protocol == EndPoint.PROTOCOL.udp)) {
                 zeroEPList.push(ep);
             }
         }
@@ -349,7 +365,7 @@ class LocalPeer extends Peer {
         if (!(_eplistWithUpdateState instanceof Map)) {
             if (eplist) {
                 for (let ep of eplist) {
-                    this.m_eplist.set(ep, {isInitEP: true});
+                    this.m_eplist.set(ep, {isInitEP: true, updateTime: TimeHelper.uptimeMS()});
                 }
                 this._eraseZeroEP();
             }
@@ -359,7 +375,7 @@ class LocalPeer extends Peer {
             _eplistWithUpdateState.forEach((attr, ep) => {
                 if (attr.isInitEP) {
                     this.m_initEPCount++;
-                    this.m_eplist.set(ep, {isInitEP: true});
+                    this.m_eplist.set(ep, {isInitEP: true, updateTime: attr.updateTime});
                 } else {
                     let info = {updateTime: attr.updateTime};
                     if (attr.isReuseListener) {
@@ -380,19 +396,23 @@ class LocalPeer extends Peer {
     }
 
     get eplist() {
-        let now = Date.now();
-        let validEpList = new Set();
+        let now = TimeHelper.uptimeMS();
+        let validEpList = [];
         this.m_eplist.forEach((info, ep) => {
             if (info.isInitEP) {
-                validEpList.add(ep);
+                validEpList.push({ep, info});
             } else if (now - info.updateTime < this.EP_TIMEOUT){
-                if (EndPoint.toAddress(ep).protocol === EndPoint.PROTOCOL.udp ||
-                    info.isReuseListener) {
-                    validEpList.add(ep);
+                let addr = EndPoint.toAddress(ep);
+                if (addr &&
+                    (addr.protocol === EndPoint.PROTOCOL.udp || info.isReuseListener)) {
+
+                    validEpList.push({ep, info});
                 }
             }
         });
-        return [...validEpList];
+
+        validEpList.sort((a, b) => b.info.updateTime - a.info.updateTime);
+        return validEpList.map(v => v.ep);
     }
 
     set eplist(newValue) {
@@ -408,12 +428,12 @@ class LocalPeer extends Peer {
     }
 
     unionEplist(eplist, isReuseListener) {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
 
         let _unionEPList = (newEPList, _isReuseListener, isConjecture) => {
             for (let ep of newEPList) {
                 let addr = EndPoint.toAddress(ep);
-                if (EndPoint.isZero(addr)) {
+                if (!addr || EndPoint.isZero(addr)) {
                     continue;
                 }
     
@@ -441,7 +461,7 @@ class LocalPeer extends Peer {
                             }
                         }
                     }
-                } else if(!info.isInitEP) {
+                } else {
                     info.updateTime = now;
                 }
                 // tcp需要区分是否是监听socket，监听socket可以传播出去，非监听socket传播出去没有意义，而且数量巨大
@@ -501,34 +521,6 @@ class LocalPeer extends Peer {
             epInfo.senderEP = senderEP;
         }
     }
-    
-    get lastRecvTime() {
-        return Date.now();
-    }
-
-    set lastRecvTime(newValue) {
-    }
-    
-    get lastRecvTimeUDP() {
-        return Date.now();
-    }
-
-    set lastRecvTimeUDP(newValue) {
-    }
-
-    get lastSendTime() {
-        return Date.now();
-    }
-
-    set lastSendTime(newValue) {
-    }
-
-    get lastSendTimeUDP() {
-        return Date.now();
-    }
-
-    set lastSendTimeUDP(newValue) {
-    }
 
     isTimeout() {
         return false;
@@ -560,17 +552,37 @@ class LocalPeer extends Peer {
     toStructForPackage() {
         let listenEPList = [];
         let isSym = this.isSymmetricNAT;
+        let lastIPV6s = [];
+        let lastInitIPV6s = [];
+
+        let addLastEP = (ep, info, list) => {
+            for (let i = 0; i < list.length; i++) {
+                let exist = list[i];
+                if (exist.info.updateTime < info.updateTime) {
+                    list.splice(i, 0, {ep, info});
+                }
+            }
+            if (list.length > 2) {
+                list.pop();
+            }
+        }
+
         this.m_eplist.forEach((info, ep) => {
             // 0地址传播没有意义
             let addr = EndPoint.toAddress(ep);
-            if (!EndPoint.isZero(addr)) {
-                // 对称NAT的公网EP分发出去没有意义，局域网地址可以碰碰运气
-                if (!isSym || EndPoint.isNAT(addr)) {
+            if (addr && !EndPoint.isZero(addr)) {
+                // IPV6有各种临时地址，只取最近用到的地址（公网发现地址和初始设定地址各两个）
+                if (addr.family === EndPoint.FAMILY.IPv6) {
+                    addLastEP(ep, info, info.isInitEP? lastInitIPV6s : lastIPV6s);
+                } else if (!isSym || EndPoint.isNAT(addr)) {
+                    // 对称NAT的公网EP分发出去没有意义，局域网地址可以碰碰运气
                     listenEPList.push(ep);
                 }
             }
         });
 
+        lastIPV6s.forEach(epInfo => listenEPList.push(epInfo.ep));
+        lastInitIPV6s.forEach(epInfo => listenEPList.push(epInfo.ep));
         let obj = this.toStruct(listenEPList);
         return obj;
     }
@@ -582,7 +594,7 @@ class LocalPeer extends Peer {
     }
 
     get natType() {
-        if (this.onlineDuration > PeerConfig.NATTypeTime) {
+        if (this.onlineDuration * 1000 < PeerConfig.NATTypeTime) {
             return NAT_TYPE.unknown;
         }
 
@@ -595,15 +607,20 @@ class LocalPeer extends Peer {
         } else {
             // 其他peer看到的地址都和发包采用地址相同，认为它有一个公网地址
             if (this.m_eplist) {
-                let now = Date.now();
+                let now = TimeHelper.uptimeMS();
                 for (let [ep, epInfo] of this.m_eplist) {
                     // LOG_INFO(`now=${now},ep=${ep},epInfo=${JSON.stringify(epInfo)}`);
                     let epAddress = EndPoint.toAddress(ep);
-                    if (epInfo.senderEP && epAddress.family === EndPoint.FAMILY.IPv4 && (epInfo.isInitEP || now - epInfo.updateTime <= this.EP_TIMEOUT) && !EndPoint.isNAT(epAddress)) {
+                    if (epAddress &&
+                        epInfo.senderEP && 
+                        epAddress.family === EndPoint.FAMILY.IPv4 && 
+                        (epInfo.isInitEP || now - epInfo.updateTime <= this.EP_TIMEOUT) && 
+                        !EndPoint.isNAT(epAddress)) {
+
                         let epSenderAddress = EndPoint.toAddress(epInfo.senderEP);
                         // 收发地址完全匹配，或者发送地址是'0.0.0.0'但port匹配，刚好映射到相同port的情况时，会误判
-                        if (ep === epInfo.senderEP || 
-                            (EndPoint.isZero(epSenderAddress) && epAddress.port === epSenderAddress.port)) {
+                        if (epSenderAddress && 
+                            (ep === epInfo.senderEP || (EndPoint.isZero(epSenderAddress) && epAddress.port === epSenderAddress.port))) {
                             return NAT_TYPE.internet;
                         }
                     }
@@ -614,7 +631,7 @@ class LocalPeer extends Peer {
     }
 
     _knockOut() {
-        let now = Date.now();
+        let now = TimeHelper.uptimeMS();
 
         let outtimeEPList = [];
         let isNat = false;
@@ -626,7 +643,7 @@ class LocalPeer extends Peer {
             let outtimeCount = outtimeEPList.length;
 
             let addr = EndPoint.toAddress(ep);
-            if (now - info.updateTime > this.EP_TIMEOUT) {
+            if (!addr || now - info.updateTime > this.EP_TIMEOUT) {
                 outtimeEPList.push(ep);
             } else {
                 if (addr.protocol === EndPoint.PROTOCOL.tcp && !info.isReuseListener) {
@@ -635,22 +652,21 @@ class LocalPeer extends Peer {
                         outtimeEPList.push(ep);
                     } else {
                         let senderAddress = EndPoint.toAddress(info.senderEP);
-                        if ((ep === info.senderEP || (EndPoint.isZero(senderAddress) && addr.port === senderAddress.port))) {
+                        if (ep === info.senderEP || 
+                            !senderAddress ||
+                            (EndPoint.isZero(senderAddress) && addr.port === senderAddress.port)) {
                             outtimeEPList.push(ep);
                         } else {
                             isNat = true;
                         }
                     }
                 }
-                if (now < info.updateTime) {
-                    info.updateTime = now;
-                }
             }
 
             if (outtimeEPList.length > outtimeCount) {
                 if (info.isConjecture) {
                     this.m_conjectureEPCount--;
-                } else if (!EndPoint.isNAT(addr)) {
+                } else if (addr && !EndPoint.isNAT(addr)) {
                     if (addr.family === EndPoint.FAMILY.IPv4) {
                         this.m_discoverInternetEPCount--;
                     }

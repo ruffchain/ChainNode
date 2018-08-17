@@ -1,3 +1,29 @@
+// Copyright (c) 2016-2018, BuckyCloud, Inc. and other BDT contributors.
+// The BDT project is supported by the GeekChain Foundation.
+// All rights reserved.
+
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//     * Redistributions of source code must retain the above copyright
+//       notice, this list of conditions and the following disclaimer.
+//     * Redistributions in binary form must reproduce the above copyright
+//       notice, this list of conditions and the following disclaimer in the
+//       documentation and/or other materials provided with the distribution.
+//     * Neither the name of the BDT nor the
+//       names of its contributors may be used to endorse or promote products
+//       derived from this software without specific prior written permission.
+
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY
+// DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 'use strict';
 
 const Base = require('../../base/base.js');
@@ -6,6 +32,8 @@ const Task = require('./task.js');
 const {ResendControlor} = require('../package_sender.js');
 const assert = require('assert');
 const {Peer, LocalPeer} = require('../peer.js');
+const BaseUtil = require('../../base/util.js');
+const TimeHelper = BaseUtil.TimeHelper;
 
 const TaskConfig = Config.Task;
 
@@ -67,8 +95,11 @@ class TouchNodeTask extends Task {
     _processImpl(response, remotePeer) {
         let arrivedPeerCount = this.m_arrivePeeridSet.size;
 
-        if (response.body.r_nodes) {
+        if (response.body.r_nodes && Array.isArray(response.body.r_nodes)) {
             response.body.r_nodes.forEach(peerid => {
+                if (typeof peerid !== 'string' || peerid.length === 0) {
+                    return;
+                }
                 this.m_arrivePeeridSet.add(peerid);
                 this.m_requestPeeridSet.add(peerid);
                 let arrived = this.m_pendingPeerList.get(peerid);
@@ -86,7 +117,7 @@ class TouchNodeTask extends Task {
             touchedPeerEx.resender.finish();
         }
 
-        if (this.m_arrivePeeridSet.size != arrivedPeerCount && this.m_package.body) {
+        if (this.m_arrivePeeridSet.size !== arrivedPeerCount && this.m_package.body) {
             let eNodes = null;
             if (this.m_excludePeerids.size > 0) {
                 eNodes = new Set([...this.m_arrivePeeridSet, ...this.m_excludePeerids]);
@@ -96,10 +127,11 @@ class TouchNodeTask extends Task {
             this.m_package.body.e_nodes = [...eNodes];
         }
 
-        if (response.body.n_nodes) {
+        if (response.body.n_nodes && Array.isArray(response.body.n_nodes)) {
             let localPeer = this.bucket.localPeer;
             for (let peer of response.body.n_nodes) {
-                if (!this._isExcludeLocalPeer || peer.peerid != localPeer.peerid) {
+                if (peer && typeof peer.id === 'string' && peer.id.length > 0 &&
+                    (!this._isExcludeLocalPeer || peer.id != localPeer.peerid)) {
                     this._sendPackage({peerid: peer.id, eplist: peer.eplist}, remotePeer);
                 }
             }
@@ -136,7 +168,7 @@ class TouchNodeTask extends Task {
         if (this.m_ttl > 0) {
             // 对方收到包后需要转发处理，超时时间应该比本地任务短，否则可能本地任务超时结束还收不到对方的结果；
             // 1500ms作为对方超时判定和网络传输的冗余
-            this.m_package.body.timeout = this.deadline - Date.now() - 1500;
+            this.m_package.body.timeout = this.deadline - TimeHelper.uptimeMS() - 500;
             if (this.m_package.body.timeout <= 0) {
                 delete this.m_package.body.timeout;
                 this.m_ttl = 0;

@@ -1,6 +1,6 @@
 import {ErrorCode} from '../error_code';
 import {Serializable} from '../serializable';
-import {Storage, StorageTransaction, IReadableKeyValue, IWritableKeyValue, IReadWritableStorage, IReadWritableKeyValue} from './storage';
+import {Storage, StorageTransaction, IReadWritableDatabase, IWritableDatabase, IWritableKeyValue, IReadWritableStorage, IReadWritableKeyValue} from './storage';
 
 export interface IStorageLogger {
     init(): any;
@@ -8,11 +8,9 @@ export interface IStorageLogger {
 
     redoOnStorage(storage: IReadWritableStorage): Promise<ErrorCode>; 
 
-    createKeyValue(name: string): Promise<{err: ErrorCode, kv?: IWritableKeyValue}>;
-
-    beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }>;
-
-    getReadWritableKeyValue(name: string): Promise<{err: ErrorCode, kv?: IWritableKeyValue}>;
+    beginTransaction(): Promise<{ err: ErrorCode, value?: StorageTransaction }>;
+    createDatabase(name: string): Promise <{err: ErrorCode, value?: IWritableDatabase}>;
+    getReadWritableDatabase(name: string): Promise <{err: ErrorCode, value?: IWritableDatabase}>;
 }
 
 export type StorageLogger = IStorageLogger & Serializable;
@@ -36,10 +34,9 @@ export class LoggedStorage {
 
     private _wrapStorage() {
         let storage = this.m_storage;
-        let logger = this.m_logger;
         {
             let proto = storage.beginTransaction;
-            storage.beginTransaction = async (): Promise<{ err: ErrorCode, value: StorageTransaction }> => {
+            storage.beginTransaction = async (): Promise<{ err: ErrorCode, value?: StorageTransaction }> => {
                 let ltr = await this.m_logger.beginTransaction();
                 await ltr.value!.beginTransaction();
                 let btr = await proto.bind(storage)();
@@ -48,19 +45,40 @@ export class LoggedStorage {
             };
         }
         {
-            let proto = storage.getReadWritableKeyValue;
-            storage.getReadWritableKeyValue = async (name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> => {
-                let ltr = await this.m_logger.getReadWritableKeyValue(name);
-                let btr = await proto.bind(storage)(name);
+            let proto = storage.getReadWritableDatabase;
+            storage.getReadWritableDatabase = async (name: string): Promise<{err: ErrorCode, value?: IReadWritableDatabase }> => {
+                let ltr = await this.m_logger.getReadWritableDatabase(name);
+                let dbr = await proto.bind(storage)(name);
+                this._wrapDatabase(dbr.value!, ltr.value!);
+                return dbr;
+            };
+        }
+        {
+            let proto = storage.createDatabase;
+            storage.createDatabase = async (name: string): Promise<{err: ErrorCode, value?: IReadWritableDatabase }> => {
+                let ltr = await this.m_logger.createDatabase(name);
+                let dbr = await proto.bind(storage)(name);
+                this._wrapDatabase(dbr.value!, ltr.value!);
+                return dbr;
+            };
+        }
+    }
+
+    private _wrapDatabase(database: IReadWritableDatabase, logger: IWritableDatabase) {
+        {
+            let proto = database.getReadWritableKeyValue;
+            database.getReadWritableKeyValue = async (name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> => {
+                let ltr = await logger.getReadWritableKeyValue(name);
+                let btr = await proto.bind(database)(name);
                 this._wrapKeyvalue(btr.kv!, ltr.kv!);
                 return btr;
             };
         }
         {
-            let proto = storage.createKeyValue;
-            storage.createKeyValue = async (name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> => {
-                let ltr = await this.m_logger.createKeyValue(name);
-                let btr = await proto.bind(storage)(name);
+            let proto = database.createKeyValue;
+            database.createKeyValue = async (name: string): Promise<{err: ErrorCode, kv?: IReadWritableKeyValue}> => {
+                let ltr = await logger.createKeyValue(name);
+                let btr = await proto.bind(database)(name);
                 this._wrapKeyvalue(btr.kv!, ltr.kv!);
                 return btr;
             };
@@ -108,7 +126,7 @@ export class LoggedStorage {
         }
         {
             let proto = kv.hclean;
-            kv.hclean = async (key: string): Promise<ErrorCode> => {
+            kv.hclean = async (key: string): Promise<{err: ErrorCode}> => {
                 await logger.hclean(key);
                 return await proto.bind(kv)(key);
             };

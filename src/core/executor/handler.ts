@@ -2,16 +2,19 @@ import {ErrorCode} from '../error_code';
 
 export type TxListener = (context: any, params: any) => Promise<ErrorCode>;
 export type BlockHeigthFilter = (height: number) => Promise<boolean>;
-export type BlockHeightListener = (context: any, bBeforeBlockExec: boolean) => Promise<ErrorCode>;
+export type BlockHeightListener = (context: any) => Promise<ErrorCode>;
 export type ViewListener = (context: any, params: any) => Promise<any>;
 
 export class BaseHandler {
     protected m_txListeners: Map<string, TxListener> = new Map();
     protected m_viewListeners: Map<string, ViewListener> = new Map();
-    protected m_heightEventListeners: {filter: BlockHeigthFilter, listener: BlockHeightListener}[] = [];
-
+    protected m_preBlockListeners: {filter: BlockHeigthFilter, listener: BlockHeightListener}[] = [];
+    protected m_postBlockListeners: {filter: BlockHeigthFilter, listener: BlockHeightListener}[] = [];
+    
     constructor() {
     }
+
+    public genesisListener?: BlockHeightListener;
 
     public addTX(name: string, listener: TxListener) {
         if (name.length > 0 && listener) {
@@ -33,13 +36,27 @@ export class BaseHandler {
         return this.m_viewListeners.get(name) as ViewListener;
     }
 
-    public addBlockHeightEvent(filter: BlockHeigthFilter, listener: BlockHeightListener) {
-        this.m_heightEventListeners.push({filter, listener});
+    public addPreBlockListener(filter: BlockHeigthFilter, listener: BlockHeightListener) {
+        this.m_preBlockListeners.push({filter, listener});
     }
 
-    public async getBlockHeightListeners(h: number): Promise<BlockHeightListener[]> {
-        let listeners: BlockHeightListener[] = [];
-        for (let l of this.m_heightEventListeners) {
+    public addPostBlockListener(filter: BlockHeigthFilter, listener: BlockHeightListener) {
+        this.m_postBlockListeners.push({filter, listener});
+    }
+
+    public getPreBlockListeners(h: number): BlockHeightListener[] {
+        let listeners = [];
+        for (let l of this.m_preBlockListeners) {
+            if (l.filter(h)) {
+                listeners.push(l.listener);
+            }
+        }
+        return listeners;
+    }
+
+    public getPostBlockListeners(h: number): BlockHeightListener[] {
+        let listeners = [];
+        for (let l of this.m_postBlockListeners) {
             if (l.filter(h)) {
                 listeners.push(l.listener);
             }
