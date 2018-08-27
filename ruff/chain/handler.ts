@@ -4,7 +4,7 @@ import { IReadableKeyValue } from '../../src/core';
 export function registerHandler(handler: ValueHandler) {
     async function getTokenBalance(balanceKv: IReadableKeyValue, address: string): Promise<BigNumber> {
         let retInfo = await balanceKv.get(address);
-        return retInfo.err === ErrorCode.RESULT_OK ? new BigNumber(retInfo.value as string) : new BigNumber(0);
+        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
     }
     
     handler.genesisListener = async (context: DposTransactionContext) => {
@@ -26,11 +26,6 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<string[]> => {
         return await context.getCandidates();
-    });
-
-    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValue(params.tokenid);
-        return await getTokenBalance(balancekv.kv!, params.address);
     });
 
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
@@ -62,7 +57,7 @@ export function registerHandler(handler: ValueHandler) {
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount).toString());
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
             }
         }
         return ErrorCode.RESULT_OK;
@@ -79,9 +74,14 @@ export function registerHandler(handler: ValueHandler) {
         if (fromTotal.lt(amount)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
-        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount).toString()));
-        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount).toString()));
+        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
+        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
         return ErrorCode.RESULT_OK;
+    });
+
+    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        let balancekv = await context.storage.getReadableKeyValue(params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.address);
     });
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
