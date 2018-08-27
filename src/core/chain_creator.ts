@@ -141,7 +141,7 @@ export class ChainCreator {
         return handler;
     }
 
-    public async createMinerInstance(dataDir: string): Promise<{ err: ErrorCode, miner?: Miner }> {
+    public async createMinerInstance(dataDir: string): Promise<{ err: ErrorCode, miner?: Miner, globalOptions?: any }> {
         if (!path.isAbsolute(dataDir)) {
             dataDir = path.join(process.cwd(), dataDir);
         }
@@ -158,10 +158,10 @@ export class ChainCreator {
         if (err) {
             return {err};
         }
-        return {err: ErrorCode.RESULT_OK, miner};
+        return {err: ErrorCode.RESULT_OK, miner, globalOptions: lcr.config!.globalOptions};
     }
 
-    public async createChainInstance(dataDir: string): Promise<{ err: ErrorCode, chain?: Chain }> {
+    public async createChainInstance(dataDir: string): Promise<{ err: ErrorCode, chain?: Chain, globalOptions?: any }> {
         if (!path.isAbsolute(dataDir)) {
             dataDir = path.join(process.cwd(), dataDir);
         }
@@ -178,15 +178,6 @@ export class ChainCreator {
         if (err) {
             return {err};
         }
-        return {err: ErrorCode.RESULT_OK, chain};
+        return {err: ErrorCode.RESULT_OK, chain, globalOptions: lcr.config!.globalOptions};
     }
-
-    // options.initBlockWnd = chainParam.get('initBlockWnd');
-    //     options.blockTimeout = chainParam.get('blockTimeout');
-    //     options.headersTimeout = chainParam.get('headersTimeout');
-    //     options.minOutbound = chainParam.get('minOutbound');
-    //     options.nodeCacheSize = chainParam.get('nodeCacheSize');
-    //     options.initializePeerCount = chainParam.get('initializePeerCount');
-    //     options.headerReqLimit = chainParam.get('headerReqLimit');
-    //     options.confirmDepth = chainParam.get('confirmDepth');
 }

@@ -11,7 +11,7 @@ import {JStorageLogger} from './js_log';
 import { Storage, StorageOptions } from './storage';
 import { IStorageSnapshotManager, StorageDumpSnapshot, StorageSnapshotManagerOptions } from './dump_snapshot';
 import { StorageDumpSnapshotManager } from './dump_snapshot_manager';
-import {HeaderStorage} from '../block';
+import {IHeaderStorage} from '../block';
 
 export class SnapshotManager implements IStorageSnapshotManager {
     constructor(options: StorageSnapshotManagerOptions) {
@@ -23,7 +23,7 @@ export class SnapshotManager implements IStorageSnapshotManager {
     }
 
     private m_logPath: string;
-    private m_headerStorage: HeaderStorage;
+    private m_headerStorage: IHeaderStorage;
     private m_dumpManager: StorageDumpSnapshotManager;
     private m_storageType: new (options: StorageOptions) => Storage;
     private m_logger: LoggerInstance;
@@ -54,6 +54,11 @@ export class SnapshotManager implements IStorageSnapshotManager {
             this.m_snapshots.set(ss.blockHash, { ref: 0 });
         }
         return ErrorCode.RESULT_OK;
+    }
+
+    uninit() {
+        this.m_dumpManager.uninit();
+        this.m_snapshots.clear();
     }
 
     async createSnapshot(from: Storage, blockHash: string): Promise<{ err: ErrorCode, snapshot?: StorageDumpSnapshot }> {
@@ -130,7 +135,7 @@ export class SnapshotManager implements IStorageSnapshotManager {
             this.m_logger.error(`get snapshot ${blockHash} failed for dump manager get snapshot failed for ${ssr.err}`);
             return {err: ssr.err};
         }
-        let hr = await this.m_headerStorage.loadHeader(blockHash);
+        let hr = await this.m_headerStorage.getHeader(blockHash);
         if (hr.err) {
             this.m_logger.error(`get snapshot ${blockHash} failed for load header failed ${hr.err}`);
             return {err: hr.err};
@@ -151,7 +156,7 @@ export class SnapshotManager implements IStorageSnapshotManager {
                 err = _ssr.err;
                 break;
             }
-            let _hr = await this.m_headerStorage.loadHeader(header.preBlockHash);
+            let _hr = await this.m_headerStorage.getHeader(header.preBlockHash);
             if (_hr.err) {
                 this.m_logger.error(`get snapshot ${blockHash} failed for get header ${header.preBlockHash} failed ${hr.err}`);
                 err = ErrorCode.RESULT_INVALID_BLOCK;

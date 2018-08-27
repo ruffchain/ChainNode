@@ -3,6 +3,7 @@ import { ErrorCode } from '../error_code';
 import {ValueTransaction} from './transaction';
 import {BigNumber} from 'bignumber.js';
 import {ValueChain} from './chain';
+import {ValueBlockHeader} from './block';
 
 export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();
@@ -20,11 +21,20 @@ export class ValuePendingTransactions extends PendingTransactions {
         }
 
         let err = await super.addTransaction(tx);
-        if (!err) {
+        if (err) {
             return err;
         }
 
         return this._updateBalance(tx.address as string, balance.minus(totalUse));
+    }
+
+    public async updateTipBlock(header: ValueBlockHeader): Promise<ErrorCode> {
+        let err = super.updateTipBlock(header);
+        if (err) {
+            return err;
+        }
+        this.m_balance = new Map();
+        return err;
     }
 
     protected async getStorageBalance(s: string): Promise<{err: ErrorCode, value?: BigNumber}> {

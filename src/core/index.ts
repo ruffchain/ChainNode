@@ -58,3 +58,5 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
     });
     return _creator;
 }
+
+export * from './chain_debuger';

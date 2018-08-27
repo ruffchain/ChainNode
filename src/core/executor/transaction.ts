@@ -7,13 +7,17 @@ import { LoggerInstance } from '../lib/logger_util';
 import { isNumber } from 'util';
 const {LogShim} = require('../lib/log_shim');
 
+export type TransactionExecuteflag = {
+    ignoreNoce?: boolean
+};
+
 class BaseExecutor {
     protected m_logger: LoggerInstance;
     constructor(logger: LoggerInstance) {
         this.m_logger = logger;
     }
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
-        let database =  (await storage.getReadWritableDatabase(Chain.dbUser));
+        let database =  (await storage.getReadWritableDatabase(Chain.dbUser)).value!;
         let context = Object.create(externContext);
         
         // context.getNow = (): number => {
@@ -84,10 +88,12 @@ export class TransactionExecutor extends BaseExecutor {
         return ErrorCode.RESULT_OK;
     }
 
-    public async execute(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<{err: ErrorCode, receipt?: Receipt}> {
-        let nonceErr = await this._dealNonce(this.m_tx, storage);
-        if (nonceErr !== ErrorCode.RESULT_OK) {
-            return {err: nonceErr};
+    public async execute(blockHeader: BlockHeader, storage: Storage, externContext: any, flag?: TransactionExecuteflag): Promise<{err: ErrorCode, receipt?: Receipt}> {
+        if (!(flag && flag.ignoreNoce)) {
+            let nonceErr = await this._dealNonce(this.m_tx, storage);
+            if (nonceErr !== ErrorCode.RESULT_OK) {
+                return {err: nonceErr};
+            }
         }
         let context = await this.prepareContext(blockHeader, storage, externContext);
         let receipt: Receipt = new Receipt();

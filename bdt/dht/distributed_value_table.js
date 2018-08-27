@@ -129,9 +129,9 @@ class DistributedValueTableMgr {
 
     log() {
         for (let [tableName, table] of this.m_tables) {
-            LOG_INFO(`Table(${tableName}) count(${table.values.size}):`);
+            LOG_DEBUG(`Table(${tableName}) count(${table.values.size}):`);
             for (let [keyName, valueObj] of table.values) {
-                LOG_INFO(`\t${keyName}\t${valueObj.value}`);
+                LOG_DEBUG(`\t${keyName}\t${valueObj.value}`);
             }
         }
     }

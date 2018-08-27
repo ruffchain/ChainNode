@@ -27,15 +27,12 @@ interface INodeConnection {
 export type NodeConnection = INodeConnection & IConnection;
 
 export class INode extends EventEmitter {
-    public async randomPeers(count: number): Promise<{err: ErrorCode, peers: string[]}> {
+    public async randomPeers(count: number, excludes: string[]): Promise<{err: ErrorCode, peers: string[]}> {
         return {err: ErrorCode.RESULT_NO_IMP, peers: []};
     }
-    protected m_socket: any = null;
-    protected m_port: number = 0;
-    protected m_addr: string = '';
-    protected m_peerid: string = '';
+    protected m_peerid?: string;
     // chain的创始块的hash值，从chain_node传入， 可用于传输中做校验
-    protected m_genesis: string = '';
+    protected m_genesis?: string;
 
     protected m_inConn: NodeConnection[] = [];
     protected m_outConn: NodeConnection[] = [];
@@ -48,7 +45,7 @@ export class INode extends EventEmitter {
         this.m_logger = initLogger(options);
     }
 
-    set genesis_hash(genesis_hash: string) {
+    set genesisHash(genesis_hash: string) {
         this.m_genesis = genesis_hash;
     }
 
@@ -57,6 +54,26 @@ export class INode extends EventEmitter {
     }
 
     public async init() {
+    }
+
+    uninit(): Promise<any> {
+        this.removeAllListeners('inbound');
+        this.removeAllListeners('error');
+        this.removeAllListeners('ban');
+
+        let ops = [];
+        for (let conn of this.m_inConn) {
+            ops.push(conn.destroy());
+        }
+        for (let conn of this.m_outConn) {
+            ops.push(conn.destroy());
+        }
+
+        this.m_inConn = [];
+        this.m_outConn = [];
+        this.m_remoteMap.clear();
+
+        return Promise.all(ops);
     }
 
     public async listen(): Promise<ErrorCode> {
@@ -72,8 +89,13 @@ export class INode extends EventEmitter {
         conn.setRemote(peerid);
         let ver: Version = new Version();
         conn.version = ver;
-        ver.genesis = this.m_genesis;
-        ver.peerid = this.m_peerid;
+        if (!this.m_genesis || !this.m_peerid) {
+            this.m_logger.error(`connectTo failed for genesis or peerid not set`);
+            assert(false, `${this.m_peerid} has not set genesis`);
+            return {err: ErrorCode.RESULT_INVALID_STATE, peerid};
+        }
+        ver.genesis = this.m_genesis!;
+        ver.peerid = this.m_peerid!;
         let err = await new Promise((resolve: (value: ErrorCode) => void) => {
             conn.once('pkg', (pkg) => {
                 conn.removeListener('error', fn);
@@ -115,7 +137,7 @@ export class INode extends EventEmitter {
         if (other) {
             if (conn.version!.compare(other.version!) > 0) {
                 conn.close();
-                return {err: ErrorCode.RESULT_OK, peerid, conn: other};
+                return {err: ErrorCode.RESULT_ALREADY_EXIST, peerid};
             } else {
                 this.closeConnection(other);
             }
@@ -176,7 +198,17 @@ export class INode extends EventEmitter {
     }
 
     public getOutbounds(): NodeConnection[] {
-        return this.m_outConn;
+        const c = this.m_outConn;
+        return c;
+    }
+
+    public getInbounds(): NodeConnection[] {
+        const c = this.m_inConn;
+        return c;
+    }
+
+    public getConnnectionCount(): number {
+        return this.m_outConn.length + this.m_inConn.length;
     }
 
     public getConnection(remote: string): NodeConnection|undefined {
@@ -196,19 +228,19 @@ export class INode extends EventEmitter {
         // TODO: 要写到一个什么地方，禁多久，忽略这个peer
         let conn = this.m_remoteMap.get(remote);
         if (conn) {
-            this.closeConnection(conn);
+            this.closeConnection(conn, true);
         }
     }
     
-    public closeConnection(conn: NodeConnection): void {
+    public closeConnection(conn: NodeConnection, destroy = false): void {
         conn.removeAllListeners('error');
         conn.removeAllListeners('pkg');
-        conn.once('close', (obj) => {
-            let index: number = 0;
+        let index: number = 0;
+        do {
             for (let c of this.m_outConn) {
                 if (c === conn) {
                     this.m_outConn.splice(index, 1);
-                    return;
+                    break;
                 }
                 index++;
             }
@@ -216,14 +248,18 @@ export class INode extends EventEmitter {
             for (let c of this.m_inConn) {
                 if (c === conn) {
                     this.m_inConn.splice(index, 1);
-                    return;
+                    break;
                 }
                 index++;
             }
-
-            this.m_remoteMap.delete(conn.getRemote());
-        });
-        conn.close();
+        } while (false);
+        this.m_remoteMap.delete(conn.getRemote());
+        if (destroy) {
+            conn.destroy();
+        } else {
+            conn.close();
+        }
+        
     }
 
     on(event: 'inbound', listener: (conn: NodeConnection) => void): this;

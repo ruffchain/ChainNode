@@ -40,6 +40,10 @@ export class StorageManager {
         return ErrorCode.RESULT_OK;
     }
 
+    uninit() {
+        this.m_snapshotManager.uninit();
+    }
+
     async createSnapshot(from: Storage, blockHash: string, remove?: boolean): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
         let csr = await this.m_snapshotManager.createSnapshot(from, blockHash);
         if (csr.err) {

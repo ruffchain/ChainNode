@@ -121,7 +121,7 @@ class PackageSender extends EventEmitter {
             return;
         }
 
-        LOG_INFO(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
+        LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${peer.peerid})`);
 
         let options = {
             ignoreCache: ignoreRouteCache,
@@ -147,7 +147,7 @@ class PackageSender extends EventEmitter {
         }
         
         cmdPackage.dest.ep = EndPoint.toString(remoteAddr);
-        LOG_INFO(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
+        LOG_DEBUG(`PEER(${this.m_bucket.localPeer.peerid}) Send package(${DHTCommandType.toString(cmdPackage.cmdType)}) to peer(${cmdPackage.dest.peerid}|${peer.peerid}:${EndPoint.toString(remoteAddr)})`);
         
         let encoder = DHTPackageFactory.createEncoder(cmdPackage);
         let buffer = encoder.encode();

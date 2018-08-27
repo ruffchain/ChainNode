@@ -26,6 +26,10 @@ export class IConnection extends EventEmitter {
         return Promise.resolve(ErrorCode.RESULT_OK);
     }
 
+    destroy(): Promise<void> {
+        return Promise.resolve();
+    }
+
     getRemote(): string {
         return '';
     }

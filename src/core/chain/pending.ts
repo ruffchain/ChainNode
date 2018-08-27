@@ -28,7 +28,7 @@ export class PendingTransactions {
     }
 
     public async addTransaction(tx: Transaction): Promise<ErrorCode> {
-        this.m_logger.info(`addTransaction, txhash=${tx.hash}`);
+        this.m_logger.debug(`addTransaction, txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
         await this.m_pendingLock.enter();
         // this.m_logger.info('transactions length='+this.m_transactions.length.toString());
         // if (this.m_orphanTx.has(tx.address as string)) {
@@ -83,6 +83,20 @@ export class PendingTransactions {
         return ErrorCode.RESULT_OK;
     }
 
+    public init(): ErrorCode {
+        return ErrorCode.RESULT_OK;
+    }
+
+    public uninit() {
+        if (this.m_curHeader) {
+            this.m_storageManager.releaseSnapshotView(this.m_curHeader.hash);
+            delete this.m_storageView;
+            delete this.m_curHeader;
+        }
+        this.m_mapNonce.clear();
+        this.m_orphanTx.clear();
+    }
+
     protected isExist(tx: Transaction): boolean {
         for (let t of this.m_transactions) {
             if (t.tx.hash === tx.hash) {
@@ -135,6 +149,7 @@ export class PendingTransactions {
                     return _err;
                 }
             }
+            this.m_logger.info(`nonce exist address=${txTime.tx.address}, nonce=${txTime.tx.nonce}, existnonce=${nonce}`);
             return ErrorCode.RESULT_ERROR_NONCE_IN_TX;
         }
         await this.ScanOrphan(address);
@@ -226,6 +241,7 @@ export class PendingTransactions {
             l = this.m_orphanTx.get(s) as TransactionWithTime[];
         } else {
             l = new Array<TransactionWithTime>();
+            this.m_orphanTx.set(s, l);
         }
         if (l.length === 0) {
             l.push(txTime);

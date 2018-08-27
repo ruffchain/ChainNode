@@ -611,21 +611,21 @@ class Reno {
                     rto = this.m_rtoMax;
                 }
                 this.m_rto = rto;
-                blog.debug(`[BDT]: bdt transfer set rto to ${rto}`);
+                blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) set rto to ${rto}`);
             }
 
             if (this.m_state === Reno.STATE.slowStart) {
                 const inc = Math.max(ackedSize, this.m_mms);
-                blog.debug(`[BDT]: bdt transfer increase cwnd with ${inc}`);
+                blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) increase cwnd with ${inc}`);
                 this.m_cwnd += inc;
                 if (this.m_cwnd >= this.m_ssthresh) {
-                    blog.debug('[BDT]: bdt transfer enter congestion avoid state');
+                    blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) enter congestion avoid state`);
                     this.m_state = Reno.STATE.congestionAvoid;
                 }
             } else if (this.m_state === Reno.STATE.congestionAvoid) {
                 let inc = Math.ceil(this.m_mms*this.m_mms/this.m_cwnd);
                 this.m_cwnd += inc;
-                blog.debug(`[BDT]: bdt transfer increase cwnd with ${inc}`);
+                blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) increase cwnd with ${inc}`);
             } else if (this.m_state === Reno.STATE.fastRecover) {
                 // 发生fastRecover时窗口中的所有包都被ack才恢复到拥塞避免
                 if (SequenceU32.compare(sendQueue.ackSeq, this.m_frSeq) < 0) {
@@ -637,7 +637,7 @@ class Reno {
                     this.m_cwnd = this.m_ssthresh;
                     this.m_state = Reno.STATE.congestionAvoid;
                 }
-                blog.debug(`[BDT]: bdt transfer set cwnd with ${this.m_cwnd} from fast recover`);
+                blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) set cwnd with ${this.m_cwnd} from fast recover`);
             }
         } else if (ackedSize === 0) {
             if (sendQueue.dumpCount >= 3) {
@@ -645,10 +645,10 @@ class Reno {
                     this.m_frcwnd = this.m_cwnd;
                     this.m_frSeq = sendQueue.maxWaitAckSeq;
                     this.m_state = Reno.STATE.fastRecover;
-                    blog.debug('[BDT]: bdt transfer enter fast recover state');
+                    blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) enter fast recover state`);
                 }
 
-                blog.debug(`[BDT]: bdt transfer set cwnd with ${this.m_cwnd} from fast recover`);
+                blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) set cwnd with ${this.m_cwnd} from fast recover`);
             }
             if (this.m_state === Reno.STATE.fastRecover || (ackPkg.header.finalAck && sendQueue.flightSize > 0)) {
                 // 没有resend就发一个新包，保证一个ack后能有一个包进入网络
@@ -668,10 +668,10 @@ class Reno {
             rto = this.m_rtoMax;
         }
         this.m_rto = rto;
-        blog.debug(`[BDT]: bdt transfer set rto to ${rto}`);
+        blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) set rto to ${rto}`);
         this.m_cwnd = this.m_mms;
         this.m_state = Reno.STATE.slowStart;
-        blog.debug(`[BDT]: bdt transfer set cwnd with ${this.m_cwnd} from slow start`);
+        blog.debug(`[BDT]: bdt transfer(connection.id=${this.m_connection.id}) set cwnd with ${this.m_cwnd} from slow start`);
     }
 }
 
@@ -818,9 +818,9 @@ class BDTTransfer {
             if (_DEBUG) {
                 if (decoder.body && decoder.body.debug) {
                     let now = Date.now();
-                    blog.debug(`recv data: senttime:${decoder.body.debug.time},now:${now},consum:${now-decoder.body.debug.time},seq:${decoder.header.seq},ackType:${ackType}`);
+                    blog.debug(`bdt transfer(connection.id=${this.m_connection.id}) recv data: senttime:${decoder.body.debug.time},now:${now},consum:${now-decoder.body.debug.time},seq:${decoder.header.seq},ackType:${ackType}`);
                     if (ackType !== AckType.data) {
-                        blog.debug(`recv data-ack: remote.cc:${JSON.stringify(decoder.body.debug)}`);
+                        blog.debug(`bdt transfer(connection.id=${this.m_connection.id}) recv data-ack: remote.cc:${JSON.stringify(decoder.body.debug)}`);
                     }
                 }
             }
@@ -830,7 +830,7 @@ class BDTTransfer {
             }
             let [acked, pkgStub] = this.m_sendQueue.onAckPackage(ackSeq, ackType);
             this.m_cc.onAck(acked, pkgStub, this.m_sendQueue, decoder);
-            blog.debug(`acked:${acked},cc.state:${this.m_cc.m_state},cc.rto:${this.m_cc.rto},cc.cwnd:${this.m_cc.cwnd},sendQueue.flightSize:${this.m_sendQueue.flightSize}`);
+            blog.debug(`bdt transfer(connection.id=${this.m_connection.id}) acked:${acked},cc.state:${this.m_cc.m_state},cc.rto:${this.m_cc.rto},cc.cwnd:${this.m_cc.cwnd},sendQueue.flightSize:${this.m_sendQueue.flightSize}`);
             if (acked >= 0) {
                 this.m_nrwnd = decoder.header.windowSize;
                 this._onWndGrow();
@@ -979,12 +979,14 @@ class BDTTransfer {
             }
 
             // 剩余数据量太小，等等看是否有新的追加数据
-            if (sendBuffer.curSize < expectPackageSize && !isTimeout && !this.m_nagling.pending && !this.m_finAckCallback) {
-                this.m_nagling.pending = setTimeout(() => {
-                    this.m_nagling.pending=null;
-                    this._onWndGrow(true);
-                }, 
-                this.m_nagling.timeout);
+            if (sendBuffer.curSize < expectPackageSize && !isTimeout && !this.m_finAckCallback) {
+                if (!this.m_nagling.pending) {
+                    this.m_nagling.pending = setTimeout(() => {
+                            this.m_nagling.pending=null;
+                            this._onWndGrow(true);
+                        }, 
+                        this.m_nagling.timeout);
+                }
                 break;
             }
 

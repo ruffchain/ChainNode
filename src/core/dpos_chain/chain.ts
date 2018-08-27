@@ -36,8 +36,11 @@ export class DposChain extends ValueChain {
 
     constructor(options: LoggerOptions) {
         super(options);
-        // DPOS中，只广播tipheader
-        this.m_broadcastDepth = 0;
+    }
+
+    // DPOS中，只广播tipheader
+    protected get _broadcastDepth() {
+        return 0;
     }
 
     public async initComponents(dataDir: string, handler: BaseHandler): Promise<ErrorCode> {
@@ -262,8 +265,8 @@ export class DposChain extends ValueChain {
         }
     }
 
-    onCheckGlobalOptions(globalOptions: any): boolean {
-        if (!super.onCheckGlobalOptions(globalOptions)) {
+    protected _onCheckGlobalOptions(globalOptions: any): boolean {
+        if (!super._onCheckGlobalOptions(globalOptions)) {
             return false;
         }
         return consensus.onCheckGlobalOptions(globalOptions);
@@ -275,5 +278,38 @@ export class DposChain extends ValueChain {
 
     protected _onCheckTypeOptions(typeOptions: ChainTypeOptions): boolean {
         return typeOptions.consensus === 'dpos';
+    }
+
+    async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions: any): Promise<ErrorCode> {
+        let err = await super.onCreateGenesisBlock(block, storage, genesisOptions);
+        if (err) {
+            return err;
+        }
+        let gkvr = await storage.getKeyValue(Chain.dbSystem, Chain.kvConfig);
+        if (gkvr.err) {
+            return gkvr.err;
+        }
+        let rpr = await gkvr.kv!.set('consensus', 'dpos');
+        if (rpr.err) {
+            return rpr.err;
+        }
+
+        let dbr = await storage.getReadWritableDatabase(Chain.dbSystem);
+        if (dbr.err) {
+            return dbr.err;
+        }
+        // storage的键值对要在初始化的时候就建立好
+        let kvr = await dbr.value!.createKeyValue(consensus.ViewContext.kvDPOS);
+        if (kvr.err) {
+            return kvr.err;
+        }
+        let denv = new consensus.Context(dbr.value!, this.globalOptions, this.m_logger);
+
+        let ir = await denv.init(genesisOptions.candidates, genesisOptions.miners);
+        if (ir.err) {
+            return ir.err;
+        }
+
+        return ErrorCode.RESULT_OK;
     }
 }

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import * as process from 'process';
-import {initUnhandledRejection, parseCommand, host as chainhost} from '../client';
-
-initUnhandledRejection();
+import * as path from 'path';
+import {initUnhandledRejection, parseCommand, host as chainhost, initLogger} from '../client';
 
 Error.stackTraceLimit = 1000;
 
@@ -12,6 +11,11 @@ export async function run(argv: string[]) {
         console.error(`parse command error, exit.`);
         process.exit();
         return ;
+    }
+    if (command.options.has('dataDir')) {
+        initUnhandledRejection(initLogger({
+            loggerOptions: {console: true, file: {root: path.join(process.cwd(), 'log', command.options.get('dataDir')), filename: 'exception.log'}}
+        }));
     }
     let exit: boolean = false;
     if (command.command === 'peer') {

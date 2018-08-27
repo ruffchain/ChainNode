@@ -23,6 +23,10 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
         return ErrorCode.RESULT_OK;
     }
 
+    uninit() {
+        // do nothing
+    }
+
     public listSnapshots(): StorageDumpSnapshot[] {
         let blocks = fs.readdirSync(this.m_path);
         return blocks.map((blockHash) => {

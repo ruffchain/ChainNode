@@ -15,7 +15,7 @@ declare module 'sqlite' {
 import { ErrorCode } from '../error_code';
 import {toStringifiable, fromStringifiable} from '../serializable';
 import {Storage, IReadWritableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
-import { LoggerInstance } from '../../client';
+import { LoggerInstance } from '../lib/logger_util';
 const {LogShim} = require('../lib/log_shim');
 
 class SqliteStorageKeyValue implements IReadWritableKeyValue {
@@ -208,7 +208,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
     public async lset(key: string, index: number, value: any): Promise<{ err: ErrorCode; }> {
         try {
             assert(key);
-            return await this.hset(key, index.toString(), JSON.stringify(toStringifiable(value, true)));
+            return await this.hset(key, index.toString(), value);
         } catch (e) {
             this.logger.error(`lset ${key} ${index} `, e);
             return {err: ErrorCode.RESULT_EXCEPTION};
@@ -230,13 +230,23 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             if (!len) {
                 return {err: ErrorCode.RESULT_OK, value: []};
             }
-            if (stop < 0) {
-                stop = len! + stop + 1;
+            if (start < 0) {
+                start = len! + start;
             }
-            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=? AND field >= ? AND field < ?`, key, start, stop);
-            let ret = new Array(Math.min(len!, stop - start));
+            if (stop < 0) {
+                stop = len! + stop;
+            }
+            if (stop >= len) {
+                stop = len - 1;
+            }
+            let fields = [];
+            for (let i = start; i <= stop; ++i) {
+                fields.push(i);
+            }
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name='${key}' AND field in (${fields.map((x) => `'${x}'`).join(',')})`);
+            let ret = new Array(result.length);
             for (let x of result) {
-                ret[parseInt(x.field)] = fromStringifiable(JSON.parse(x.value));
+                ret[parseInt(x.field) - start] = fromStringifiable(JSON.parse(x.value));
             }
             return { err: ErrorCode.RESULT_OK, value: ret };
         } catch (e) {
@@ -309,7 +319,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             for (let i = 0; i < value.length; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
                 await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) \
-                    VALUES ('${key}', ${len! + i}, '${json}')`);
+                    VALUES ('${key}', '${len! + i}', '${json}')`);
             }
 
             return { err: ErrorCode.RESULT_OK };    
@@ -505,12 +515,15 @@ export class SqliteStorage extends Storage {
             err = ErrorCode.RESULT_EXCEPTION;
         }
         // await this.m_db.migrate({ force: 'latest', migrationsPath: path.join(__dirname, 'migrations') });
-        
-        this.m_eventEmitter.emit('init', err);
+       
         if (!err) {
             this.m_isInit = true;
         }
         
+        setImmediate(() => {
+            this.m_eventEmitter.emit('init', err);
+        }); 
+
         return err;
     }
 

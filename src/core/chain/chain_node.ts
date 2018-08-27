@@ -1,15 +1,14 @@
 import * as assert from 'assert';
 import {EventEmitter} from 'events';
-
+import {isString} from 'util';
 import {ErrorCode} from '../error_code';
-import {LoggerInstance, initLogger, LoggerOptions} from '../lib/logger_util';
+import {LoggerInstance, } from '../lib/logger_util';
 import { StorageManager, StorageLogger, StorageDumpSnapshot, JStorageLogger } from '../storage';
 
-import {Transaction, BlockContent, BlockHeader, Block, BlockStorage, VERIFY_STATE, HeaderStorage} from '../block';
+import {Transaction, BlockHeader, Block, BlockStorage, BaseNode, BAN_LEVEL} from '../block';
 
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
-import {NodeStorage, NodeStorageOptions} from './node_storage';
 
 import {INode, NodeConnection, PackageStreamWriter, Package, CMD_TYPE} from '../net';
 
@@ -23,22 +22,12 @@ export enum SYNC_CMD_TYPE {
 }
 
 export type ChainNodeOptions = {
-    node: INode;
+    node: BaseNode;
     initBlockWnd?: number;
     blockTimeout?: number;
     headersTimeout?: number;
-    minOutbound?: number;
-    nodeCacheSize?: number;
-    dataDir: string;
-};
-
-export type  ChainNodeOptionsEx = {
-    blockHeaderType: new () => BlockHeader;
-    transactionType: new () => Transaction;
-    blockStorage: BlockStorage, 
-    headerStorage: HeaderStorage, 
-    storageManager: StorageManager,
-    logger: LoggerInstance
+    blockStorage: BlockStorage;
+    storageManager: StorageManager;
 };
 
 type RequestingBlockConnection = {
@@ -61,67 +50,43 @@ export type BlocksEventParams = {
     redoLog?: StorageLogger;
 };
 
-export enum BAN_LEVEL {
-    minute = 1,
-    hour = 60,
-    day = 24 * 60,
-    month = 30 * 24 * 60,
-    forever = 0,
-}
-
 export class ChainNode extends EventEmitter {
-    constructor(options: ChainNodeOptions & ChainNodeOptionsEx) {
+    constructor(options: ChainNodeOptions) {
         super();
         // net/node
         this.m_node = options.node;
         this.m_blockStorage = options.blockStorage;
-        this.m_headerStorage = options.headerStorage;
         this.m_storageManager = options.storageManager;
-        
-        this.m_blockHeaderType = options.blockHeaderType;
-        this.m_transactionType = options.transactionType;
-        this.m_logger = options.logger;
 
-        this.m_minOutbound = options.minOutbound ? options.minOutbound : 8;
         this.m_initBlockWnd = options.initBlockWnd ? options.initBlockWnd : 10;
-        this.m_node.on('error', (conn: NodeConnection, err: ErrorCode) => {
-            this._onConnectionError(conn.getRemote());
-        });
 
-        // 收到net/node的ban事件, 调用 ChainNode的banConnection方法做封禁处理
-        // 日期先设置为按天
+        this.m_node.on('inbound', (conn: NodeConnection) => {
+            this._beginSyncWithNode(conn);
+        });
+        this.m_node.on('outbound', (conn: NodeConnection) => {
+            this._beginSyncWithNode(conn);
+        });
+        this.m_node.on('error', (connRemotePeer: string, err: ErrorCode) => {
+            this._onConnectionError(connRemotePeer);
+        });
         this.m_node.on('ban', (remote: string) => {
-            this.banConnection(remote, BAN_LEVEL.day);
+            this._onRemoveConnection(remote);
         });
-
+        
         this.m_blockTimeout = options.blockTimeout ? options.blockTimeout : 10000;
         this.m_headersTimeout = options.headersTimeout ? options.headersTimeout : 30000;
         this.m_reqTimeoutTimer = setInterval(() => {
             this._onReqTimeoutTimer(Date.now() / 1000);
         }, 1000);
-        this.m_nodeStorage = new NodeStorage({
-            count: options.nodeCacheSize ? options.nodeCacheSize : 50, 
-            dataDir: options.dataDir, 
-            logger: this.m_logger});
     }
-    private m_node: INode;
-    private m_headerStorage: HeaderStorage;
+
+    private m_node: BaseNode;
     private m_blockStorage: BlockStorage;
     private m_storageManager: StorageManager;
-    private m_blockHeaderType: new () => BlockHeader;
-    private m_transactionType: new () => Transaction;
-    private m_logger: LoggerInstance;
-    private m_minOutbound: number;
-    private m_connectingCount: number = 0;
-    private m_connectingPeerids: string[] = [];
-    private m_checkOutboundTimer: any;
-    private m_nodeStorage: NodeStorage;
 
     on(event: 'blocks', listener: (params: BlocksEventParams) => any): this;
     on(event: 'headers', listener: (params: HeadersEventParams) => any): this;
     on(event: 'transactions', listener: (conn: NodeConnection, tx: Transaction[]) => any): this;
-    on(event: 'ban', listener: (remote: string) => any): this;
-    on(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
@@ -129,191 +94,32 @@ export class ChainNode extends EventEmitter {
     once(event: 'blocks', listener: (params: BlocksEventParams) => any): this;
     once(event: 'headers', listener: (params: HeadersEventParams) => any): this;
     once(event: 'transactions', listener: (conn: NodeConnection, tx: Transaction[]) => any): this;
-    once(event: 'ban', listener: (remote: string) => any): this;
-    once(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     once(event: string, listener: any): this {
-        return super.on(event, listener);
+        return super.once(event, listener);
     }   
 
-    public async init() {
-        // 读取创始块的hash值， 并将其传入 net/node
-        const result = await this.getHeader(0);
-        const genesis_hash: string = result.header!.hash;
-        this.m_node.genesis_hash = genesis_hash;
-
+    public async init(): Promise<ErrorCode> {
         await this.m_node.init();
+        return this.m_node.initialOutbounds();
+    }
+
+    uninit(): Promise<any> {
+        this.removeAllListeners('blocks');
+        this.removeAllListeners('headers');
+        this.removeAllListeners('transactions');
+        return this.m_node.uninit();
     }
 
     public get logger(): LoggerInstance {
-        return this.m_logger;
-    }
-
-    public get node(): INode {
-        return this.m_node;
-    }
-
-    public get peerid(): string {
-        return this.m_node.peerid;
-    }
-
-    public async initialOutbounds(): Promise<ErrorCode> {
-        let err = await this._newOutbounds(this.m_minOutbound);
-        if (err) {
-            return err;
-        }
-        this.m_checkOutboundTimer = setInterval(() => {
-            let next = this.m_minOutbound - (this.m_connectingCount + this.m_node.getOutbounds().length);
-            if (next > 0) {
-                this._newOutbounds(next);
-            }
-        }, 1000);
-        return ErrorCode.RESULT_OK;
-    }
-
-    protected async _newOutbounds(count: number, callback?: (count: number) => void): Promise<ErrorCode> {
-        let willConnPeerids: string[] = [];
-
-        let canUse: (peerid: string) => boolean = (peerid: string): boolean => {
-            if (this.m_nodeStorage.isBan(peerid)) {
-                return false;
-            }
-
-            let outConns: NodeConnection[] = this.m_node.getOutbounds();
-            for (let outConn of outConns) {
-                if (outConn.getRemote() === peerid) {
-                    return false;
-                }
-            }
-
-            for (let pid of this.m_connectingPeerids) {
-                if (pid === peerid) {
-                    return false;
-                }
-            }
-            for (let pid of willConnPeerids) {
-                if (pid === peerid) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
-        let peerids: string[] = this.m_nodeStorage.get('all');
-        for (let pid of peerids) {
-            if (canUse(pid)) {
-                willConnPeerids.push(pid);
-                if (willConnPeerids.length === count) {
-                    break;
-                }
-            }
-        }
-        if (willConnPeerids.length < count) {
-            let result = await this.m_node.randomPeers(count);
-            if (result.err === ErrorCode.RESULT_OK) {
-                for (let pid of result.peers) {
-                    if (canUse(pid)) {
-                        willConnPeerids.push(pid);
-                        if (willConnPeerids.length === count) {
-                            break;
-                        }
-                    }
-                }
-            } else {
-                return result.err;
-            }
-        }
-        
-        return await this.connectTo(willConnPeerids, callback);
-    }
-
-    public async connectTo(willConnPeerids: string[], callback?: (count: number) => void): Promise<ErrorCode> {
-        if (willConnPeerids.length === 0) {
-            if (callback) {
-                callback(0);
-            }
-            return ErrorCode.RESULT_OK;
-        }
-
-        let canUse: (peerid: string) => boolean = (peerid: string): boolean => {
-            if (this.m_nodeStorage.isBan(peerid)) {
-                return false;
-            }
-
-            let outConns: NodeConnection[] = this.m_node.getOutbounds();
-            for (let outConn of outConns) {
-                if (outConn.getRemote() === peerid) {
-                    return false;
-                }
-            }
-
-            for (let pid of this.m_connectingPeerids) {
-                if (pid === peerid) {
-                    return false;
-                }
-            }
-
-            return true;
-        };
- 
-        let ops = [];
-        for (let peer of willConnPeerids) {
-            if (canUse(peer)) {
-                this.m_connectingPeerids.push(peer);
-                ops.push(this.m_node.connectTo(peer));
-            }
-        }
-        if (ops.length === 0) {
-            if (callback) {
-                callback(0);
-            }
-            return ErrorCode.RESULT_OK;
-        }
-        let count: number = ops.length;
-        this.m_connectingCount += count;
-        let deleteFrom: (pid: string, pidArray: string[]) => void = (pid: string, pidArray: string[]) => {
-            for (let i = 0; i < pidArray.length; i++) {
-                if (pidArray[i] === pid) {
-                    pidArray.splice(i, 1);
-                    return;
-                }
-            }
-        };
-        Promise.all(ops).then((results) => {
-            this.m_connectingCount -= count;
-            let connCount = 0;
-            for (let r of results) {
-                deleteFrom(r.peerid, this.m_connectingPeerids);
-                if (r.conn) {
-                    this.m_nodeStorage.add(r.conn.getRemote());
-                    this._beginSyncWithNode(r.conn);
-                    this.emit('outbound', r.conn);
-                    ++ connCount;
-                } else {
-                    this.m_nodeStorage.remove(r.peerid);
-                    if (r.err === ErrorCode.RESULT_VER_NOT_SUPPORT) {
-                        this.m_nodeStorage.ban(r.peerid, BAN_LEVEL.month);
-                    } else {
-                        // 禁用1分钟，防止random的时候又找到它
-                        this.m_nodeStorage.ban(r.peerid, BAN_LEVEL.minute);
-                    }
-                }
-            }
-            if (callback) {
-                callback(connCount);
-            }
-        });
-        return ErrorCode.RESULT_OK;
+        return this.m_node.logger;
     }
 
     public async listen(): Promise<ErrorCode> {
-        this.m_node.on('inbound', (inbound: NodeConnection) => {
-            if (this.m_nodeStorage.isBan(inbound.getRemote())) {
-                this.m_node.closeConnection(inbound);
-            } else {
-                this._beginSyncWithNode(inbound);
-            }
-        });
-        return await this.m_node.listen();
+        return this.m_node.listen();
+    }
+
+    public get base(): BaseNode {
+        return this.m_node;
     }
 
     public broadcast(content: BlockHeader[]|Transaction[], options?: {count?: number, filter?: (conn: NodeConnection) => boolean}): ErrorCode {
@@ -326,7 +132,7 @@ export class ChainNode extends EventEmitter {
             for (let header of content) {
                 let err = header.encode(hwriter);
                 if (err) {
-                    this.m_logger.error(`encode header ${header.hash} failed`);
+                    this.logger.error(`encode header ${header.hash} failed`);
                     return err;
                 }
             }
@@ -338,7 +144,7 @@ export class ChainNode extends EventEmitter {
             for (let tx of content) {
                 let err = tx.encode(hwriter);
                 if (err) {
-                    this.m_logger.error(`encode transaction ${tx.hash} failed`);
+                    this.logger.error(`encode transaction ${tx.hash} failed`);
                     return err;
                 }
             }
@@ -347,7 +153,7 @@ export class ChainNode extends EventEmitter {
             pwriter.writeData(raw);
         }
         assert(pwriter);
-        this.m_node.broadcast(pwriter!, options);
+        this.m_node.node.broadcast(pwriter!, options);
         return ErrorCode.RESULT_OK;
     }
 
@@ -360,21 +166,21 @@ export class ChainNode extends EventEmitter {
                 let txes: Transaction[] = [];
                 let err = ErrorCode.RESULT_OK;
                 for (let ix = 0; ix < pkg.body.count; ++ix) {
-                    let tx = this.newTransaction();
+                    let tx = this.base.newTransaction();
                     if (tx.decode(txReader) !== ErrorCode.RESULT_OK) {
-                        this.m_logger.warn(`receive invalid format transaction from ${conn.getRemote()}`);
+                        this.logger.warn(`receive invalid format transaction from ${conn.getRemote()}`);
                         err = ErrorCode.RESULT_INVALID_PARAM;
                         break;
                     }
                     if (!tx.verifySignature()) {
-                        this.m_logger.warn(`receive invalid signature transaction ${tx.hash} from ${conn.getRemote()}`);
+                        this.logger.warn(`receive invalid signature transaction ${tx.hash} from ${conn.getRemote()}`);
                         err = ErrorCode.RESULT_INVALID_TOKEN;
                         break;
                     }
                     txes.push(tx);
                 }
                 if (err) {
-                    this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                    this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                 } else {
                     if (txes.length) {
                         this.emit('transactions', conn, txes);
@@ -389,9 +195,9 @@ export class ChainNode extends EventEmitter {
                     let err = ErrorCode.RESULT_OK;
                     let preHeader: BlockHeader|undefined;
                     for (let ix = 0; ix < pkg.body.count; ++ix) {
-                        let header = this.newBlockHeader();
+                        let header = this.base.newBlockHeader();
                         if (header.decode(headerReader) !== ErrorCode.RESULT_OK) {
-                            this.m_logger.warn(`receive invalid format header from ${conn.getRemote()}`);
+                            this.logger.warn(`receive invalid format header from ${conn.getRemote()}`);
                             err = ErrorCode.RESULT_INVALID_BLOCK;
                             break;
                         }
@@ -399,7 +205,7 @@ export class ChainNode extends EventEmitter {
                             // 广播或者用from请求的header必须连续
                             if (preHeader) {
                                 if (!preHeader.isPreBlock(header)) {
-                                    this.m_logger.warn(`receive headers not in sequence from ${conn.getRemote()}`);
+                                    this.logger.warn(`receive headers not in sequence from ${conn.getRemote()}`);
                                     err = ErrorCode.RESULT_INVALID_BLOCK;
                                     break;
                                 }
@@ -410,32 +216,32 @@ export class ChainNode extends EventEmitter {
                     }
                     if (err) {
                         // 发错的header的peer怎么处理
-                        this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                        this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                         return;
                     }
                     // 用from请求的返回的第一个跟from不一致
                     if (headers.length && pkg.body.request && headers[0].preBlockHash !== pkg.body.request.from) {
-                        this.m_logger.warn(`receive headers ${headers[0].preBlockHash} not match with request ${pkg.body.request.from} from ${conn.getRemote()}`);
-                        this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                        this.logger.warn(`receive headers ${headers[0].preBlockHash} not match with request ${pkg.body.request.from} from ${conn.getRemote()}`);
+                        this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                         return;
                     }
                     // 任何返回 gensis 的都不对
                     if (headers.length) {
                         if (headers[0].number === 0) {
-                            this.m_logger.warn(`receive genesis header from ${conn.getRemote()}`);
-                            this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                            this.logger.warn(`receive genesis header from ${conn.getRemote()}`);
+                            this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                             return;
                         }
                     }
                 } else if (pkg.body.error === ErrorCode.RESULT_NOT_FOUND) {
-                    let ghr = await this.m_headerStorage!.loadHeader(0);
+                    let ghr = await this.base.headerStorage.getHeader(0);
                     if (ghr.err) {
                         return;
                     }
                     // from用gensis请求的返回没有
                     if (pkg.body.request && pkg.body.request.from === ghr.header!.hash) {
-                        this.m_logger.warn(`receive can't get genesis header ${pkg.body.request.from} from ${conn.getRemote()}`);
-                        this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                        this.logger.warn(`receive can't get genesis header ${pkg.body.request.from} from ${conn.getRemote()}`);
+                        this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                         return ;
                     }
                 }
@@ -487,20 +293,20 @@ export class ChainNode extends EventEmitter {
 
         if (pkg.body.err === ErrorCode.RESULT_NOT_FOUND) {
             // 请求的block肯定已经从header里面确定remote有，直接禁掉
-            this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+            this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
             return ;
         }
 
         // 构造block对象
-        let block = this.newBlock();
+        let block = this.base.newBlock();
         if (block.decode(blockReader) !== ErrorCode.RESULT_OK) {
-            this.m_logger.warn(`receive block invalid format from ${conn.getRemote()}`);
-            this.banConnection(conn.getRemote(), BAN_LEVEL.forever);
+            this.logger.warn(`receive block invalid format from ${conn.getRemote()}`);
+            this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
             return;
         }
         if (!block.verify()) {
-            this.m_logger.warn(`receive block not match header ${block.header.hash} from ${conn.getRemote()}`);
-            this.banConnection(conn.getRemote(), BAN_LEVEL.day); // 可能分叉？
+            this.logger.warn(`receive block not match header ${block.header.hash} from ${conn.getRemote()}`);
+            this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.day); // 可能分叉？
             return;
         }
         let err = this._onRecvBlock(block, conn.getRemote());
@@ -513,9 +319,11 @@ export class ChainNode extends EventEmitter {
 
     public requestHeaders(from: NodeConnection|string, options: {from?: string, limit?: number}): ErrorCode {
         let conn;
+        this.logger.debug(`request headers from ${isString(from) ? from : from.getRemote()} with options `, options);
         if (typeof from === 'string') {
             let connRequesting = this._getConnRequesting(from);
             if (!connRequesting) {
+                this.logger.debug(`request headers from ${from} skipped for connection not found with options `, options);
                 return ErrorCode.RESULT_NOT_FOUND;
             }
             conn = connRequesting.conn;
@@ -523,7 +331,7 @@ export class ChainNode extends EventEmitter {
             conn = from;
         }
         if (this.m_requestingHeaders.get(conn.getRemote())) {
-            this.m_logger.warn(`request headers ${options} from ${conn.getRemote()} skipped for former headers request existing`);
+            this.logger.warn(`request headers ${options} from ${conn.getRemote()} skipped for former headers request existing`);
             return ErrorCode.RESULT_ALREADY_EXIST;
         }
         this.m_requestingHeaders.set(conn.getRemote(), {
@@ -537,8 +345,10 @@ export class ChainNode extends EventEmitter {
 
     // 这里必须实现成同步的
     public requestBlocks(options: {headers?: BlockHeader[], redoLog?: number}, from: string): ErrorCode {
+        this.logger.debug(`request blocks from ${from} with options `, options);
         let connRequesting = this._getConnRequesting(from);
         if (!connRequesting) {
+            this.logger.debug(`request blocks from ${from} skipped for connection not found with options `, options);
             return ErrorCode.RESULT_NOT_FOUND;
         }
         let requests: string[] = [];
@@ -592,15 +402,7 @@ export class ChainNode extends EventEmitter {
         }
         return ErrorCode.RESULT_OK;
     }
-
-    public banConnection(remote: string, level: BAN_LEVEL) {
-        this.m_logger.warn(`banned peer ${remote} for ${level}`);
-        this.m_nodeStorage.ban(remote, level);
-        this.m_node.banConnection(remote);
-        this._onRemoveConnection(remote);
-        this.emit('ban', remote);
-    }
-    
+ 
     protected m_initBlockWnd: number;
     protected m_requestingBlock: {
         connMap: Map<string, RequestingBlockConnection>,
@@ -632,7 +434,7 @@ export class ChainNode extends EventEmitter {
     protected _getConnRequesting(remote: string): RequestingBlockConnection|undefined  {
         let connRequesting = this.m_requestingBlock.connMap.get(remote);
         if (!connRequesting) {
-            let conn = this.m_node.getConnection(remote);
+            let conn = this.m_node.node.getConnection(remote);
             // TODO: 取不到这个conn的时候要处理
             assert(conn, `no connection to ${remote}`);
             if (!conn) {
@@ -654,7 +456,7 @@ export class ChainNode extends EventEmitter {
         } else {
             connRequesting = from;
         }
-        this.m_logger.debug(`request block ${hash} from ${connRequesting.conn.getRemote()}`);
+        this.logger.debug(`request block ${hash} from ${connRequesting.conn.getRemote()}`);
         let writer = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.getBlock, { hash, redoLog });
         connRequesting.conn.addPendingWriter(writer);
         connRequesting.hashes.add(hash);
@@ -712,7 +514,7 @@ export class ChainNode extends EventEmitter {
             // TODO: 过频繁的广播header, 要干掉
         }
         if (!valid) {
-            this.banConnection(from, BAN_LEVEL.forever);
+            this.m_node.banConnection(from, BAN_LEVEL.forever);
         }
         return valid;
     }
@@ -721,10 +523,10 @@ export class ChainNode extends EventEmitter {
         let stub = this.m_requestingBlock.hashMap.get(block.hash);
         assert(stub, `recv block ${block.hash} from ${from} that never request`);
         if (!stub) {
-            this.banConnection(from, BAN_LEVEL.day);
+            this.m_node.banConnection(from, BAN_LEVEL.day);
             return ErrorCode.RESULT_INVALID_BLOCK;
         }
-        this.m_logger.debug(`recv block hash: ${block.hash} number: ${block.number} from ${from}`);
+        this.logger.debug(`recv block hash: ${block.hash} number: ${block.number} from ${from}`);
         this.m_blockStorage!.add(block);
         assert(stub!.from === from, `request ${block.hash} from ${stub!.from} while recv from ${from}`);
         this.m_requestingBlock.hashMap.delete(block.hash);
@@ -741,6 +543,7 @@ export class ChainNode extends EventEmitter {
     }
 
     protected _onConnectionError(remote: string) {
+        this.logger.warn(`connection from ${remote} break, close it.`);
         this._onRemoveConnection(remote);
     }
 
@@ -784,7 +587,7 @@ export class ChainNode extends EventEmitter {
                 this.m_cc.onBlockTimeout(this, hash, fromRequesting);
                 // close it 
                 if (fromRequesting.wnd < 1) {
-                    this.banConnection(stub.from, BAN_LEVEL.hour);
+                    this.m_node.banConnection(stub.from, BAN_LEVEL.hour);
                 }
             }
         }
@@ -792,41 +595,25 @@ export class ChainNode extends EventEmitter {
         for (let remote of this.m_requestingHeaders.keys()) {
             let rh = this.m_requestingHeaders.get(remote)!;
             if (now - rh.time > this.m_headersTimeout) {
-                this.banConnection(remote, BAN_LEVEL.hour);
+                this.logger.debug(`header request timeout from ${remote} timeout with options `, rh.req);
+                this.m_node.banConnection(remote, BAN_LEVEL.hour);
             }
         }
     }
 
-    public newTransaction(): Transaction {
-        return new this.m_transactionType();
-    }
-
-    public newBlockHeader(): BlockHeader {
-        return new this.m_blockHeaderType();
-    }
-
-    public newBlock(header?: BlockHeader): Block {
-        let block = new Block({
-            header,
-            headerType: this.m_blockHeaderType, 
-            transactionType: this.m_transactionType});
-        return block;
-    }
-
     protected async _responseBlocks(conn: NodeConnection, req: any): Promise<ErrorCode> {
-        assert(this.m_headerStorage);
         assert(this.m_blockStorage);
-        this.m_logger.info(`receive block request from ${conn.getRemote()} with ${JSON.stringify(req)}`);
+        this.logger.info(`receive block request from ${conn.getRemote()} with ${JSON.stringify(req)}`);
         let bwriter = new BufferWriter();
         let block = this.m_blockStorage!.get(req.hash);
         if (!block) {
-            this.m_logger.crit(`cannot get Block ${req.hash} from blockStorage`);
+            this.logger.crit(`cannot get Block ${req.hash} from blockStorage`);
             assert(false, `${this.m_node.peerid} cannot get Block ${req.hash} from blockStorage`);
             return ErrorCode.RESULT_OK;
         }
         let err = block.encode(bwriter);
         if (err) {
-            this.m_logger.error(`encode block ${block.hash} failed`);
+            this.logger.error(`encode block ${block.hash} failed`);
             return err;
         }
         let rawBlocks = bwriter.render();
@@ -838,7 +625,7 @@ export class ChainNode extends EventEmitter {
             let redoLog = this.m_storageManager.getRedoLog(req.hash);
             err = redoLog!.encode(redoLogWriter);
             if (err) {
-                this.m_logger.error(`encode redolog ${req.hash} failed`);
+                this.logger.error(`encode redolog ${req.hash} failed`);
                 return err;
             }
             let redoLogRaw = redoLogWriter.render();
@@ -860,64 +647,19 @@ export class ChainNode extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
-    public async getHeader(arg1: string|number|'latest'): Promise<{err: ErrorCode, header?: BlockHeader}>;
-    public async getHeader(arg1: string|BlockHeader, arg2: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
-    public async getHeader(arg1: string|number|'latest'|BlockHeader, arg2?: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}> {
-        let header: BlockHeader|undefined;
-        assert(this.m_headerStorage);
-        if (arg2 === undefined || arg2 === undefined) {
-            if (arg1 instanceof BlockHeader) {
-                assert(false);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
-            }
-            return await this.m_headerStorage!.loadHeader(arg1);
-        } else {
-            let fromHeader: BlockHeader;
-            if (arg1 instanceof BlockHeader) {
-                fromHeader = arg1;
-            } else {
-                let hr = await this.m_headerStorage!.loadHeader(arg1);
-                if (hr.err) {
-                    return hr;
-                }
-                fromHeader = hr.header!;
-            }
-            let headers: BlockHeader[] = []; 
-            headers.push(fromHeader);
-            if (arg2 > 0) {
-                assert(false);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
-            } else {
-                if (fromHeader.number + arg2 < 0) {
-                    arg2 = -fromHeader.number;
-                }
-                for (let ix = 0; ix < -arg2; ++ix) {
-                    let hr = await this.m_headerStorage!.loadHeader(fromHeader.preBlockHash);
-                    if (hr.err) {
-                        return hr;
-                    }
-                    fromHeader = hr.header!;
-                    headers.push(fromHeader);
-                }
-                headers = headers.reverse();
-                return {err: ErrorCode.RESULT_OK, header: headers[0], headers};
-            }
-        }
-    }
-
     protected async _responseHeaders(conn: NodeConnection, req: any): Promise<ErrorCode> {
-        assert(this.m_headerStorage);
-        this.m_logger.info(`receive header request from ${conn.getRemote()} with ${JSON.stringify(req)}`);
+        this.logger.info(`receive header request from ${conn.getRemote()} with ${JSON.stringify(req)}`);
         if (req.from) {
             let hwriter = new BufferWriter();
             let respErr = ErrorCode.RESULT_OK;
             let headerCount = 0;
             do {
-                let tipResult = await this.m_headerStorage.loadHeader('latest');
+                let tipResult = await this.base.headerStorage.getHeader('latest');
                 if (tipResult.err) {
                     return tipResult.err;
                 }
-                let heightResult = await this.m_headerStorage!.getHeightOnBest(req.from);
+                
+                let heightResult = await this.m_node.headerStorage!.getHeightOnBest(req.from);
                 if (heightResult.err === ErrorCode.RESULT_NOT_FOUND) {
                     respErr = ErrorCode.RESULT_NOT_FOUND;
                     break;
@@ -935,7 +677,7 @@ export class ChainNode extends EventEmitter {
                     headerCount = req.limit;
                 }
                 
-                let hr = await this.getHeader(heightResult.height! + headerCount);
+                let hr = await this.base.headerStorage.getHeader(heightResult.height! + headerCount);
                 if (hr.err) {
                     // 中间changeBest了，返回not found
                     if (hr.err === ErrorCode.RESULT_NOT_FOUND) {
@@ -946,7 +688,7 @@ export class ChainNode extends EventEmitter {
                     }
                 }
 
-                let hsr = await this.getHeader(hr.header!.hash, -headerCount + 1);
+                let hsr = await this.base.headerStorage.getHeader(hr.header!.hash, -headerCount + 1);
                 if (hsr.err) {
                     return hsr.err;
                 }
@@ -958,7 +700,7 @@ export class ChainNode extends EventEmitter {
                 for (let h of hsr.headers!) {
                     let err = h.encode(hwriter);
                     if (err) {
-                        this.m_logger.error(`encode header ${h.hash} failed`);
+                        this.logger.error(`encode header ${h.hash} failed`);
                         respErr = ErrorCode.RESULT_NOT_FOUND;
                     }
                 }

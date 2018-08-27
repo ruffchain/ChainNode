@@ -173,7 +173,7 @@ class SN extends EventEmitter {
         let result = 0;
         decoder.decodeBody();
         
-        LOG_INFO(`[SN]: got package ${BDTPackage.CMD_TYPE.toString(decoder.header.cmdType)}(seq = ${decoder.header.seq}) is sendto ${remote.address}: ${remote.port}`);
+        LOG_DEBUG(`[SN]: got package ${BDTPackage.CMD_TYPE.toString(decoder.header.cmdType)}(seq = ${decoder.header.seq}) is sendto ${remote.address}: ${remote.port}`);
         switch(decoder.header.cmdType){
             case BDTPackage.CMD_TYPE.pingReq:
                 return this._processPingReq(socket, decoder, remote);
@@ -253,11 +253,11 @@ class SN extends EventEmitter {
             this.m_resendQueue.addPackage(resendPackgeId, encoder.buffer, this.m_server, remote, this.m_options.resendInterval, this.m_options.resendTimes, null);
         }
 
-        LOG_INFO(`[SN]: package ${BDTPackage.CMD_TYPE.toString(cmdPackage.header.cmdType)}(seq = ${cmdPackage.header.seq}) is sendto ${remote.address}: ${remote.port}`);
+        LOG_DEBUG(`[SN]: package ${BDTPackage.CMD_TYPE.toString(cmdPackage.header.cmdType)}(seq = ${cmdPackage.header.seq}) is sendto ${remote.address}: ${remote.port}`);
     }
 
     _processPingReq(socket, cmdPackage, remote) {
-        LOG_INFO(`peer(${cmdPackage.body.peerid}:${BaseUtil.EndPoint.toString(remote)}) online.sessionid:${cmdPackage.header.sessionid}`);
+        LOG_DEBUG(`peer(${cmdPackage.body.peerid}:${BaseUtil.EndPoint.toString(remote)}) online.sessionid:${cmdPackage.header.sessionid}`);
         if(cmdPackage.body == null || 
             typeof cmdPackage.body.peerid !== 'string' || cmdPackage.body.peerid.length === 0) {
             LOG_WARN('[SN]: processPingReq error, body is null');
@@ -282,10 +282,10 @@ class SN extends EventEmitter {
         respHeader.src.peeridHash = this.m_peeridHash;
         respHeader.dest.peeridHash = reqHeader.src.peeridHash;
         let hashpid = BDTPackage.hashPeerid(peerid);
-        LOG_INFO(`[SN]: hash pid=${hashpid},src_peerid_hash=${cmdPackage.header.src.peeridHash}`);
+        LOG_DEBUG(`[SN]: hash pid=${hashpid},src_peerid_hash=${cmdPackage.header.src.peeridHash}`);
 
         if (hashpid === reqHeader.src.peeridHash) {
-            LOG_INFO('[SN]: CHECK OK,can update peer info');
+            LOG_DEBUG('[SN]: CHECK OK,can update peer info');
             respBody.result = 0;
             respBody.peerid = reqBody.peerid;
         
@@ -319,7 +319,7 @@ class SN extends EventEmitter {
             eplist = [...epSet];
             eplist.unshift(wlanEPString);
 
-            LOG_INFO(`[SN]: UPDATE info,peerid: ${peerid} ,eplist: ${eplist.toString()}`);
+            LOG_DEBUG(`[SN]: UPDATE info,peerid: ${peerid} ,eplist: ${eplist.toString()}`);
 
             // mount the eplist to response
             respBody.eplist = eplist;
@@ -387,12 +387,12 @@ class SN extends EventEmitter {
         respHeader.dest.peeridHash = reqHeader.src.peeridHash;
         respHeader.sessionid = reqHeader.sessionid;
 
-        LOG_INFO(`[SN]: call remote peer, ${srcPeerid} -> ${destPeerid}`);
+        LOG_DEBUG(`[SN]: call remote peer, ${srcPeerid} -> ${destPeerid}`);
         
         let now = TimeHelper.uptimeMS();
 
         let sendCallResp = (result, eplist, dynamicEPList, lastUpdateTime) => {
-            LOG_INFO(`[SN]: will send call resp, result:${result}, ${srcPeerid} -> ${destPeerid}`);
+            LOG_DEBUG(`[SN]: will send call resp, result:${result}, ${srcPeerid} -> ${destPeerid}`);
     
             let respBody = {
                     'src': reqBody.dest,
@@ -416,7 +416,7 @@ class SN extends EventEmitter {
         };
     
         let sendSN2SN = (srcPeerInfo, destPeerInfo) => {
-            LOG_INFO(`[SN]: will send sn2sn ${srcPeerid} -> ${destPeerid}`);
+            LOG_DEBUG(`[SN]: will send sn2sn ${srcPeerid} -> ${destPeerid}`);
             let sn2snReq = this.m_packageHelper.createPackage(BDTPackage.CMD_TYPE.sn2snReq);
             let sn2snHeader = sn2snReq.header;
             sn2snHeader.src.peeridHash = BDTPackage.hashPeerid(this.m_perid);
@@ -500,10 +500,10 @@ class SN extends EventEmitter {
                 sendCallResp(Result.SUCCESS, destEPArray, dynamicEPList, destPeerInfo.lastUpdateTime);
                 return Result.SUCCESS;
             }
-            LOG_INFO(`Found dest peer(${srcPeerid}-${destPeerid}) from sn`);
+            LOG_DEBUG(`Found dest peer(${srcPeerid}-${destPeerid}) from sn`);
         } else {
             sendCallResp(Result.DEST_PEERID_NOT_FOUND);
-            LOG_INFO(`Result.DEST_PEERID_NOT_FOUND (${srcPeerid}-${destPeerid}), cacheSize:${this.m_peerCache.peerCount}`);
+            LOG_DEBUG(`Result.DEST_PEERID_NOT_FOUND (${srcPeerid}-${destPeerid}), cacheSize:${this.m_peerCache.peerCount}`);
             this.m_stat.miss++;
             // 没命中，客户端需要考虑重新搜索其他SN上线，或者通过其他手段找到对方(如DHT)
             return Result.DEST_PEERID_NOT_FOUND;

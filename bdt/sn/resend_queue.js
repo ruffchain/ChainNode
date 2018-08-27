@@ -48,7 +48,7 @@ class ResendQueue {
     static genPackageID(cmdType, remotePeeridHash, seq)
     {
         let id = `${cmdType}:${remotePeeridHash}:${seq}`;
-        LOG_INFO(`genPackageID:${id}`);
+        LOG_DEBUG(`genPackageID:${id}`);
         return id;
     }
 
@@ -103,13 +103,13 @@ class ResendQueue {
                 if(v.onTimeOut) {
                     v.onTimeOut();
                 }
-                LOG_INFO(`package(${k}) is timeout!!!!`);
+                LOG_DEBUG(`package(${k}) is timeout!!!!`);
                 willRemove.push(k);
             } else {
                 if (now - v.lastSend > v.interval * (v.times + 1)) {
                     v.times = v.times + 1;
                     v.lastSend = now;
-                    LOG_INFO(`resend a req package(${k})`);
+                    LOG_DEBUG(`resend a req package(${k})`);
                     v.server.send(
                         v.buffer,
                         [v.remoteEP],

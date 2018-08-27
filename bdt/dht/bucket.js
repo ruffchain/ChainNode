@@ -265,9 +265,9 @@ class Bucket {
         let bucketNo = 0;
         let localPeerHash = this.m_localPeer.hash;
         for (let bucket of this.m_buckets) {
-            LOG_INFO(`mask:${HashDistance.hashBit(HashDistance.HASH_MASK, bucketNo)}, peers:`);
+            LOG_DEBUG(`mask:${HashDistance.hashBit(HashDistance.HASH_MASK, bucketNo)}, peers:`);
             for (let peer of bucket.peerList) {
-                LOG_INFO(`PEER(distanse:${HashDistance.calcDistance(peer.hash, localPeerHash)} = ${peer.hash} ^ ${localPeerHash})`);
+                LOG_DEBUG(`PEER(distanse:${HashDistance.calcDistance(peer.hash, localPeerHash)} = ${peer.hash} ^ ${localPeerHash})`);
             }
 
             bucketNo++;
@@ -322,12 +322,7 @@ class SubBucket {
         } else if (targetPeer !== peer){
             if (isTrust) {
                 // 所有信息都可信，全部全量更新一遍
-                if (peer.eplist && peer.eplist.length > 0) {
-                    targetPeer.eplist = peer.eplist;
-                }
-                
-                targetPeer.updateServices(peer.services);
-                targetPeer.additionalInfo = peer.additionalInfo;
+                targetPeer.update(peer);
             } else {
                 targetPeer.unionEplist(peer.eplist);
             }

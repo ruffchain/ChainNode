@@ -16,6 +16,21 @@ export class RPCServer extends EventEmitter {
         return super.on(event, listener);
     }
 
+    once(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
+    once(event: string, listener: any): this  {
+        return super.once(event, listener);
+    }
+
+    prependListener(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
+    prependListener(event: string, listener: any): this  {
+        return super.prependListener(event, listener);
+    }
+
+    prependOnceListener(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
+    prependOnceListener(event: string, listener: any): this  {
+        return super.prependOnceListener(event, listener);
+    }
+
     start() {
         if (this.m_server) {
             return;

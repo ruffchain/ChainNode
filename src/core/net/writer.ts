@@ -132,6 +132,8 @@ export class PackageStreamWriter extends EventEmitter {
         if (this.m_connection && this.m_drainListener) {
             this.m_connection.removeListener('drain', this.m_drainListener);
         }
+        this.removeAllListeners(WRITER_EVENT.finish);
+        this.removeAllListeners(WRITER_EVENT.error);
         this.m_connection = undefined;
         this.m_drainListener = undefined;
         return;

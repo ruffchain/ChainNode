@@ -29,7 +29,7 @@ export function signBufferMsg(msg: Buffer, key: Buffer) {
     return secp256k1.signatureNormalize(sig.signature);
 }
 
-export function verifyBufferMsg(msg: Buffer, sig: Buffer, key: Buffer) {
+export function verifyBufferMsg(msg: Buffer, sig: Buffer, key: Buffer): boolean {
     if (sig.length === 0) {
         return false;
     }

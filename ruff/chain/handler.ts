@@ -6,6 +6,11 @@ export function registerHandler(handler: ValueHandler) {
         let retInfo = await balanceKv.get(address);
         return retInfo.err === ErrorCode.RESULT_OK ? new BigNumber(retInfo.value as string) : new BigNumber(0);
     }
+    
+    handler.genesisListener = async (context: DposTransactionContext) => {
+        // await context.storage.createKeyValue('testkv');
+        return ErrorCode.RESULT_OK;
+    };
 
     handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         return await context.getBalance(params.address);

@@ -10,22 +10,29 @@ export class TcpNode extends INode {
     private m_options: any;
     private m_server: Server;
 
-    constructor(options: {host: string, port: number} & LoggerOptions) {
-        super({peerid: `${options.host}:${options.port}`, logger: options.logger, loggerOptions: options.loggerOptions});
+    constructor(options: {peerid: string, host: string, port: number} & LoggerOptions) {
+        super({peerid: options.peerid, logger: options.logger, loggerOptions: options.loggerOptions});
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
         this.m_server = new Server();
     }
 
-    protected _connectTo(peerid: string): Promise<{err: ErrorCode, conn?: NodeConnection}> {
-        let [host, port] = peerid.split(':');
+    protected async _peeridToIpAddress(peerid: string): Promise<{err: ErrorCode, ip?: {host: string, port: number}}>  {
+        return {err: ErrorCode.RESULT_NOT_SUPPORT};
+    }
+
+    protected async _connectTo(peerid: string): Promise<{err: ErrorCode, conn?: NodeConnection}> {
+        let par = await this._peeridToIpAddress(peerid);
+        if (par.err) {
+            return {err: par.err};
+        }
         let tcp = new Socket();
-        return new Promise((resolve, reject) => {
+        return new Promise<{err: ErrorCode, conn?: NodeConnection}>((resolve, reject) => {
             tcp.once('error', (e) => {
                 tcp.removeAllListeners('connect');
                 resolve({err: ErrorCode.RESULT_EXCEPTION});
             });
-            tcp.connect({host, port: parseInt(port, 10)});
+            tcp.connect(par.ip!);
             tcp.once('connect', () => {
                 let connNodeType = this._nodeConnectionType();
                 let connNode: any = (new connNodeType(this, {socket: tcp , remote: peerid}));
@@ -39,6 +46,20 @@ export class TcpNode extends INode {
 
     protected _connectionType(): new(...args: any[]) => IConnection {
         return TcpConnection;
+    }
+
+    public uninit() {
+        let closeServerOp;
+        if (this.m_server) {
+            closeServerOp = new Promise((resolve) => {
+                this.m_server.close(resolve);
+            });
+        }
+        if (closeServerOp) {
+            return Promise.all([closeServerOp, super.uninit()]);
+        } else {
+            return super.uninit();
+        }
     }
 
     public listen(): Promise<ErrorCode> {
@@ -57,7 +78,7 @@ export class TcpNode extends INode {
             });
             this.m_server.once('error', (e) => {
                 this.m_server.removeAllListeners('listening');
-                reject(ErrorCode.RESULT_EXCEPTION);
+                resolve(ErrorCode.RESULT_EXCEPTION);
             });
         });
     }

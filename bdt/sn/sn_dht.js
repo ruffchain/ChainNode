@@ -413,7 +413,7 @@ class SNDHT {
                     lastOnlineTime = now;
                 }
                 // 在internet上线足够久，并且附近没有SN上线
-                LOG_INFO(`SN test online:now=${now},lastOnlineTime=${lastOnlineTime}, isJoined=${this.m_isJoinedDHT},nearSNDistance=${this._getNearSNDistance()}`);
+                LOG_DEBUG(`SN test online:now=${now},lastOnlineTime=${lastOnlineTime}, isJoined=${this.m_isJoinedDHT},nearSNDistance=${this._getNearSNDistance()}`);
                 if (now - lastOnlineTime >= this.MINI_ONLINE_TIME_MS && canJoinDHT()) {
                     // SN上线；
                     if (limitTimes > 5) {
@@ -428,7 +428,7 @@ class SNDHT {
                     this._unjoinDHT();
                 }
             } else {
-                LOG_INFO(`not internet.natType=${localPeer.natType}`);
+                LOG_DEBUG(`not internet.natType=${localPeer.natType}`);
                 if (this.m_isJoinedDHT) {
                     limitTimes *= 2;
                     recentState = [];

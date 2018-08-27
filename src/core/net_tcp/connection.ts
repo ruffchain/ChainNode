@@ -34,11 +34,31 @@ export class TcpConnection extends IConnection {
     }
     close(): Promise<ErrorCode> {
         if (this.m_socket) {
+            this.m_socket.removeAllListeners('drain');
+            this.m_socket.removeAllListeners('data');
+            this.m_socket.removeAllListeners('error');
+            this.m_socket.once('error', () => {
+                // do nothing
+            });
             this.m_socket.end();
             delete this.m_socket; 
         }
         this.emit('close', this);
         return Promise.resolve(ErrorCode.RESULT_OK);
+    }
+
+    destroy(): Promise<void> {
+        if (this.m_socket) {
+            this.m_socket.removeAllListeners('drain');
+            this.m_socket.removeAllListeners('data');
+            this.m_socket.removeAllListeners('error');
+            this.m_socket.once('error', () => {
+                // do nothing
+            });
+            this.m_socket.destroy();
+            delete this.m_socket;
+        }
+        return Promise.resolve();
     }
 
     getRemote(): string {

@@ -27,7 +27,7 @@ host.registerNet('tcp', (commandOptions: CommandOptions): any => {
         peers = (peers as string).split(';');
     }
     let nodeType = StaticOutNode(TcpNode);
-    return new nodeType({host: _host, port}, peers);
+    return new nodeType(peers, {host: _host, port});
 });
 
 host.registerNet('bdt', (commandOptions: CommandOptions): any => {

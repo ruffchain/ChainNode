@@ -3,7 +3,7 @@ import {IConnection, NodeConnection, INode} from '../net';
 import {BdtConnection} from './connection';
 import { randomBytes } from 'crypto';
 const P2P = require('../../../bdt/p2p/p2p');
-const {NetHelper} = require('../../../bdt/base/util.js');
+const {NetHelper, HashDistance} = require('../../../bdt/base/util.js');
 
 export class BdtNode extends INode {
     private m_options: any;
@@ -37,9 +37,13 @@ export class BdtNode extends INode {
 
         this.m_skipList.push(options.peerid);
         this.m_skipList.push(this.m_options.snPeer.peerid);
+        this.m_bdtStack = undefined;
     }
 
     public async init() {
+        if (this.m_bdtStack) {
+            return;
+        }
         // bdt 的log控制参数
         P2P.debug({
             level: this.m_options.bdtLoggerOptions.level,
@@ -79,7 +83,7 @@ export class BdtNode extends INode {
 
         // 检查是否创建成功
         if ( result !== 0 ) {
-            throw Error('init p2p peer error. please check the params');
+            throw Error(`init p2p peer error ${result}. please check the params`);
         }
 
         this.m_snPeerid = this.m_options.snPeer.peerid;
@@ -96,24 +100,34 @@ export class BdtNode extends INode {
 
     // 通过发现自身， 来找到一些peers, 然后尝试每个握手一下
     // 在测试阶段这种方法实现比较及时, 后面可能考虑用会dht中的randomPeers
-    async randomPeers(count: number): Promise<{ err: ErrorCode, peers: string[] }> {
-        let dhtPeerid  = this.m_snPeerid;
-        let res = await this.m_dht.findPeer(randomBytes(8).toString('hex'));
+    async randomPeers(count: number, excludes: string[]): Promise<{ err: ErrorCode, peers: string[], ignore0: boolean }> {
+        let res = await this.m_dht.getRandomPeers(count, false);
+        this.m_logger.info(`first find ${res.peerlist.length} peers, ${JSON.stringify(res.peerlist.map((value: any) => value.peerid))}`);
+        const ignore0 = !res || !res.peerlist || res.peerlist.length === 0;
         // 过滤掉自己和种子peer
-        let peers: any = res.peerlist.filter((val: any) => {
+        let peers: any[] = res.peerlist.filter((val: any) => {
+            if (!val.peerid) {
+                this.m_logger.info(`exclude undefined peerid, ${JSON.stringify(val)}`);
+                return false;
+            }
             if (this.m_skipList.includes(val.peerid)) {
+                this.m_logger.info(`exclude ${val.peerid} from skipList`);
+                return false;
+            }
+            if (excludes.includes(val.peerid)) {
+                this.m_logger.info(`exclude ${val.peerid} from excludesList`);
                 return false;
             }
             let ready = val.getAdditionalInfo('ready');
-            // console.log(peer.peerid, 'ready', ready)
             if ( ready !== 1 ) {
+                this.m_logger.info(`exclude ${val.peerid} not ready`);
                 return false;
             }
             return true;
         });
 
-        // 过滤 peers 中undefined(已经被剔除)
-        let peerids = peers.filter((val: any) => val).map((val: any) => val.peerid);
+        let peerids = peers.map((value) => value.peerid);
+        this.m_logger.info(`find ${peerids.length} peers after filter, count ${count}, ${JSON.stringify(peerids)}`);
 
         // 如果peer数量比传入的count多， 需要随机截取
         if ( peerids.length > count ) {
@@ -126,12 +140,11 @@ export class BdtNode extends INode {
             peerids = temp_peerids;
         }
 
-        let errCode = peerids.length ? ErrorCode.RESULT_OK : ErrorCode.RESULT_SKIPPED;
-        return { err: errCode, peers: peerids };
+        let errCode = peerids.length > 0 ? ErrorCode.RESULT_OK : ErrorCode.RESULT_SKIPPED;
+        return { err: errCode, peers: peerids, ignore0 };
     }
 
     protected _connectTo(peerid: string): Promise<{err: ErrorCode, conn?: NodeConnection}> {
-        // console.log('_connectTo', peerid)
         let vport = this.m_vport;
         let connection = this.m_bdtStack.newConnection();
         connection.bind(null);
@@ -158,6 +171,11 @@ export class BdtNode extends INode {
 
     protected _connectionType(): new(...args: any[]) => IConnection {
         return BdtConnection;
+    }
+
+    public uninit() {
+        // TODO:
+        return super.uninit();
     }
 
     public listen(): Promise<ErrorCode> {

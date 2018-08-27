@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import * as process from 'process';
-import {createKeyPair, addressFromSecretKey, publicKeyFromSecretKey, addressFromPublicKey, initUnhandledRejection, parseCommand} from '../client';
+import {createKeyPair, addressFromSecretKey, publicKeyFromSecretKey, addressFromPublicKey, initUnhandledRejection, parseCommand, initLogger} from '../client';
 
-initUnhandledRejection();
+initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 
 function main() {
     let command = parseCommand(process.argv);

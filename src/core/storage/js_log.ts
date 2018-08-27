@@ -207,7 +207,7 @@ export class JStorageLogger implements StorageLogger {
 
     async createDatabase(name: string): Promise <{err: ErrorCode, value?: IWritableDatabase}> {
         let val = this._dbVal();
-        this.appendLog(`let ${val} = (await storage.createKeyValue(${JSON.stringify(name)})).value;`);
+        this.appendLog(`let ${val} = (await storage.createDatabase(${JSON.stringify(name)})).value;`);
         return {err: ErrorCode.RESULT_OK, value: new DatabaseLogger(this, val)};
     }
 

@@ -28,7 +28,7 @@
 
 const Base = require('../../base/base.js');
 const {EndPoint} = require('../../base/util.js');
-const {HashDistance, Result: DHTResult, Config} = require('../util.js');
+const {HashDistance, Result: DHTResult, Config, RandomGenerator} = require('../util.js');
 const Peer = require('../peer.js');
 const {TouchNodeConvergenceTask} = require('./task_touch_node_recursion.js');
 const DHTPackage = require('../packages/package.js');
@@ -45,10 +45,11 @@ const LOG_ASSERT = Base.BX_ASSERT;
 const LOG_ERROR = Base.BX_ERROR;
 
 class FindPeerTask extends TouchNodeConvergenceTask {
-    constructor(owner, peerid, isImmediately) {
+    constructor(owner, peerid, isImmediately, findCount) {
         super(owner, isImmediately);
 
         this.m_peerid = peerid;
+        this.m_findCount = findCount;
 
         this.m_foundPeerList = new Map();
 
@@ -64,7 +65,9 @@ class FindPeerTask extends TouchNodeConvergenceTask {
                 this.m_foundCountLastStep = this.m_foundPeerList.size;
 
                 let foundPeerList = [...this.m_foundPeerList.values()];
-                HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(this.m_peerid)});
+                // 有目标peer就按目标peer距离排序，否则按本地节点距离排序
+                const peeridSort = this.m_peerid || this.bucket.localPeer.peerid;
+                HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(peeridSort)});
         
                 let abort = true;
                 this.m_stepListeners.forEach(callback => {
@@ -86,12 +89,16 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         return this.m_peerid;
     }
 
+    get findCount() {
+        return this.m_findCount;
+    }
+    
     addStepListener(callback) {
         this.m_stepListeners.push(callback);
     }
 
     _processImpl(response, remotePeer) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid})`);
+        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) remotePeer:${response.common.src.peerid} responsed FindPeer(${this.m_peerid})`);
         this.m_lastResponseTime = TimeHelper.uptimeMS();
         // 合并当前使用的address到eplist，然后恢复response内容
         // 如果address是TCP地址，可能没有记录到eplist，但这个地址可能是唯一可用连接地址
@@ -109,18 +116,25 @@ class FindPeerTask extends TouchNodeConvergenceTask {
 
         if (isInService) {
             this.m_foundPeerList.set(response.common.src.peerid, foundPeer);
+            if (this.m_peerid) {
+                if (response.common.src.peerid === this.m_peerid) {
+                    this._onComplete(DHTResult.SUCCESS);
+                    return;
+                }
+            } else if (this.m_foundPeerList.size >= this.m_findCount) {
+                this._onComplete(DHTResult.SUCCESS);
+                return;
+            }
         }
-        if (isInService && response.common.src.peerid === this.m_peerid) {
-            this._onComplete(DHTResult.SUCCESS);
-        } else {
-            super._processImpl(response, remotePeer);
-        }
+        super._processImpl(response, remotePeer);
     }
 
     _onCompleteImpl(result) {
-        LOG_INFO(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer complete:${this.m_foundPeerList.size}`);
+        LOG_DEBUG(`LOCALPEER:(${this.bucket.localPeer.peerid}:${this.servicePath}) FindPeer(${this.m_peerid}) complete:${this.m_foundPeerList.size}`);
+        // 有目标peer就按目标peer距离排序，否则按本地节点距离排序
+        const peeridSort = this.m_peerid || this.bucket.localPeer.peerid;
         let foundPeerList = [...this.m_foundPeerList.values()];
-        HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(this.m_peerid)});
+        HashDistance.sortByDistance(foundPeerList, {hash: HashDistance.checkHash(peeridSort)});
         this._callback(result, foundPeerList);
 
         setImmediate(() => {
@@ -135,13 +149,15 @@ class FindPeerTask extends TouchNodeConvergenceTask {
         let cmdPackage = this.packageFactory.createPackage(DHTCommandType.FIND_PEER_REQ);
         cmdPackage.body = {
             taskid: this.m_id,
-            target: this.m_peerid
         };
+        if (this.m_peerid) {
+            cmdPackage.body.target = this.m_peerid;
+        }
         return cmdPackage;
     }
 
     get _targetKey() {
-        return this.m_peerid;
+        return this.m_peerid || RandomGenerator.string();
     }
 
     _stopImpl() {

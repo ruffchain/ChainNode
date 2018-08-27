@@ -30,7 +30,8 @@ gulp.task('_publish', () => {
     delete pkg['scripts'];
     pkg['bin'] = {
         'chain_host': './src/tool/host.js',
-        'address_tool': './src/tool/address.js'
+        'address_tool': './src/tool/address.js',
+        'chain_debuger': './src/tool/debuger.js'
     };
     fs.ensureDirSync('./dist/blockchain-sdk/src/');
     fs.writeJSONSync('./dist/blockchain-sdk/package.json', pkg, {spaces: 4, flag: 'w'});

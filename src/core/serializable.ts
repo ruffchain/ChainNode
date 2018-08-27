@@ -16,6 +16,40 @@ export interface JSONable {
     stringify(): any;
 }
 
+export function deepCopy(o: any): any {
+    if (isUndefined(o) || isNull(o)) {
+        return o;
+    } else if (isNumber(o) || isBoolean(o)) {
+        return o;
+    } else if (isString(o)) {
+        return o;
+    } else if (o instanceof BigNumber) {
+        return new BigNumber(o);
+    } else if (isBuffer(o)) {
+        return Buffer.from(o);
+    } else if (isArray(o) || o instanceof Array) {
+        let s = [];
+        for (let e of o) {
+            s.push(deepCopy(e));
+        }
+        return s;
+    } else if (isObject(o)) {
+        let s = Object.create(null);
+        for (let k of Object.keys(o)) {
+            s[k] = deepCopy(o[k]);
+        }
+        return s;
+    } else if (o instanceof Map) {
+        let s = new Map();
+        for (let k of o.keys()) {
+            s.set(k, deepCopy(o.get(k)));
+        }
+        return s;
+    } else {
+        throw new Error('not JSONable');
+    }
+}
+
 export function toStringifiable(o: any, parsable: boolean = false): any {
     if (isUndefined(o) || isNull(o)) {
         return o;

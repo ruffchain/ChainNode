@@ -1,12 +1,13 @@
 
 import * as process from 'process';
+import { LoggerInstance } from 'winston';
 
-export function init() {
+export function init(logger: LoggerInstance) {
     process.on('unhandledRejection', (reason, p) => {
-        console.error('Unhandled Rejection at: Promise ', p, ' reason: ', reason.stack);
+        logger.error('Unhandled Rejection at: Promise ', p, ' reason: ', reason.stack);
     });
     
     process.on('uncaughtException', (err) => {
-        console.error('uncaught exception at: ', err.stack);
+        logger.error('uncaught exception at: ', err.stack);
     });    
 }

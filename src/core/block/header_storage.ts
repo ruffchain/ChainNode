@@ -8,7 +8,7 @@ import { LoggerInstance } from 'winston';
 import {LRUCache} from '../lib/LRUCache';
 import { isArray } from 'util';
 import { Lock } from '../lib/Lock';
-import {TxStorage} from './tx_storage';
+import {ITxStorage, TxStorage} from './tx_storage';
 import {BlockStorage} from './block_storage';
 
 const initHeaderSql = 'CREATE TABLE IF NOT EXISTS "headers"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "pre" CHAR(64) NOT NULL, "verified" TINYINT NOT NULL, "raw" BLOB NOT NULL);';
@@ -25,6 +25,20 @@ const getTipSql = 'SELECT h.raw, h.verified FROM headers AS h LEFT JOIN best AS 
 const updateVerifiedSql = 'UPDATE headers SET verified=$verified WHERE hash=$hash';
 const getByPreBlockSql = 'SELECT raw, verified FROM headers WHERE pre = $pre';
 
+export interface IHeaderStorage {
+    readonly txView: ITxStorage;
+    init(): Promise<ErrorCode>;
+    uninit(): void;
+    getHeader(arg1: string|number|'latest'): Promise<{err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE}>;
+    getHeader(arg1: string|BlockHeader, arg2: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
+    getHeightOnBest(hash: string): Promise<{ err: ErrorCode, height?: number, header?: BlockHeader }>;
+    saveHeader(header: BlockHeader): Promise<ErrorCode>;
+    createGenesis(genesis: BlockHeader): Promise<ErrorCode>;
+    getNextHeader(hash: string): Promise<{err: ErrorCode, results?: {header: BlockHeader, verified: VERIFY_STATE}[]}>;
+    updateVerified(header: BlockHeader, verified: VERIFY_STATE): Promise<ErrorCode>;
+    changeBest(header: BlockHeader): Promise<ErrorCode>;
+}
+
 export enum VERIFY_STATE {
     notVerified = 0,
     verified = 1,
@@ -40,7 +54,7 @@ class BlockHeaderEntry {
     }
 }
 
-export class HeaderStorage {
+export class HeaderStorage implements IHeaderStorage {
     private m_db: sqlite.Database;
     private m_blockHeaderType: new () => BlockHeader;
     
@@ -50,7 +64,7 @@ export class HeaderStorage {
     protected m_cacheHash: LRUCache<string, BlockHeaderEntry>;
     private m_transactionLock = new Lock();
 
-    private m_txView: TxStorage;
+    protected m_txView: ITxStorage;
 
     constructor(options: {
         logger: LoggerInstance;
@@ -66,7 +80,7 @@ export class HeaderStorage {
         this.m_txView = new TxStorage({logger: options.logger, db: options.db, blockstorage: options.blockStorage});
     }
 
-    get txview(): TxStorage {
+    get txView(): ITxStorage {
         return this.m_txView;
     }
 
@@ -82,7 +96,55 @@ export class HeaderStorage {
         return await this.m_txView.init();
     }
 
-    public async loadHeader(arg: number | string): Promise<{ err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE }> {
+    uninit() {
+        this.m_txView.uninit();
+    }
+
+    public async getHeader(arg1: string|number|'latest'): Promise<{err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE}>;
+    public async getHeader(arg1: string|BlockHeader, arg2: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
+    public async getHeader(arg1: string|number|'latest'|BlockHeader, arg2?: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}> {
+        let header: BlockHeader|undefined;
+        if (arg2 === undefined || arg2 === undefined) {
+            if (arg1 instanceof BlockHeader) {
+                assert(false);
+                return {err: ErrorCode.RESULT_INVALID_PARAM};
+            }
+            return await this._loadHeader(arg1);
+        } else {
+            let fromHeader: BlockHeader;
+            if (arg1 instanceof BlockHeader) {
+                fromHeader = arg1;
+            } else {
+                let hr = await this._loadHeader(arg1);
+                if (hr.err) {
+                    return hr;
+                }
+                fromHeader = hr.header!;
+            }
+            let headers: BlockHeader[] = []; 
+            headers.push(fromHeader);
+            if (arg2 > 0) {
+                assert(false);
+                return {err: ErrorCode.RESULT_INVALID_PARAM};
+            } else {
+                if (fromHeader.number + arg2 < 0) {
+                    arg2 = -fromHeader.number;
+                }
+                for (let ix = 0; ix < -arg2; ++ix) {
+                    let hr = await this._loadHeader(fromHeader.preBlockHash);
+                    if (hr.err) {
+                        return hr;
+                    }
+                    fromHeader = hr.header!;
+                    headers.push(fromHeader);
+                }
+                headers = headers.reverse();
+                return {err: ErrorCode.RESULT_OK, header: headers[0], headers};
+            }
+        }
+    }
+
+    protected async _loadHeader(arg: number | string): Promise<{ err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE }> {
         let rawHeader: Buffer;
         let verified: VERIFY_STATE;
         if (typeof arg === 'number') {
@@ -170,7 +232,7 @@ export class HeaderStorage {
         return { err: ErrorCode.RESULT_OK, height: result.height, header };
     }
 
-    public async _saveHeader(header: BlockHeader): Promise<ErrorCode> {
+    protected async _saveHeader(header: BlockHeader): Promise<ErrorCode> {
         let writer = new BufferWriter();
         let err = header.encode(writer);
         if (err) {
@@ -276,7 +338,7 @@ export class HeaderStorage {
                 txViewOp.push({op: 'remove', value: forkFrom.number});
                 break;
             } else if (result.err === ErrorCode.RESULT_NOT_FOUND) {
-                let _result = await this.loadHeader(forkFrom.preBlockHash);
+                let _result = await this._loadHeader(forkFrom.preBlockHash);
                 assert(_result.header);
                 forkFrom = _result.header!;
                 sqls.push(`INSERT INTO best (hash, height, timestamp) VALUES("${forkFrom.hash}", "${forkFrom.number}", "${forkFrom.timestamp}")`);
@@ -320,17 +382,17 @@ export class HeaderStorage {
         return ErrorCode.RESULT_OK;
     }
 
-    async _begin() {
+    protected async _begin() {
         await this.m_transactionLock.enter();
         await this.m_db.run('BEGIN;');
     }
 
-    async _commit() {
+    protected async _commit() {
         await this.m_db.run('COMMIT;');
         this.m_transactionLock.leave();
     }
 
-    async _rollback() {
+    protected async _rollback() {
         await this.m_db.run('ROLLBACK;');
         this.m_transactionLock.leave();
     }

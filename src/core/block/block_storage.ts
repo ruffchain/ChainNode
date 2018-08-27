@@ -6,7 +6,15 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../../client';
 
-export class BlockStorage {
+export interface IBlockStorage {
+    init(): ErrorCode;
+    has(blockHash: string): boolean;
+    get(blockHash: string): Block | undefined;
+    add(block: Block): ErrorCode;
+    getSize(blockHash: string): number;
+}
+
+export class BlockStorage implements IBlockStorage {
     constructor(options: {
         path: string,
         blockHeaderType: new () => BlockHeader,
@@ -24,8 +32,13 @@ export class BlockStorage {
     private m_path: string;
     private m_logger: LoggerInstance;
 
-    public init() {
+    public init(): ErrorCode {
         fs.mkdirsSync(this.m_path);
+        return ErrorCode.RESULT_OK;
+    }
+
+    public uninit(): void {
+        // do nothing
     }
 
     public has(blockHash: string): boolean {

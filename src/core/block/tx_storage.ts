@@ -5,9 +5,23 @@ import { LoggerInstance } from '../lib/logger_util';
 import {BlockStorage} from './block_storage';
 let assert = require('assert');
 
+export interface ITxStorage {
+    init(): Promise<ErrorCode>;
+
+    uninit(): void;
+
+    add(blockhash: string): Promise<ErrorCode>;
+
+    remove(nBlockHeight: number): Promise<ErrorCode>;
+
+    get(txHash: string): Promise<{err: ErrorCode, blockhash?: string}>;
+
+    getCountByAddress(address: string): Promise<{err: ErrorCode, count?: number}>;
+}
+
 const initSql = 'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "address" CHAR(64) NOT NULL, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);';
 
-export class TxStorage {
+export class TxStorage implements ITxStorage {
     private m_db: sqlite.Database;
     private m_logger: LoggerInstance;
     private m_blockStorage: BlockStorage;
@@ -31,6 +45,10 @@ export class TxStorage {
         }
 
         return ErrorCode.RESULT_OK;
+    }
+
+    uninit() {
+        // do nothing
     }
 
     public async add(blockhash: string): Promise<ErrorCode> {

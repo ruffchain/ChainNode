@@ -16,7 +16,7 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
         const loggerTransports = [];
         if (options.loggerOptions.console) {
             loggerTransports.push(new transports.Console({
-                level: 'info',
+                level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
                 timestamp: true,
                 handleExceptions: true,
                 humanReadableUnhandledException: true
@@ -26,7 +26,7 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
             fs.ensureDirSync(options.loggerOptions.file.root);
             loggerTransports.push(new transports.File({
                 json: false,
-                level: 'info',
+                level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
                 timestamp: true,
                 filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
                 datePattern: 'yyyy-MM-dd.',
@@ -55,3 +55,5 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
         return new LogShim(logger).log;
     }
 }
+
+export {LogShim};

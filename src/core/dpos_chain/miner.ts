@@ -120,37 +120,4 @@ export class DposMiner extends ValueMiner {
 
         return {err: ErrorCode.RESULT_OK, timeout: (nextTime + hr.header!.timestamp - now) * 1000};
     }
-
-    protected async _createGenesisBlock(block: Block, storage: Storage, globalOptions: any, genesisOptions: any): Promise<ErrorCode> {
-        let err = await super._createGenesisBlock(block, storage, globalOptions, genesisOptions);
-        if (err) {
-            return err;
-        }
-        let gkvr = await storage.getKeyValue(Chain.dbSystem, Chain.kvConfig);
-        if (gkvr.err) {
-            return gkvr.err;
-        }
-        let rpr = await gkvr.kv!.set('consensus', 'dpos');
-        if (rpr.err) {
-            return rpr.err;
-        }
-
-        let dbr = await storage.getReadWritableDatabase(Chain.dbSystem);
-        if (dbr.err) {
-            return dbr.err;
-        }
-        // storage的键值对要在初始化的时候就建立好
-        let kvr = await dbr.value!.createKeyValue(consensus.ViewContext.kvDPOS);
-        if (kvr.err) {
-            return kvr.err;
-        }
-        let denv = new consensus.Context(dbr.value!, globalOptions, this.m_logger);
-
-        let ir = await denv.init(genesisOptions.candidates, genesisOptions.miners);
-        if (ir.err) {
-            return ir.err;
-        }
-
-        return ErrorCode.RESULT_OK;
-    }
 }

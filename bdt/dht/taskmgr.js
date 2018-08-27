@@ -59,9 +59,17 @@ class TaskExecutor {
     }
 
     findPeer(peerid, isImmediately, callback = null, onStep = null) {
+        return this._findPeer(peerid, 0, isImmediately, callback, onStep);
+    }
+
+    findRandomPeer(findCount, isImmediately, callback = null, onStep = null) {
+        return this._findPeer(null, findCount, isImmediately, callback, onStep);
+    }
+
+    _findPeer(peerid, findCount, isImmediately, callback = null, onStep = null) {
         for (let [taskid, task] of this.m_taskMgr.m_taskMap) {
             if (task.type === 'FindPeerTask'
-                && task.peerid === peerid
+                && ((task.peerid && task.peerid === peerid) || (!task.peerid && task.findCount === findCount))
                 && task.servicePath == this.m_servicePath
                 && !task.isComplete) {
                     // onStep不可忽略空
@@ -73,7 +81,7 @@ class TaskExecutor {
             }
         }
 
-        let newTask = new FindPeerTask(this, peerid, isImmediately);
+        let newTask = new FindPeerTask(this, peerid, isImmediately, findCount);
         newTask.addStepListener(onStep);
         if (callback) {
             newTask.addCallback(callback);
@@ -126,7 +134,7 @@ class TaskExecutor {
     }
 
     emitBroadcastEvent(eventName, params, sourcePeer, taskid, {timeout = BroadcastConfig.TimeoutMS} = {}, callback) {
-        // LOG_INFO(`BROADCAST: servicePath: ${this.servicePath}: eventName: ${eventName}`);
+        // LOG_DEBUG(`BROADCAST: servicePath: ${this.servicePath}: eventName: ${eventName}`);
         let task = this.m_taskMgr.m_taskMap.get(taskid);
         if (task) {
             if (callback) {

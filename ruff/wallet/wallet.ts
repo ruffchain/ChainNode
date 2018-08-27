@@ -2,7 +2,7 @@ import * as readline from 'readline';
 import * as process from 'process';
 import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection, initLogger} from '../../src/client';
 
-initUnhandledRejection();
+initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 
 function main() {
     let command = parseCommand(process.argv);

@@ -20,6 +20,10 @@ export class BdtConnection extends IConnection {
         this.m_bdt_connection.on(P2P.Connection.EVENT.error, () => {
             this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
         });
+        this.m_bdt_connection.on(P2P.Connection.EVENT.end, () => {
+            // 对端主动关闭了连接，这里先当break一样处理
+            // this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
+        });
         this.m_bdt_connection.on(P2P.Connection.EVENT.close, () => {
             this.emit('close', this);
         });
@@ -36,6 +40,13 @@ export class BdtConnection extends IConnection {
             delete this.m_bdt_connection;
         }
         return Promise.resolve(ErrorCode.RESULT_OK);
+    }
+    destroy(): Promise<void> {
+        if (this.m_bdt_connection) {
+            this.m_bdt_connection.close(true);
+            delete this.m_bdt_connection;
+        }
+        return Promise.resolve();
     }
 
     getRemote(): string {

@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
-import {HeaderStorage} from '../block';
+import {IHeaderStorage} from '../block';
 
 import { Storage, StorageOptions} from './storage';
 const digest = require('../lib/digest');
@@ -46,7 +46,7 @@ export class StorageDumpSnapshot {
 
 export type StorageSnapshotManagerOptions = {
     path: string,
-    headerStorage: HeaderStorage, 
+    headerStorage: IHeaderStorage, 
     storageType: new (options: StorageOptions) => Storage,
     logger: LoggerInstance
 };

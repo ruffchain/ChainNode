@@ -726,7 +726,7 @@ class MixSocket extends EventEmitter {
                 ));
 
                 socket.on('error', error => {
-                    blog.debug(`[mixsock]: socket bind udp ${ip}:${curPort} failed, error:${error}.`);
+                    blog.warn(`[mixsock]: socket bind udp ${ip}:${curPort} failed, error:${error}.`);
                     setImmediate(() => this._onSocketError(error, socket, localAddr, null, MixSocket.PROTOCOL.udp));
                     socket.close();
                     if (bindSucc || this.m_asyncCloseOp) {
@@ -792,7 +792,7 @@ class MixSocket extends EventEmitter {
                 ));
 
                 server.on('error', error => {
-                    blog.debug(`[mixsock]: socket bind tcp ${ip}:${curPort} failed, error:${error}.`);
+                    blog.warn(`[mixsock]: socket bind tcp ${ip}:${curPort} failed, error:${error}.`);
                     setImmediate(() => this._onSocketError(error, server, localAddr, null, MixSocket.PROTOCOL.tcp));
                     server.close();
                     if (bindSucc || this.m_asyncCloseOp) {
