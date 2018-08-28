@@ -5,8 +5,8 @@ const {
     BLOG_LEVEL_INFO,
     BLOG_LEVEL_ALL,
     BLOG_LEVEL_OFF,
-} = require('./base/base');
-const P2P = require('./p2p/p2p');
+} = require('../base/base');
+const P2P = require('../p2p/p2p');
 const path = require('path');
 
 

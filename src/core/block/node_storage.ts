@@ -20,17 +20,26 @@ export class NodeStorage {
     protected m_file: string;
     protected m_bFlush = false;
     private m_logger: LoggerInstance;
+    protected m_staticNodes: string[] = [];
 
     constructor(options: NodeStorageOptions) {
         this.m_file = path.join(options.dataDir, 'nodeinfo');
         this.m_logger = options.logger;
         try {
             fs.ensureDirSync(options.dataDir);
-            let json: any = fs.readJsonSync(this.m_file);
-            this.m_nodes = json['nodes'] ? json['nodes'] : [];
-            this.m_banNodes = json['bans'] ? json['bans'] : [];
+            if (fs.existsSync(this.m_file)) {
+                let json: any = fs.readJsonSync(this.m_file);
+                this.m_nodes = json['nodes'] ? json['nodes'] : [];
+                this.m_banNodes = json['bans'] ? json['bans'] : [];
+            }
         } catch (e) {
-            this.m_logger.warn(`[node_storage NodeStorage constructor] ${e.toString()}`);
+            this.m_logger.error(`[node_storage NodeStorage constructor] ${e.toString()}`);
+        }
+
+        // 在这里读一次staticnodes
+        const staticFile = path.join(options.dataDir, 'staticnodes');
+        if (fs.pathExistsSync(staticFile)) {
+            this.m_staticNodes = fs.readJSONSync(staticFile);
         }
 
         setInterval(() => {
@@ -48,6 +57,10 @@ export class NodeStorage {
         let peerids: string[] = this.m_nodes.slice(0, count);
 
         return peerids;
+    }
+
+    get staticNodes(): string[] {
+        return this.m_staticNodes;
     }
 
     public add(peerid: string): ErrorCode {
