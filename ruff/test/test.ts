@@ -1,7 +1,7 @@
 import 'mocha';
 import * as path from 'path';
 const assert = require('assert');
-import {createValueMemoryDebuger, initChainCreator, initLogger, stringifyErrorCode, ValueMemoryDebugSession, BigNumber, ErrorCode} from '../../../src/core';
+import {createValueMemoryDebuger, initChainCreator, initLogger, stringifyErrorCode, ValueMemoryDebugSession, BigNumber, ErrorCode} from '../../src/core';
 
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);

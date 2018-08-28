@@ -21,7 +21,7 @@ export class BaseHandler {
             this.m_txListeners.set(name, listener);
         }
     }
-
+    
     public getListener(name: string): TxListener|undefined {
         return this.m_txListeners.get(name);
     }

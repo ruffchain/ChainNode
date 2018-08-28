@@ -14,7 +14,7 @@ export class ValueMemoryDebugSession {
     private m_accounts?: Buffer[];
     private m_interval?: number;
     constructor(private readonly debuger: ValueMemoryDebuger) {
-
+        
     }
 
     async init(options: {

@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as assert from 'assert';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
+
 const { TransactionDatabase } = require('sqlite3-transactions');
 declare module 'sqlite' {
     interface Database {
@@ -16,6 +17,8 @@ import { ErrorCode } from '../error_code';
 import {toStringifiable, fromStringifiable} from '../serializable';
 import {Storage, IReadWritableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
 import { LoggerInstance } from '../lib/logger_util';
+import { JsonStorage } from '../storage_json/storage';
+import { isUndefined, isArray } from 'util';
 const {LogShim} = require('../lib/log_shim');
 
 class SqliteStorageKeyValue implements IReadWritableKeyValue {
@@ -567,5 +570,67 @@ export class SqliteStorage extends Storage {
         await transcation.beginTransaction();
 
         return { err: ErrorCode.RESULT_OK, value: transcation };
+    }
+
+    public async toJsonStorage(storage: JsonStorage): Promise<{err: ErrorCode}> {
+        let tableNames: Map<string, string[]> = new Map();
+        try {
+            const results = await this.m_db!.all(`select name fromsqlite_master where type='table' order by name;`);
+            for (const {name} of results) {
+                const {dbName, kvName} = SqliteStorage.splitFullName(name);
+                if (!tableNames.has(dbName!)) {
+                    tableNames.set(dbName!, []);
+                }
+                tableNames.get(dbName!)!.push(kvName!);
+            }
+        } catch (e) {
+            this.m_logger.error(`get all tables failed `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+        let root = Object.create(null);
+        for (let [dbName, kvNames] of tableNames.entries()) {
+            let dbRoot = Object.create(null);
+            root[dbName] = dbRoot;
+            for (let kvName of kvNames) {
+                let kvRoot = Object.create(null);
+                dbRoot[kvName] = kvRoot;
+                const tableName = SqliteStorage.getKeyValueFullName(dbName, kvName);
+                try {
+                    const elems = await this.m_db!.all(`select * from ${tableName}`);
+                    for (const elem of elems) {
+                        if (isUndefined(elem.field)) {
+                            kvRoot[elem.name] = fromStringifiable(JSON.parse(elem.value));
+                        } else {
+                            const index = parseInt(elem.field);
+                            if (isNaN(index)) {
+                                if (isUndefined(kvRoot[elem.name])) {
+                                    kvRoot[elem.name] = Object.create(null);
+                                }
+                                kvRoot[elem.name][elem.filed] = fromStringifiable(JSON.parse(elem.value));
+                            } else {
+                                if (!isArray(kvRoot[elem.name])) {
+                                    kvRoot[elem.name] = [];
+                                } 
+                                let arr = kvRoot[elem.name] as any[];
+                                if (arr.length > index) {
+                                    arr[index] = fromStringifiable(JSON.parse(elem.value));
+                                } else {
+                                    const offset = index - arr.length - 1;
+                                    for (let ix = 0; ix < offset; ++ix) {
+                                        arr.push(undefined);
+                                    }
+                                    arr.push(fromStringifiable(JSON.parse(elem.value)));
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    this.m_logger.error(`database: ${dbName} kv: ${kvName} transfer error `, e);
+                    return {err: ErrorCode.RESULT_EXCEPTION};
+                }
+            }
+        }
+        await storage.flush(root);
+        return {err: ErrorCode.RESULT_OK};
     }
 }

@@ -397,7 +397,7 @@ class JsonDataBase implements IReadWritableDatabase {
         }
         
         let tbl = new JsonStorageKeyValue(this.m_root, name, this.logger);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
+        return { err, kv: tbl };
     }
 
     public async getReadWritableKeyValue(name: string) {
@@ -523,5 +523,10 @@ export class JsonStorage extends Storage {
         await transcation.beginTransaction();
 
         return { err: ErrorCode.RESULT_OK, value: transcation };
+    }
+
+    public async flush(root: any) {
+        this.m_root = root;
+        await fs.writeJSON(this.m_filePath, this.m_root);
     }
 }
