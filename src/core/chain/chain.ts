@@ -277,6 +277,16 @@ export class Chain extends EventEmitter {
             this.m_logger.error(`chain initialize failed for load global config global failed ${kvgr.err}`);
             return kvgr.err;
         }
+
+        // 将hgetall返回的数组转换成对象
+        if (Array.isArray(kvgr.value)) {
+            kvgr.value = kvgr.value.reduce((obj, item) => {
+                const {key, value} = item
+                obj[key] = value;
+                return obj;
+            }, {});
+        }
+
         const err = await this.setGlobalOptions(kvgr.value!);
         return err;
     }

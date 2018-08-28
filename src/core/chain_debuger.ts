@@ -4,7 +4,7 @@ import {ChainCreator} from './chain_creator';
 import {JsonStorage} from './storage_json/storage';
 import { LoggerInstance } from './lib/logger_util';
 import {Chain, Transaction, BlockHeader, Receipt, BlockHeightListener} from './chain';
-import {ValueTransaction, ValueBlockHeader, ValueHandler, ValueBlockExecutor} from './value_chain';
+import {ValueTransaction, ValueBlockHeader, ValueBlockExecutor} from './value_chain';
 import {createKeyPair, addressFromSecretKey} from './address';
 import { isArray } from 'util';
 
@@ -21,7 +21,8 @@ export class ValueMemoryDebugSession {
         height: number, 
         accounts: Buffer[] | number, 
         coinbase: number,
-        interval: number
+        interval: number,
+        preBalance?: number
     }): Promise<ErrorCode> {
         const csr = await this.debuger.createStorage();
         if (csr.err) {
@@ -41,8 +42,18 @@ export class ValueMemoryDebugSession {
         let gh = chain.newBlockHeader() as ValueBlockHeader;
         gh.timestamp = Date.now() / 1000;
         let block = chain.newBlock(gh);
-        
-        const err = await chain.onCreateGenesisBlock(block, csr.storage!, {coinbase: addressFromSecretKey(this.m_accounts[options.coinbase])});
+
+        let genesissOptions: any = {};
+        genesissOptions.candidates = [];
+        genesissOptions.miners = [];
+        genesissOptions.coinbase = addressFromSecretKey(this.m_accounts[options.coinbase]);
+        if (options.preBalance) {
+            genesissOptions.preBalances = [];
+            this.m_accounts.forEach((value) => {
+                genesissOptions.preBalances.push({address: addressFromSecretKey(value), amount: options.preBalance});
+            });
+        }  
+        const err = await chain.onCreateGenesisBlock(block, csr.storage!, genesissOptions);
         if (err) {
             chain.logger.error(`onCreateGenesisBlock failed for `, stringifyErrorCode(err));
             return err;
