@@ -4,6 +4,7 @@ import {ErrorCode} from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import {StorageManager, IReadableStorage} from '../storage';
 import {Lock} from '../lib/Lock';
+import { BaseHandler } from '../executor';
 
 export type TransactionWithTime = {tx: Transaction, ct: number};
 
@@ -17,7 +18,8 @@ export class PendingTransactions {
     protected m_curHeader?: BlockHeader;
     protected m_txLiveTime: number;
     protected m_pendingLock: Lock;
-    constructor(options: {storageManager: StorageManager, logger: LoggerInstance, txlivetime: number}) {
+    protected m_handler: BaseHandler;
+    constructor(options: {storageManager: StorageManager, logger: LoggerInstance, txlivetime: number, handler: BaseHandler}) {
         this.m_transactions = [];
         this.m_orphanTx = new Map();
         this.m_mapNonce = new Map<string, number>();
@@ -25,10 +27,21 @@ export class PendingTransactions {
         this.m_storageManager = options.storageManager;
         this.m_txLiveTime = options.txlivetime;
         this.m_pendingLock = new Lock();
+        this.m_handler = options.handler;
     }
 
     public async addTransaction(tx: Transaction): Promise<ErrorCode> {
         this.m_logger.debug(`addTransaction, txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
+        const checker = this.m_handler.getTxPendingChecker(tx.method);
+        if (!checker) {
+            this.m_logger.error(`txhash=${tx.hash} method=${tx.method} has no match listener`);
+            return ErrorCode.RESULT_TX_CHECKER_ERROR;
+        }
+        const err = checker(tx);
+        if (err) {
+            this.m_logger.error(`txhash=${tx.hash} checker error ${err}`);
+            return ErrorCode.RESULT_TX_CHECKER_ERROR;
+        }
         await this.m_pendingLock.enter();
         // this.m_logger.info('transactions length='+this.m_transactions.length.toString());
         // if (this.m_orphanTx.has(tx.address as string)) {
@@ -121,6 +134,7 @@ export class PendingTransactions {
 
         let {err, nonce} = await this.getNonce(address);
         if (err) {
+            this.m_logger.error(`_addTx getNonce nonce error ${err}`);
             return err;
         }
         if (nonce! + 1 === txTime.tx.nonce) {
@@ -130,20 +144,17 @@ export class PendingTransactions {
         } else {
             for (let i = 0; i < this.m_transactions.length; i++) {
                 if (this.m_transactions[i].tx.address === txTime.tx.address && this.m_transactions[i].tx.nonce === txTime.tx.nonce) {
+                    let txOld: Transaction = this.m_transactions[i].tx;
                     if (this.isTimeout(this.m_transactions[i])) {
-                        this.m_transactions.splice(i, 1);
-                        this.addToQueue(txTime);
-                        // addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
-                        this.m_mapNonce.set(txTime.tx.address as string, nonce!);
+                        this.m_transactions.splice(i, 1, txTime);
+                        await this.onReplaceTx(txTime.tx, txOld);
                         return ErrorCode.RESULT_OK;
                     }
 
                     let _err = await this.checkSmallNonceTx(txTime.tx, this.m_transactions[i].tx);
                     if (_err === ErrorCode.RESULT_OK) {
-                        this.m_transactions.splice(i, 1);
-                        this.addToQueue(txTime);
-                        // addToQueue会设置txTime的nonce进去，txTime.tx.nonce会小于inPendingNonce,所以需要重新设置回去
-                        this.m_mapNonce.set(txTime.tx.address as string, nonce!);
+                        this.m_transactions.splice(i, 1, txTime);
+                        await this.onReplaceTx(txTime.tx, txOld);
                         return ErrorCode.RESULT_OK;
                     }
                     return _err;
@@ -290,5 +301,9 @@ export class PendingTransactions {
     protected addToQueue(txTime: TransactionWithTime) {
         this.m_transactions.push(txTime);
         this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce);
+    }
+
+    protected async onReplaceTx(txNew: Transaction, txOld: Transaction): Promise<void> {
+
     }
 }

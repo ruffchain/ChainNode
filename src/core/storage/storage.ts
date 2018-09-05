@@ -5,7 +5,6 @@ import { ErrorCode } from '../error_code';
 import {LoggerInstance} from '../lib/logger_util';
 import { StorageLogger, LoggedStorage } from './logger';
 import { BufferReader } from '../lib/reader';
-const digest = require('../lib/digest');
 
 export interface IReadableKeyValue {
     // 单值操作
@@ -142,19 +141,26 @@ export abstract class Storage extends IReadWritableStorage {
     public abstract uninit(): Promise<ErrorCode>;
 
     public async reset(): Promise<ErrorCode> {
-        await this.remove();
+        const err = await this.remove();
+        if (err) {
+            return err;
+        }
         return await this.init();
     }
 
-    public async remove() {
+    public async remove(): Promise<ErrorCode> {
         await this.uninit();
-        fs.removeSync(this.m_filePath);
+        try {
+            fs.removeSync(this.m_filePath);
+        } catch (e) {
+            this.m_logger.error(`remove storage ${this.m_filePath} failed `, e);
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+        return ErrorCode.RESULT_OK;
     }
 
-    public async messageDigest(): Promise<{ err: ErrorCode, value: ByteString }> {
-        let buf = await fs.readFile(this.m_filePath);
-        let hash = digest.hash256(buf).toString('hex');
-        return { err: ErrorCode.RESULT_OK, value: hash };
+    public messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
+        return Promise.resolve({err: ErrorCode.RESULT_NOT_SUPPORT});
     }
 
     static keyValueNameSpec = '#';

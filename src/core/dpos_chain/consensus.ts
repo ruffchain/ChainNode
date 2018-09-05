@@ -229,7 +229,21 @@ export class Context extends ViewContext {
         return this.m_database as IReadWritableDatabase;
     }
 
+    removeDuplicate(s: string[]): string[] {
+        let s1 = [];
+        let bit: Map<string, number> = new Map();
+        for (let v of s) {
+            if (!bit.has(v)) {
+                s1.push(v);
+                bit.set(v, 1);
+            }
+        }
+        return s1;
+    }
+
     async init(candidates: string[], miners: string[]): Promise<{err: ErrorCode}> {
+        candidates = this.removeDuplicate(candidates);
+        miners = this.removeDuplicate(miners);
         let kvCurDPOS = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let candiateValues = candidates.map(() => {
             return 0;
@@ -369,6 +383,7 @@ export class Context extends ViewContext {
     }
 
     async vote(from: string, candidates: string[]): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
+        candidates = this.removeDuplicate(candidates);
         assert(candidates.length > 0 && candidates.length <= this.globalOptions.dposVoteMaxProducers, 'candidates.length must right');
         
         let cans = await this.getValidCandidates();

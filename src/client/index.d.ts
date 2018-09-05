@@ -40,12 +40,16 @@ export enum ErrorCode {
     RESULT_TX_EXIST = 34,
     RESULT_VER_NOT_SUPPORT = 35,
     RESULT_EXECUTE_ERROR = 36,
+    RESULT_VERIFY_NOT_MATCH = 37,
+    RESULT_TX_CHECKER_ERROR = 38,
+    RESULT_TX_FEE_NOT_ENOUGH = 39,
 
     RESULT_SKIPPED = 40,
 
     RESULT_FORK_DETECTED = 50,
 }
 
+export function stringifyErrorCode(err: ErrorCode): string;
 export function stringify(v: any, parsable?:boolean): any;
 export function parseJSON(v: any): any;
 export function rejectifyValue<T>(func: (...args: any[]) => Promise<{err: ErrorCode, value?: T}>, _this: any): (...args: any[]) => Promise<T>;
@@ -73,6 +77,21 @@ export class ValueTransaction extends Transaction {
     value: BigNumber;
 
     fee: BigNumber;
+}
+
+export class EventLog {
+    name: string;
+    param: any;
+}
+
+export class Receipt {
+    transactionHash: string;
+    returnCode: number;
+    eventLogs: EventLog[];
+}
+
+export class ValueReceipt extends Receipt {
+    cost: BigNumber;
 }
 
 
@@ -156,6 +175,7 @@ export type ValueTransactionContext = {
     value: BigNumber;
     getBalance: (address: string) => Promise<BigNumber>;
     transferTo: (address: string, amount: BigNumber) => Promise<ErrorCode>;
+    cost: (fee: BigNumber) => ErrorCode;
 } & TransactionContext;
 
 export type ValueEventContext = {
@@ -221,6 +241,7 @@ export class ChainClient {
 // export {init as initUnhandledRejection} from './lib/unhandled_rejection';
 
 type TxListener = (context: any, params: any) => Promise<ErrorCode>;
+type TxPendingChecker = (tx: Transaction) => ErrorCode;
 type BlockHeigthFilter = (height: number) => Promise<boolean>;
 type BlockHeightListener = (context: any) => Promise<ErrorCode>;
 type ViewListener = (context: any, params: any) => Promise<any>;
@@ -230,9 +251,11 @@ export class BaseHandler {
 
     genesisListener?: BlockHeightListener;
     
-    addTX(name: string, listener: TxListener): void;
+    addTX(name: string, listener: TxListener, checker?: TxPendingChecker): void;
 
-    getListener(name: string): TxListener|undefined;
+    getTxListener(name: string): TxListener|undefined;
+
+    getTxPendingChecker(name: string): TxPendingChecker|undefined
 
     addViewMethod(name: string, listener: ViewListener): void;
 
@@ -258,4 +281,33 @@ export class ValueHandler extends BaseHandler {
     getMinerWageListener(): MinerWageListener;
 }
 
-export const handler: ValueHandler;
+
+export class ValueIndependDebugSession {
+    init(options: {
+        height: number, 
+        accounts: Buffer[] | number, 
+        coinbase: number,
+        interval: number,
+        preBalance?: number
+    }): Promise<ErrorCode>;
+
+    updateHeightTo(height: number, coinbase: number): ErrorCode;
+
+    transaction(options: {caller: number, method: string, input: any, value: BigNumber}): Promise<{err: ErrorCode, receipt?: Receipt}>;
+    wage(): Promise<{err: ErrorCode}>;
+    view(options: {method: string, params: any}): Promise<{err: ErrorCode, value?: any}>;
+    getAccount(index: number): string;
+}
+
+export class ValueChainDebugSession {
+    init(storageDir: string): Promise<ErrorCode>;
+    block(hash: string): Promise<{err: ErrorCode}>;
+    transaction(hash: string): Promise<{err: ErrorCode}>;
+    view(from: string, method: string, params: any): Promise<{err: ErrorCode, value?: any}>;
+}
+
+export const valueChainDebuger: {
+    createIndependSession(loggerOptions: {console: boolean, file?: {root: string, filename?: string}, level?: string}, dataDir: string): Promise<{err: ErrorCode, session?: ValueIndependDebugSession}>;
+    createChainSession(loggerOptions: {console: boolean, file?: {root: string, filename?: string}, level?: string}, dataDir: string, debugerDir: string): Promise<{err: ErrorCode, session?: ValueChainDebugSession}>;
+};
+

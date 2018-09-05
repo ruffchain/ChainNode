@@ -6,7 +6,7 @@ import {LoggerInstance} from '../lib/logger_util';
 import {NodeStorage, NodeStorageOptions} from './node_storage';
 import {BlockHeader, Block} from './block';
 import {IHeaderStorage} from './header_storage';
-import {Transaction} from './transaction';
+import {Transaction, Receipt} from './transaction';
 
 import {INode, NodeConnection} from '../net';
 const {LogShim} = require('../lib/log_shim');
@@ -19,6 +19,7 @@ export type BaseNodeOptions = {
     nodeCacheSize?: number;
     blockHeaderType: new () => BlockHeader;
     transactionType: new () => Transaction;
+    receiptType: new () => Receipt;
 };
 
 export enum BAN_LEVEL {
@@ -33,7 +34,8 @@ export class BaseNode extends EventEmitter {
     constructor(options: BaseNodeOptions) {
         super();
         this.m_blockHeaderType = options.blockHeaderType;
-        this.m_transactionType = options.transactionType;        
+        this.m_transactionType = options.transactionType;      
+        this.m_receiptType = options.receiptType;  
         this.m_node = options.node;
         this.m_logger = new LogShim(options.logger).bind(`[peerid: ${this.peerid}]`, true).log;
 
@@ -61,6 +63,7 @@ export class BaseNode extends EventEmitter {
     private m_headerStorage: IHeaderStorage;
     private m_blockHeaderType: new () => BlockHeader;
     private m_transactionType: new () => Transaction;
+    private m_receiptType: new () => Receipt;
 
     on(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     on(event: 'inbound', listener: (conn: NodeConnection) => any): this;
@@ -119,7 +122,8 @@ export class BaseNode extends EventEmitter {
         let block = new Block({
             header,
             headerType: this.m_blockHeaderType, 
-            transactionType: this.m_transactionType});
+            transactionType: this.m_transactionType,
+            receiptType: this.m_receiptType});
         return block;
     }
 

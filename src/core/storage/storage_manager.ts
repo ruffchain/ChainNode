@@ -9,25 +9,36 @@ import {LoggerInstance} from '../lib/logger_util';
 
 import {StorageSnapshotManagerOptions, StorageDumpSnapshot} from './dump_snapshot';
 import {IReadableStorage, Storage, StorageOptions} from './storage';
-import {SnapshotManager} from './log_snapshot_manager';
+import {StorageLogSnapshotManager} from './log_snapshot_manager';
 import {StorageLogger} from './logger';
+import {IHeaderStorage} from '../block';
 
 export type StorageManagerOptions = {
     path: string;
     storageType: new (options: StorageOptions) => Storage;
     logger: LoggerInstance;
-} & StorageSnapshotManagerOptions;
+    headerStorage?: IHeaderStorage, 
+    snapshotManager?: StorageLogSnapshotManager,
+    readonly?: boolean
+};
 
 export class StorageManager {
     constructor(options: StorageManagerOptions) {
         this.m_path = options.path;
         this.m_storageType = options.storageType;
         this.m_logger = options.logger;
-        this.m_snapshotManager = new SnapshotManager(options);
+        if (options.snapshotManager) {
+            this.m_snapshotManager = options.snapshotManager;
+        } else {
+            this.m_snapshotManager = new StorageLogSnapshotManager(options as StorageSnapshotManagerOptions);
+        }
+        
+        this.m_readonly = !!options.readonly;
     }
+    private m_readonly: boolean;
     private m_path: string;
     private m_storageType: new (options: StorageOptions) => Storage;
-    private m_snapshotManager: SnapshotManager;
+    private m_snapshotManager: StorageLogSnapshotManager;
     private m_logger: LoggerInstance;
     private m_views: Map<string, {storage: Storage, ref: number}> = new Map();
 
@@ -40,11 +51,18 @@ export class StorageManager {
         return ErrorCode.RESULT_OK;
     }
 
+    get path(): string {
+        return this.m_path;
+    }
+
     uninit() {
         this.m_snapshotManager.uninit();
     }
 
     async createSnapshot(from: Storage, blockHash: string, remove?: boolean): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
+        if (this.m_readonly) {
+            return {err: ErrorCode.RESULT_NOT_SUPPORT};
+        }
         let csr = await this.m_snapshotManager.createSnapshot(from, blockHash);
         if (csr.err) {
             return csr;
@@ -61,6 +79,9 @@ export class StorageManager {
     }
 
     public async createStorage(name: string, from?: Storage|string): Promise<{err: ErrorCode, storage?: Storage}> {
+        if (this.m_readonly) {
+            return {err: ErrorCode.RESULT_NOT_SUPPORT};
+        }
         let storage = new this.m_storageType({
             filePath: path.join(this.m_path, name),
             logger: this.m_logger}
@@ -159,8 +180,11 @@ export class StorageManager {
 
     // 对象形式的redo log（通过网络请求, 然后解析buffer获得) 写入至本地文件
     // 提供给chain层引用
-    public writeRedoLog(blockHash: string, log: StorageLogger) {
-        this.m_snapshotManager.writeRedoLog(blockHash, log);
+    public writeRedoLog(blockHash: string, log: StorageLogger): ErrorCode {
+        if (this.m_readonly) {
+            return ErrorCode.RESULT_NOT_SUPPORT;
+        }
+        return this.m_snapshotManager.writeRedoLog(blockHash, log);
     }
 
     public async releaseSnapshotView(blockHash: string): Promise<void> {

@@ -17,7 +17,7 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
         }
         
         // Uint8Array(33)
-        private m_pubkey: Buffer = new Buffer(33);
+        private m_pubkey: Buffer = Encoding.ZERO_KEY;
         // Uint8Array(64)
         private m_sign: Buffer = Encoding.ZERO_SIG64;
     
@@ -91,6 +91,12 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
             this._encodeSignContent(writer);
             let signHash = digest.hash256(writer.render());
             return Address.verifyBufferMsg(signHash, this.m_sign, this.m_pubkey);
+        }
+
+        public stringify(): any { 
+            let obj = super.stringify();
+            obj.creator = Address.addressFromPublicKey(this.m_pubkey);
+            return obj;
         }
     };
 }

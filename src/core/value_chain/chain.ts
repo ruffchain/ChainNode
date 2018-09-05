@@ -6,8 +6,8 @@ import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 
 import { Storage } from '../storage';
 import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor} from '../chain';
-import { ValueBlockHeader } from './block';
-import { ValueTransaction } from './transaction';
+import { ValueBlockHeader} from './block';
+import { ValueTransaction, ValueReceipt } from './transaction';
 import { ValueBlockExecutor} from './executor';
 import * as ValueContext from './context';
 import {ValuePendingTransactions} from './pending';
@@ -16,6 +16,7 @@ export type ValueTransactionContext = {
     value: BigNumber;
     getBalance: (address: string) => Promise<BigNumber>;
     transferTo: (address: string, amount: BigNumber) => Promise<ErrorCode>;
+    cost: (fee: BigNumber) => ErrorCode;
 } & TransactionContext;
 
 export type ValueEventContext = {
@@ -69,8 +70,12 @@ export class ValueChain extends Chain {
         return ValueTransaction;
     }
 
+    protected _getReceiptType() {
+        return ValueReceipt;
+    }
+
     protected _createPending(): ValuePendingTransactions {
-        return new ValuePendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime});
+        return new ValuePendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime, handler: this.m_handler!});
     }
 
     async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions?: any): Promise<ErrorCode> {

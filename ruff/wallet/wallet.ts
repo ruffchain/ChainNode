@@ -1,6 +1,6 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection, initLogger} from '../../src/client';
+import {ChainClient, BigNumber, ErrorCode, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection, initLogger, MapFromObject} from '../../src/client';
 
 initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 
@@ -243,7 +243,10 @@ function main() {
                 console.error(`getVote failed for ${ret.err};`);
                 return ;
             }
-            console.log(`${ret.value!}`);
+            let vote: Map<string, BigNumber> = MapFromObject(ret.value!);
+            for (let [k, v] of vote) {
+                console.log(`${k}:${v.toString()}`);
+            }
         },
 
         getStoke: async (_address: string) => {

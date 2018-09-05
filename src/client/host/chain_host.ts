@@ -4,7 +4,7 @@ import * as fs from 'fs-extra';
 
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {INode, initChainCreator, initLogger} from '../../core';
+import {INode, initChainCreator, initLogger, Chain} from '../../core';
 
 import {ChainServer} from './rpc';
 
@@ -18,29 +18,29 @@ export class ChainHost {
     public async initMiner(commandOptions: CommandOptions): Promise<boolean> {
         let dataDir = this._parseDataDir(commandOptions);
         if (!dataDir) {
-            console.error('chain_host initMiner fail _parseDataDir')
+            console.error('chain_host initMiner fail _parseDataDir');
             return false;
         }
         let logger = this._parseLogger(dataDir, commandOptions);
         let creator = initChainCreator({logger});
         let cr = await creator.createMinerInstance(dataDir);
         if (cr.err) {
-            console.error('chain_host initMiner fail createMinerInstance')
+            console.error('chain_host initMiner fail createMinerInstance');
             return false;
         }
         let node = this._parseNode(commandOptions);
         if (!node) {
-            console.error('chain_host initMiner fail _parseNode')
+            console.error('chain_host initMiner fail _parseNode');
             return false;
         }
         let pr = cr.miner!.parseInstanceOptions(node, commandOptions);
         if (pr.err) {
-            console.error('chain_host initMiner fail parseInstanceOptions')
+            console.error('chain_host initMiner fail parseInstanceOptions');
             return false;
         }
         let err = await cr.miner!.initialize(pr.value!);
         if (err) {
-            console.error('chain_host initMiner fail initialize')
+            console.error('chain_host initMiner fail initialize');
             return false;
         }
         this.m_server = new ChainServer(logger, cr.miner!.chain!, cr.miner!);
@@ -161,7 +161,7 @@ export class ChainHost {
             fs.removeSync(dataDir); 
         }
         
-        if (fs.pathExistsSync(dataDir)) {
+        if (Chain.dataDirValid(dataDir)) {
             return dataDir;
         } else {
             fs.ensureDirSync(dataDir);

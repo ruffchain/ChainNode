@@ -43,19 +43,23 @@ export class DposChain extends ValueChain {
         return 0;
     }
 
-    public async initComponents(dataDir: string, handler: BaseHandler): Promise<ErrorCode> {
-        let err = await super.initComponents(dataDir, handler);
+    public async initComponents(dataDir: string, handler: BaseHandler, options?: {readonly?: boolean}): Promise<ErrorCode> {
+        let err = await super.initComponents(dataDir, handler, options);
         if (err) {
             return err;
         }
 
-        try {
-            await this.m_db!.run(initMinersSql);
-            return ErrorCode.RESULT_OK;
-        } catch (e) {
-            this.logger.error(e);
-            return ErrorCode.RESULT_EXCEPTION;
+        const readonly = options && options.readonly;
+        if (!readonly) {
+            try {
+                await this.m_db!.run(initMinersSql);
+            } catch (e) {
+                this.logger.error(e);
+                return ErrorCode.RESULT_EXCEPTION;
+            }
         }
+        
+        return ErrorCode.RESULT_OK;
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {

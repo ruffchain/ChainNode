@@ -3,12 +3,136 @@ import {BigNumber} from 'bignumber.js';
 import {ChainCreator} from './chain_creator';
 import {JsonStorage} from './storage_json/storage';
 import { LoggerInstance } from './lib/logger_util';
-import {Chain, Transaction, BlockHeader, Receipt, BlockHeightListener} from './chain';
-import {ValueTransaction, ValueBlockHeader, ValueBlockExecutor} from './value_chain';
+import {Chain, Block, Transaction, BlockHeader, Receipt, BlockHeightListener} from './chain';
+import {ValueTransaction, ValueBlockHeader, ValueBlockExecutor, ValueReceipt} from './value_chain';
 import {createKeyPair, addressFromSecretKey} from './address';
+import {StorageDumpSnapshotManager, StorageManager, StorageLogSnapshotManager} from './storage';
 import { isArray } from 'util';
+import { SqliteStorage } from './storage_sqlite/storage';
 
-export class ValueMemoryDebugSession {
+export class ValueChainDebugSession {
+    constructor(private readonly debuger: ValueMemoryDebuger) {
+        
+    }
+    private m_dumpSnapshotManager?: StorageDumpSnapshotManager;
+    private m_storageManager?: StorageManager;
+    async init(storageDir: string): Promise<ErrorCode> {
+        const chain = this.debuger.chain;
+        const dumpSnapshotManager = new StorageDumpSnapshotManager({
+            logger: chain.logger,
+            path: storageDir
+        });
+        this.m_dumpSnapshotManager = dumpSnapshotManager;
+        const snapshotManager = new StorageLogSnapshotManager({
+            path: chain.storageManager.path,
+            headerStorage: chain.headerStorage, 
+            storageType: JsonStorage,
+            logger: chain.logger,
+            dumpSnapshotManager
+        });
+        const storageManager = new StorageManager({
+            path: storageDir,
+            storageType: JsonStorage,
+            logger: chain.logger,
+            snapshotManager
+        });
+        this.m_storageManager = storageManager;
+        let err = await this.m_storageManager.init();
+        if (err) {
+            chain.logger.error(`ValueChainDebugSession init storageManager init failed `, stringifyErrorCode(err));
+            return err;
+        }
+        const ghr = await chain.headerStorage.getHeader(0);
+        if (ghr.err) {
+            chain.logger.error(`ValueChainDebugSession init get genesis header failed `, stringifyErrorCode(ghr.err));
+            return ghr.err;
+        }
+
+        const genesisHash = ghr.header!.hash;
+        const gsr = await this.m_dumpSnapshotManager.getSnapshot(genesisHash);
+        if (!gsr.err) {
+            return ErrorCode.RESULT_OK;
+        } else if (gsr.err !== ErrorCode.RESULT_NOT_FOUND) {
+            chain.logger.error(`ValueChainDebugSession init get gensis dump snapshot err `, stringifyErrorCode(gsr.err));
+            return gsr.err;
+        }
+
+        const gsvr = await chain.storageManager.getSnapshotView(genesisHash);
+        if (gsvr.err) {
+            chain.logger.error(`ValueChainDebugSession init get gensis dump snapshot err `, stringifyErrorCode(gsvr.err));
+            return gsvr.err;
+        }
+        const srcStorage = gsvr.storage as SqliteStorage;
+        let csr = await storageManager.createStorage('genesis');
+        if (csr.err) {
+            chain.logger.error(`ValueChainDebugSession init create genesis memory storage failed `, stringifyErrorCode(csr.err));
+            return csr.err;
+        }
+        const dstStorage = csr.storage as JsonStorage;
+        const tjsr = await srcStorage.toJsonStorage(dstStorage);
+        if (tjsr.err) {
+            chain.logger.error(`ValueChainDebugSession init transfer genesis memory storage failed `, stringifyErrorCode(tjsr.err));
+            return tjsr.err;
+        }
+
+        csr = await this.m_storageManager.createSnapshot(dstStorage, genesisHash, true);
+        if (csr.err) {
+            chain.logger.error(`ValueChainDebugSession init create genesis memory dump failed `, stringifyErrorCode(csr.err));
+            return csr.err;
+        }
+
+        return ErrorCode.RESULT_OK;
+    }
+
+    async block(hash: string): Promise<{err: ErrorCode}> {
+        const chain = this.debuger.chain;
+        const block = chain.blockStorage.get(hash);
+        if (!block) {
+            chain.logger.error(`block ${hash} not found`);
+            return {err: ErrorCode.RESULT_NOT_FOUND};
+        }
+        const csr = await this.m_storageManager!.createStorage(hash, block.header.preBlockHash);
+        if (csr.err) {
+            chain.logger.error(`block ${hash} create pre block storage failed `, stringifyErrorCode(csr.err));
+        }
+        const {err} = await this.debuger.debugBlock(csr.storage as JsonStorage, block);
+        csr.storage!.remove();
+        return {err};
+    }
+
+    async transaction(hash: string): Promise<{err: ErrorCode}> {
+        const chain = this.debuger.chain;
+        const gtrr = await chain.getTransactionReceipt(hash);
+        if (gtrr.err) {
+            chain.logger.error(`transaction ${hash} get receipt failed `, stringifyErrorCode(gtrr.err));
+            return {err: gtrr.err};
+        }
+        return this.block(gtrr.block!.hash);
+    }
+
+    async view(from: string, method: string, params: any): Promise<{err: ErrorCode, value?: any}> {
+        const chain = this.debuger.chain;
+        
+        let hr = await chain.headerStorage.getHeader(from);
+        if (hr.err !== ErrorCode.RESULT_OK) {
+            chain.logger!.error(`view ${method} failed for load header ${from} failed for ${hr.err}`);
+            return {err: hr.err};
+        }
+        let header = hr.header!;
+        let svr = await this.m_storageManager!.getSnapshotView(header.hash);
+        if (svr.err !== ErrorCode.RESULT_OK) {
+            chain.logger!.error(`view ${method} failed for get snapshot ${header.hash} failed for ${svr.err}`);
+            return { err: svr.err };
+        }
+        const ret = await this.debuger.debugView(svr.storage as JsonStorage, header, method, params);
+
+        this.m_storageManager!.releaseSnapshotView(header.hash);
+
+        return ret;
+    }
+}
+
+export class ValueIndependDebugSession {
     private m_storage?: JsonStorage;
     private m_curHeader?: ValueBlockHeader;
     private m_accounts?: Buffer[];
@@ -52,13 +176,14 @@ export class ValueMemoryDebugSession {
             this.m_accounts.forEach((value) => {
                 genesissOptions.preBalances.push({address: addressFromSecretKey(value), amount: options.preBalance});
             });
-        }  
+        }
         const err = await chain.onCreateGenesisBlock(block, csr.storage!, genesissOptions);
         if (err) {
             chain.logger.error(`onCreateGenesisBlock failed for `, stringifyErrorCode(err));
             return err;
         }
         gh.updateHash();
+        await this.debuger.debugBlock(this.m_storage, block);
         if (options.height > 0) {
             const _err = this.updateHeightTo(options.height, options.coinbase);
             if (_err) {
@@ -70,7 +195,7 @@ export class ValueMemoryDebugSession {
         return ErrorCode.RESULT_OK;
     }
 
-    updateHeightTo(height: number, coinbase: number): ErrorCode {
+    async updateHeightTo(height: number, coinbase: number, isExecuteBlockEvent: boolean = false): Promise<ErrorCode> {
         if (height <= this.m_curHeader!.number) {
             this.debuger.chain.logger.error(`updateHeightTo ${height} failed for current height ${this.m_curHeader!.number} is larger`); 
             return ErrorCode.RESULT_INVALID_PARAM;
@@ -78,11 +203,29 @@ export class ValueMemoryDebugSession {
         let curHeader = this.m_curHeader!;
         const offset = height - curHeader.number;
         for (let i = 0; i <= offset; ++i) {
+            if (isExecuteBlockEvent) {
+                // execute curBlock PostBlockEvent
+                const {err, executor} = await this.debuger.chain.newBlockExecutor(this.debuger.chain.newBlock(curHeader), this.m_storage!);
+                let listeners = await this.debuger.chain.handler.getPostBlockListeners(curHeader.number);
+                for (let l of listeners) {
+                    const err1 = await executor!.executeBlockEvent(l); 
+                    this.debuger.chain.logger.info(`debugger run post event at ${curHeader.number}, ret ${err1}`);
+                }
+            }
             let header = this.debuger.chain.newBlockHeader() as ValueBlockHeader;
             header.timestamp = curHeader.timestamp + this.m_interval!;
             header.coinbase = addressFromSecretKey(this.m_accounts![coinbase])!;
             header.setPreBlock(curHeader);
             curHeader = header;
+            if (isExecuteBlockEvent) {
+                // execute curBlock PostBlockEvent
+                const {err, executor} = await this.debuger.chain.newBlockExecutor(this.debuger.chain.newBlock(curHeader), this.m_storage!);
+                let listeners = await this.debuger.chain.handler.getPreBlockListeners(curHeader.number);
+                for (let l of listeners) {
+                    const err1 = await executor!.executeBlockEvent(l); 
+                    this.debuger.chain.logger.error(`debugger run pre event at ${curHeader.number}, ret ${err1}`);
+                }
+            }
         }
         this.m_curHeader = curHeader;
         return ErrorCode.RESULT_OK;
@@ -167,9 +310,19 @@ class MemoryDebuger {
 
         return nver.executor!.execute();
     }
+
+    async debugBlock(storage: JsonStorage, block: Block): Promise<{err: ErrorCode}> {
+        const nber = await this.chain.newBlockExecutor(block, storage);
+        if (nber.err) {
+            return {err: nber.err};
+        }
+
+        const err = await nber.executor!.execute();
+        return {err};
+    }
 }
 
-class ValueMemoryDebuger extends MemoryDebuger {
+export class ValueMemoryDebuger extends MemoryDebuger {
     async debugMinerWageEvent(storage: JsonStorage, header: BlockHeader): Promise<{err: ErrorCode}> {
         const block = this.chain.newBlock(header);
         
@@ -183,13 +336,22 @@ class ValueMemoryDebuger extends MemoryDebuger {
 
     }
 
-    createSession(): ValueMemoryDebugSession {
-        return new ValueMemoryDebugSession(this);
+    createIndependSession(): ValueIndependDebugSession {
+        return new ValueIndependDebugSession(this);
+    }
+
+    async createChainSession(storageDir: string): Promise<{err: ErrorCode, session?: ValueChainDebugSession}> {
+        const session = new ValueChainDebugSession(this);
+        const err = await session.init(storageDir);
+        if (err) {
+            return {err};
+        }
+        return {err: ErrorCode.RESULT_OK, session};
     }
 }
 
-export async function createValueMemoryDebuger(chainCreator: ChainCreator, dataDir: string): Promise<{err: ErrorCode, debuger?: ValueMemoryDebuger}> {
-    const ccir = await chainCreator.createChainInstance(dataDir);
+export async function createValueDebuger(chainCreator: ChainCreator, dataDir: string): Promise<{err: ErrorCode, debuger?: ValueMemoryDebuger}> {
+    const ccir = await chainCreator.createChainInstance(dataDir, {readonly: true});
     if (ccir.err) {
         chainCreator.logger.error(`create chain instance from ${dataDir} failed `, stringifyErrorCode(ccir.err));
         return {err: ccir.err};

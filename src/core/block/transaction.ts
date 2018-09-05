@@ -250,16 +250,20 @@ export class Receipt implements Serializable {
     }
 
     public decode(reader: BufferReader): ErrorCode {
-        this.m_transactionHash = reader.readVarString();
-        this.m_returnCode = reader.readI32();
-        let nCount: number = reader.readU16();
-        for (let i = 0; i < nCount; i++) {
-            let log: EventLog = new EventLog();
-            let err = log.decode(reader);
-            if (err) {
-                return err;
+        try {
+            this.m_transactionHash = reader.readVarString();
+            this.m_returnCode = reader.readI32();
+            let nCount: number = reader.readU16();
+            for (let i = 0; i < nCount; i++) {
+                let log: EventLog = new EventLog();
+                let err = log.decode(reader);
+                if (err) {
+                    return err;
+                }
+                this.m_eventLogs.push(log);
             }
-            this.m_eventLogs.push(log);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
         }
 
         return ErrorCode.RESULT_OK;

@@ -183,6 +183,11 @@ export class ChainNode extends EventEmitter {
                     this.m_node.banConnection(conn.getRemote(), BAN_LEVEL.forever);
                 } else {
                     if (txes.length) {
+                        let hashs: string[] = [];
+                        for (let tx of txes) {
+                            hashs.push(tx.hash);
+                        }
+                        this.logger.debug(`receive transaction from ${conn.getRemote()} ${JSON.stringify(hashs)}`);
                         this.emit('transactions', conn, txes);
                     }
                 }

@@ -1,7 +1,7 @@
 import 'mocha';
 import * as path from 'path';
 const assert = require('assert');
-import {createValueMemoryDebuger, initChainCreator, initLogger, stringifyErrorCode, ValueMemoryDebugSession, BigNumber, ErrorCode} from '../../src/core';
+import {createValueDebuger, initChainCreator, initLogger, stringifyErrorCode, ValueIndependDebugSession, BigNumber, ErrorCode} from '../../src/core';
 
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
@@ -10,14 +10,14 @@ process.on('unhandledRejection', (reason, p) => {
 
 describe('token', () => {
     const logger = initLogger({loggerOptions: {console: true}});
-    let session: ValueMemoryDebugSession;
+    let session: ValueIndependDebugSession;
     before((done) => {
         async function __test() {
-            const mdr = await createValueMemoryDebuger(initChainCreator({logger}), path.join(__dirname, '../chain'));
+            const mdr = await createValueDebuger(initChainCreator({logger}), path.join(__dirname, '../chain'));
             assert(!mdr.err, 'createValueMemoryDebuger failed', stringifyErrorCode(mdr.err));
             const debuger = mdr.debuger!;
-            session = debuger.createSession();
-            assert(!(await session.init({height: 0, accounts: 2, coinbase: 0, interval: 10, preBalance: 100000})), 'init session failed');
+            session = debuger.createIndependSession();
+            assert(!(await session.init({height: 0, accounts: 4, coinbase: 0, interval: 10, preBalance: 100000})), 'init session failed');
         }
         __test().then(done);
     });
@@ -110,6 +110,72 @@ describe('token', () => {
             assert(gbr.value!.eq(1000000 - 100), `0 Token balance value err, actual ${gbr.value}`);
             gbr = await session.view({method: 'getTokenBalance', params: {tokenid: 'token1', address: session.getAccount(1)}});
             assert(gbr.value!.eq(100), '1 Token balance value err, actual ${gbr.value}');
+        }
+        __test().then(done);
+    });
+
+    it('bid', (done) => {
+        async function __test() {
+            // 发布bid
+            let terr = await session.transaction(
+                {
+                    caller: 0, 
+                    method: 'publish', 
+                    input: {
+                        name: 'goods1', 
+                        duation: 5,
+                        lowest: new BigNumber(10)
+                    },
+                    value: new BigNumber(0)
+                }
+            );
+            assert(!terr.err && !terr.receipt!.returnCode, `publishGood failed. ${terr.err}`);
+
+            terr = await session.transaction(
+                {
+                    caller: 0, 
+                    method: 'publish', 
+                    input: {
+                        name: 'goods1', 
+                        duation: 100,
+                        lowest: new BigNumber(100)
+                    },
+                    value: new BigNumber(0)
+                }
+            );
+            assert(!terr.err && terr.receipt!.returnCode === ErrorCode.RESULT_ALREADY_EXIST, `rePublishGood failed. ${terr.err}`);
+
+            terr = await session.transaction(
+                {
+                    caller: 1, 
+                    method: 'bid', 
+                    input: {
+                        name: 'goods1', 
+                    },
+                    value: new BigNumber(11)
+                }
+            );
+            assert(!terr.err && !terr.receipt!.returnCode, `BidGood failed. ${terr.err}`);
+
+            let gbr = await session.view({method: 'GetBidInfo', params: {name: 'goods1'}});
+            assert(gbr.value!.bidder === session.getAccount(1), `check bidder failed, except ${session.getAccount(1)}, actual ${gbr.value!.bidder}`);
+            assert(gbr.value!.bidvalue.eq(11), `check biddervalue failed, except 11, actual ${gbr.value!.bidvalue.toString()}`);
+
+            terr = await session.transaction(
+                {
+                    caller: 2, 
+                    method: 'bid', 
+                    input: {
+                        name: 'goods1', 
+                    },
+                    value: new BigNumber(11)
+                }
+            );
+            assert(!terr.err && terr.receipt!.returnCode === ErrorCode.RESULT_NOT_ENOUGH, `BidGood2 failed. ${terr.err}`);
+            await session.updateHeightTo(6, 0, true);
+            gbr = await session.view({method: 'GetBidInfo', params: {name: 'goods1'}});
+            assert(gbr.value!.owner === session.getAccount(1), `check owner failed, except ${session.getAccount(1)}, actual ${gbr.value!.owner}`);
+            assert(gbr.value!.value.eq(11), `check value failed, except 11, actual ${gbr.value!.value.toString()}`);
         }
         __test().then(done);
     });

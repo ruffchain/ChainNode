@@ -5,7 +5,7 @@ import {isValidAddress} from '../address';
 import {Transaction, BlockHeader, Receipt, BlockExecutor, TxListener, TransactionExecutor, Storage, IReadableKeyValue, IReadWritableKeyValue, Chain, TransactionExecuteflag} from '../chain';
 import {Context} from './context';
 import {ValueHandler} from './handler';
-import {ValueTransaction} from './transaction';
+import {ValueTransaction, ValueReceipt} from './transaction';
 import {ValueBlockHeader} from './block';
 import {ValueChain} from './chain';
 import { LoggerInstance } from '../lib/logger_util';
@@ -41,10 +41,12 @@ export class ValueBlockExecutor extends BlockExecutor {
 }
 
 export class ValueTransactionExecutor extends TransactionExecutor {
-    protected m_toAddress: string = '';
     constructor(listener: TxListener, tx: Transaction, logger: LoggerInstance) {
         super(listener, tx, logger);
+        this.m_totalCost = new BigNumber(0);
     }
+
+    protected m_totalCost: BigNumber;
 
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
         let context = await super.prepareContext(blockHeader, storage, externContext);
@@ -55,6 +57,18 @@ export class ValueTransactionExecutor extends TransactionExecutor {
                 value: (this.m_tx as ValueTransaction).value
             } 
         );
+
+        context.cost = (fee: BigNumber): ErrorCode => {
+            let totalCost = this.m_totalCost;
+            totalCost = totalCost.plus(fee);
+            if (totalCost.gt((this.m_tx as ValueTransaction).fee)) {
+                this.m_totalCost = (this.m_tx as ValueTransaction).fee;
+                return ErrorCode.RESULT_TX_FEE_NOT_ENOUGH;
+            } else {
+                this.m_totalCost = totalCost;
+                return ErrorCode.RESULT_OK;
+            }
+        };
 
         return context;
     }
@@ -71,7 +85,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         let nToValue: BigNumber = (this.m_tx as ValueTransaction).value;
         let nFee: BigNumber = (this.m_tx as ValueTransaction).fee;
 
-        let receipt: Receipt = new Receipt(); 
+        let receipt: ValueReceipt = new ValueReceipt(); 
         let ve = new Context(kvBalance);
         if ((await ve.getBalance(fromAddress)).lt(nToValue.plus(nFee))) {
             receipt.returnCode = ErrorCode.RESULT_NOT_ENOUGH;
@@ -91,6 +105,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
             return {err};
         }
         receipt.returnCode = await this._execute(context, this.m_tx.input);
+        receipt.cost = this.m_totalCost;
         assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
         if (!isNumber(receipt.returnCode)) {
             this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=`, receipt.returnCode);
@@ -108,7 +123,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         if (!isValidAddress(coinbase)) {
             coinbase = ValueChain.sysAddress;
         }
-        err = await ve.transferTo(fromAddress, coinbase, nFee);
+        err = await ve.transferTo(fromAddress, coinbase, receipt.cost);
         if (err) {
             return {err};
         }

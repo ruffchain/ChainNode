@@ -3,9 +3,10 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 
 import { ErrorCode } from '../error_code';
-import { deepCopy } from '../serializable';
-import {Storage, IReadWritableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
+import { deepCopy, toStringifiable, fromStringifiable } from '../serializable';
+import {Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
 import { LoggerInstance } from '../lib/logger_util';
+import * as digest from '../lib/digest';
 import { isNullOrUndefined, isUndefined } from 'util';
 
 class JsonStorageKeyValue implements IReadWritableKeyValue {
@@ -192,7 +193,7 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
 
     public async hclean(key: string): Promise<{err: ErrorCode}> {
         try {
-            this.m_root[key] = Object.create(null);
+            delete this.m_root[key];
             return {err: ErrorCode.RESULT_OK}; 
         } catch (e) {
             this.logger.error(`hclean ${key} `, e);
@@ -297,7 +298,11 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
     public async lpop(key: string): Promise<{ err: ErrorCode; value?: any; }> {
         try {
             assert(key);
-            return {err: ErrorCode.RESULT_OK, value: deepCopy(this.m_root[key].shift())};
+            if (this.m_root[key] && this.m_root[key].length > 0) {
+                return {err: ErrorCode.RESULT_OK, value: deepCopy(this.m_root[key].shift())};
+            } else {
+                return {err: ErrorCode.RESULT_NOT_FOUND};
+            }
         } catch (e) {
             this.logger.error(`lpop ${key} `, e);
             return {err: ErrorCode.RESULT_EXCEPTION};
@@ -335,9 +340,13 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
     public async rpop(key: string): Promise<{ err: ErrorCode; value?: any; }> {
         try {
             assert(key);
-            return {err: ErrorCode.RESULT_OK, value: deepCopy(this.m_root[key].pop())};
+            if (this.m_root[key] && this.m_root[key].length > 0) {
+                return {err: ErrorCode.RESULT_OK, value: deepCopy(this.m_root[key].pop())};
+            } else {
+                return {err: ErrorCode.RESULT_NOT_FOUND};
+            }
         } catch (e) {
-            this.logger.error(`lpop ${key} `, e);
+            this.logger.error(`rpop ${key} `, e);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
@@ -364,7 +373,7 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
     }
 }
 
-class JsonDataBase implements IReadWritableDatabase {
+class JsonReadableDatabase implements IReadableDatabase {
     protected m_root: any; 
     constructor(storageRoot: any, protected readonly name: string, protected readonly logger: LoggerInstance) {
         this.m_root = storageRoot[name];
@@ -377,6 +386,21 @@ class JsonDataBase implements IReadWritableDatabase {
 
     public async getReadableKeyValue(name: string) {
         const err = Storage.checkTableName(name);
+        if (err) {
+            return {err};
+        }
+        let tbl = new JsonStorageKeyValue(this.m_root!, name, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+}
+
+class JsonReadWritableDatabase extends JsonReadableDatabase implements IReadWritableDatabase {
+    constructor(...args: any[]) {
+        super(args[0], args[1], args[2]);
+    }
+
+    public async getReadWritableKeyValue(name: string) {
+        let err = Storage.checkTableName(name);
         if (err) {
             return {err};
         }
@@ -398,16 +422,7 @@ class JsonDataBase implements IReadWritableDatabase {
         
         let tbl = new JsonStorageKeyValue(this.m_root, name, this.logger);
         return { err, kv: tbl };
-    }
-
-    public async getReadWritableKeyValue(name: string) {
-        let err = Storage.checkTableName(name);
-        if (err) {
-            return {err};
-        }
-        let tbl = new JsonStorageKeyValue(this.m_root!, name, this.logger);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
-    }
+    }   
 }
 
 class JsonStorageTransaction implements StorageTransaction {
@@ -463,7 +478,8 @@ export class JsonStorage extends Storage {
         let err = ErrorCode.RESULT_OK;
         if (fs.existsSync(this.m_filePath)) {
             try {
-                this.m_root = fs.readJSONSync(this.m_filePath);
+                const root = fs.readJSONSync(this.m_filePath);
+                this.m_root = fromStringifiable(root);
             } catch (e) {
                 err = ErrorCode.RESULT_EXCEPTION;
             }
@@ -483,19 +499,26 @@ export class JsonStorage extends Storage {
     }
 
     public async uninit(): Promise<ErrorCode> {
+        await this.flush();
         if (this.m_root) {
             delete this.m_root;
         }
 
         return ErrorCode.RESULT_OK;
     }
-
+/*
+    public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
+        let buf = await fs.readFile(this.m_filePath);
+        let hash = digest.hash256(buf).toString('hex');
+        return { err: ErrorCode.RESULT_OK, value: hash };
+    }
+*/
     public async getReadableDataBase(name: string) {
         let err = Storage.checkDataBaseName(name);
         if (err) {
             return {err};
         }
-        return {err: ErrorCode.RESULT_OK, value: new JsonDataBase(this.m_root, name, this.m_logger)};
+        return {err: ErrorCode.RESULT_OK, value: new JsonReadableDatabase(this.m_root, name, this.m_logger)};
     }
 
     public async createDatabase(name: string): Promise<{err: ErrorCode, value?: IReadWritableDatabase}> {
@@ -506,7 +529,7 @@ export class JsonStorage extends Storage {
         if (isUndefined(this.m_root[name])) {
             this.m_root[name] = Object.create(null);
         }
-        return await this.getReadWritableDatabase(name);
+        return {err: ErrorCode.RESULT_OK, value: new JsonReadWritableDatabase(this.m_root, name, this.m_logger)};
     }
 
     public async getReadWritableDatabase(name: string) {
@@ -514,7 +537,7 @@ export class JsonStorage extends Storage {
         if (err) {
             return {err};
         }
-        return {err: ErrorCode.RESULT_OK, value: new JsonDataBase(this.m_root, name, this.m_logger)};
+        return {err: ErrorCode.RESULT_OK, value: new JsonReadWritableDatabase(this.m_root, name, this.m_logger)};
     }
 
     public async beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }> {
@@ -525,8 +548,18 @@ export class JsonStorage extends Storage {
         return { err: ErrorCode.RESULT_OK, value: transcation };
     }
 
-    public async flush(root: any) {
-        this.m_root = root;
-        await fs.writeJSON(this.m_filePath, this.m_root);
+    public async flush(root?: any) {
+        if (root) {
+            this.m_root = root;
+        }
+        const s = toStringifiable(this.m_root, true);
+        await fs.writeJSON(this.m_filePath, s, {spaces: 4, flag: 'w'});
     }
+
+    public async messageDigest(): Promise<{ err: ErrorCode, value: ByteString }> {
+        let buf = new Buffer(JSON.stringify(toStringifiable(this.m_root, true)));
+        let hash = digest.hash256(buf).toString('hex');
+        return { err: ErrorCode.RESULT_OK, value: hash };
+    }
+    
 }

@@ -54,6 +54,13 @@ export class BlockExecutor {
     }
 
     public async verify(logger: LoggerInstance): Promise<{err: ErrorCode, valid?: boolean}> {
+        for (let tx of this.m_block.content.transactions) {
+            const checker = this.m_handler.getTxPendingChecker(tx.method);
+            if (!checker || !checker(tx)) {
+                this.m_logger.error(`verfiy block failed for tx ${tx.hash} ${tx.method} checker failed`);
+                return {err: ErrorCode.RESULT_OK, valid: false};
+            }
+        }
         let oldBlock = this.m_block;
         this.m_block = this.m_block.clone();
         let err = await this.execute();
@@ -93,9 +100,7 @@ export class BlockExecutor {
         // 票据
         block.content.setReceipts(receipts);
         // 更新块信息
-        await this.updateBlock(block);
-
-        return ErrorCode.RESULT_OK;
+        return this._updateBlock(block);
     }
 
     public async executeBlockEvent(listener: BlockHeightListener): Promise<ErrorCode> {
@@ -154,7 +159,7 @@ export class BlockExecutor {
     }
 
     public async executeTransaction(tx: Transaction, flag?: TransactionExecuteflag): Promise<{err: ErrorCode, receipt?: Receipt}> {
-        let listener: TxListener|undefined = this.m_handler.getListener(tx.method);
+        let listener: TxListener|undefined = this.m_handler.getTxListener(tx.method);
         if (!listener) {
             this.m_logger.error(`not find listener,method name=${tx.method}`);
             let receipt: Receipt = new Receipt();
@@ -167,10 +172,15 @@ export class BlockExecutor {
         return ret;
     }
 
-    protected async updateBlock(block: Block) {
+    protected async _updateBlock(block: Block): Promise<ErrorCode> {
         // 写回数据库签名
-        block.header.storageHash = (await this.m_storage.messageDigest()).value;
+        const mdr = await this.m_storage.messageDigest();
+        if (mdr.err) {
+            return mdr.err;
+        }
+        block.header.storageHash = mdr.value!;
         block.header.updateContent(block.content);
         block.header.updateHash();
+        return ErrorCode.RESULT_OK;
     }
 }

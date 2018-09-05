@@ -2,8 +2,7 @@ import {ErrorCode} from '../error_code';
 import {IConnection, NodeConnection, INode} from '../net';
 import {BdtConnection} from './connection';
 import { randomBytes } from 'crypto';
-const P2P = require('../../../bdt/p2p/p2p');
-const {NetHelper, HashDistance} = require('../../../bdt/base/util.js');
+const {P2P, Util} = require('bdt-p2p');
 
 export class BdtNode extends INode {
     private m_options: any;
@@ -59,7 +58,7 @@ export class BdtNode extends INode {
 
         // bdt 里0.0.0.0 只能找到公网ip, 这样会导致单机多进程或单机单进程的节点找不到对方
         // 为了方便测试， 补充加入本机的内网192 IP
-        let ips = NetHelper.getLocalIPV4().filter((ip: string) => ip.match(/^192.168.\d+.\d+/));
+        let ips = Util.NetHelper.getLocalIPV4().filter((ip: string) => ip.match(/^192.168.\d+.\d+/));
         let addrList = [this.m_host, ...ips];
         let bdtInitParams: any = {};
         bdtInitParams['peerid'] = this.m_peerid;
@@ -107,20 +106,20 @@ export class BdtNode extends INode {
         // 过滤掉自己和种子peer
         let peers: any[] = res.peerlist.filter((val: any) => {
             if (!val.peerid) {
-                this.m_logger.info(`exclude undefined peerid, ${JSON.stringify(val)}`);
+                this.m_logger.debug(`exclude undefined peerid, ${JSON.stringify(val)}`);
                 return false;
             }
             if (this.m_skipList.includes(val.peerid)) {
-                this.m_logger.info(`exclude ${val.peerid} from skipList`);
+                this.m_logger.debug(`exclude ${val.peerid} from skipList`);
                 return false;
             }
             if (excludes.includes(val.peerid)) {
-                this.m_logger.info(`exclude ${val.peerid} from excludesList`);
+                this.m_logger.debug(`exclude ${val.peerid} from excludesList`);
                 return false;
             }
             let ready = val.getAdditionalInfo('ready');
             if ( ready !== 1 ) {
-                this.m_logger.info(`exclude ${val.peerid} not ready`);
+                this.m_logger.debug(`exclude ${val.peerid} not ready`);
                 return false;
             }
             return true;

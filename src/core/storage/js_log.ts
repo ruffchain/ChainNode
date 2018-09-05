@@ -1,6 +1,6 @@
 import { ErrorCode } from '../error_code';
 import {StorageLogger} from './logger';
-import {BufferReader, BufferWriter} from '../serializable';
+import {BufferReader, BufferWriter, toEvalText} from '../serializable';
 import {StorageTransaction, IReadWritableKeyValue, IReadWritableStorage, IWritableDatabase} from './storage';
 
 class TransactionLogger implements StorageTransaction {
@@ -69,67 +69,67 @@ class KeyValueLogger implements IReadWritableKeyValue {
     }
     
     async set(key: string, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.set(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.set(${toEvalText(key)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     
     // hash
     async hset(key: string, field: string, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.hset(${JSON.stringify(key)}, ${JSON.stringify(field)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.hset(${toEvalText(key)}, ${toEvalText(field)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async hmset(key: string, fields: string[], values: any[]): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.hmset(${JSON.stringify(key)}, ${JSON.stringify(fields)}, ${JSON.stringify(values)});`);
+        this.owner.appendLog(`await ${this.name}.hmset(${toEvalText(key)}, ${toEvalText(fields)}, ${toEvalText(values)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async hclean(key: string): Promise<{err: ErrorCode}> {
-        this.owner.appendLog(`await ${this.name}.hclean(${JSON.stringify(key)});`);
+        this.owner.appendLog(`await ${this.name}.hclean(${toEvalText(key)});`);
         return {err: ErrorCode.RESULT_OK};
     }
 
     public async hdel(key: string, field: string): Promise<{err: ErrorCode}> {
-        this.owner.appendLog(`await ${this.name}.hdel(${key},${field})`);
+        this.owner.appendLog(`await ${this.name}.hdel(${toEvalText(key)},${toEvalText(field)})`);
         return {err: ErrorCode.RESULT_OK };
     }
     
     // array
     async lset(key: string, index: number, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.lset(${JSON.stringify(key)}, ${index}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.lset(${toEvalText(key)}, ${index}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
 
     async lpush(key: string, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.lpush(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.lpush(${toEvalText(key)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async lpushx(key: string, value: any[]): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.lpushx(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.lpushx(${toEvalText(key)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async lpop(key: string): Promise<{ err: ErrorCode, value?: any }> {
-        this.owner.appendLog(`await ${this.name}.lpop(${JSON.stringify(key)});`);
+        this.owner.appendLog(`await ${this.name}.lpop(${toEvalText(key)});`);
         return {err: ErrorCode.RESULT_OK};
     }
 
     async rpush(key: string, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.rpush(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.rpush(${toEvalText(key)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async rpushx(key: string, value: any[]): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.rpushx(${JSON.stringify(key)}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.rpushx(${toEvalText(key)}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async rpop(key: string): Promise<{ err: ErrorCode, value?: any }> {
-        this.owner.appendLog(`await ${this.name}.rpop(${JSON.stringify(key)});`);
+        this.owner.appendLog(`await ${this.name}.rpop(${toEvalText(key)});`);
         return {err: ErrorCode.RESULT_OK};
     }
 
     async linsert(key: string, index: number, value: any): Promise<{ err: ErrorCode }> {
-        this.owner.appendLog(`await ${this.name}.linsert(${JSON.stringify(key)}, ${index}, ${JSON.stringify(value)});`);
+        this.owner.appendLog(`await ${this.name}.linsert(${toEvalText(key)}, ${index}, ${toEvalText(value)});`);
         return {err: ErrorCode.RESULT_OK};
     }
     async lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }> {
-        this.owner.appendLog(`await ${this.name}.lremove(${JSON.stringify(key)}, ${index});`);
+        this.owner.appendLog(`await ${this.name}.lremove(${toEvalText(key)}, ${index});`);
         return {err: ErrorCode.RESULT_OK};
     }
 }
@@ -194,7 +194,7 @@ export class JStorageLogger implements StorageLogger {
     }
 
     init(): any {
-        this.m_log = 'async function redo() {';
+        this.m_log = `const BigNumber = require('bignumber.js');async function redo() {`;
     }
 
     finish() {

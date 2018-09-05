@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import * as path from 'path';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
+import * as fs from 'fs-extra';
 import { isNumber, isBoolean, isString } from 'util';
 
 import { ErrorCode } from '../error_code';
@@ -18,9 +19,8 @@ import { PendingTransactions } from './pending';
 
 import { BlockExecutor, ViewExecutor, BaseHandler } from '../executor';
 
-import { ChainNodeOptions, ChainNode, HeadersEventParams, BlocksEventParams} from './chain_node';
+import { ChainNode, HeadersEventParams, BlocksEventParams} from './chain_node';
 
-import { Lock } from '../lib/Lock';
 import { isNullOrUndefined } from 'util';
 
 export type ExecutorContext = {
@@ -80,6 +80,16 @@ type SyncConnection = {
 };
 
 export class Chain extends EventEmitter {
+    public static dataDirValid(dataDir: string): boolean {
+        if (!fs.pathExistsSync(dataDir)) {
+            return false;
+        }
+        if (!fs.pathExistsSync(path.join(dataDir, Chain.s_dbFile))) {
+            return false;
+        }
+        return true;
+    }
+
     /**
      * @param options.dataDir
      * @param options.blockHeaderType
@@ -281,7 +291,7 @@ export class Chain extends EventEmitter {
         // 将hgetall返回的数组转换成对象
         if (Array.isArray(kvgr.value)) {
             kvgr.value = kvgr.value.reduce((obj, item) => {
-                const {key, value} = item
+                const {key, value} = item;
                 obj[key] = value;
                 return obj;
             }, {});
@@ -291,7 +301,7 @@ export class Chain extends EventEmitter {
         return err;
     }
 
-    public async initComponents(dataDir: string, handler: BaseHandler): Promise<ErrorCode> {
+    public async initComponents(dataDir: string, handler: BaseHandler, options?: {readonly?: boolean}): Promise<ErrorCode> {
         // 上层保证await调用别重入了, 不加入中间状态了
         if (this.m_state >= ChainState.init) {
             return ErrorCode.RESULT_OK;
@@ -299,15 +309,25 @@ export class Chain extends EventEmitter {
         this.m_dataDir = dataDir;
         this.m_handler = handler;
 
+        const readonly = options && options.readonly;
+
         this.m_blockStorage = new BlockStorage({
             logger: this.m_logger!,
             path: dataDir,
             blockHeaderType: this._getBlockHeaderType(),
-            transactionType: this._getTransactionType()
+            transactionType: this._getTransactionType(),
+            receiptType: this._getReceiptType(), 
+            readonly
         });
         await this.m_blockStorage.init();
 
-        this.m_db = await sqlite.open(dataDir + '/' + Chain.s_dbFile, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+        let sqliteOptions: any = {};
+        if (!readonly) {
+            sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE; 
+        } else {
+            sqliteOptions.mode = sqlite3.OPEN_READONLY;
+        }
+        this.m_db = await sqlite.open(dataDir + '/' + Chain.s_dbFile, sqliteOptions);
         this.m_headerStorage = new HeaderStorage({
             logger: this.m_logger!,
             blockHeaderType: this._getBlockHeaderType(),
@@ -421,9 +441,13 @@ export class Chain extends EventEmitter {
         this.m_node.on('headers', (params: HeadersEventParams) => {
             this._addPendingHeaders(params);
         });
-        this.m_node.on('transactions', (conn: NodeConnection, transactions: Transaction[]) => {
+        this.m_node.on('transactions', async (conn: NodeConnection, transactions: Transaction[]) => {
             for (let tx of transactions) {
-                this._addTransaction(tx);
+                const _err = await this._addTransaction(tx);
+                if (_err === ErrorCode.RESULT_TX_CHECKER_ERROR) {
+                    this._banConnection(conn.getRemote(), BAN_LEVEL.forever);
+                    break;
+                }
             }
         });
         this.m_node.base.on('ban', (remote: string) => {
@@ -479,7 +503,7 @@ export class Chain extends EventEmitter {
     }
 
     protected _createPending(): PendingTransactions {
-        return new PendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime});
+        return new PendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime, handler: this.m_handler!});
     }
 
     protected _createChainNode(): BaseNode {
@@ -491,7 +515,8 @@ export class Chain extends EventEmitter {
             logger: this.m_logger,
             headerStorage: this.m_headerStorage!,
             blockHeaderType: this._getBlockHeaderType(),
-            transactionType: this._getTransactionType()
+            transactionType: this._getTransactionType(),
+            receiptType: this._getReceiptType(),
         });
     }
 
@@ -559,6 +584,7 @@ export class Chain extends EventEmitter {
         let err = await this.m_pending!.addTransaction(tx);
         // TODO: 广播要排除tx的来源 
         if (!err) {
+            this.logger.debug(`broadcast transaction txhash=${tx.hash}, nonce=${tx.hash}, address=${tx.address}`);
             this.m_node!.broadcast([tx]);
         }
         return err;
@@ -992,7 +1018,7 @@ export class Chain extends EventEmitter {
                     hr.headers = hr.headers!.slice(1);
                 }
                 this.m_node!.broadcast(hr.headers!, { filter: (conn: NodeConnection) => { 
-                    this.m_logger.info(`broadcast to ${conn.getRemote()}: ${!broadcastExcept.has(conn.getRemote())}`);
+                    this.m_logger.debug(`broadcast to ${conn.getRemote()}: ${!broadcastExcept.has(conn.getRemote())}`);
                     return !broadcastExcept.has(conn.getRemote()); 
                 } });
                 this.m_logger.info(`broadcast tip headers from number: ${hr.headers![0].number} hash: ${hr.headers![0].hash} to number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
@@ -1065,7 +1091,8 @@ export class Chain extends EventEmitter {
         let block = new Block({
             header,
             headerType: this._getBlockHeaderType(), 
-            transactionType: this._getTransactionType()});
+            transactionType: this._getTransactionType(),
+            receiptType: this._getReceiptType()});
         return block;
     }
 
@@ -1332,5 +1359,9 @@ export class Chain extends EventEmitter {
 
     protected _getTransactionType(): new () => Transaction {
         return Transaction;
+    }
+
+    protected _getReceiptType(): new () => Receipt {
+        return Receipt;
     }
 }

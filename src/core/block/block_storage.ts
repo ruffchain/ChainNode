@@ -1,7 +1,7 @@
 import { Block, BlockHeader, BlockContent } from './block';
 import { BufferWriter, BufferReader } from '../serializable';
 import { LoggerInstance } from '../lib/logger_util';
-import { Transaction } from './transaction';
+import { Transaction, Receipt } from './transaction';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../../client';
@@ -19,16 +19,22 @@ export class BlockStorage implements IBlockStorage {
         path: string,
         blockHeaderType: new () => BlockHeader,
         transactionType: new () => Transaction,
-        logger: LoggerInstance
+        receiptType: new () => Receipt,
+        logger: LoggerInstance,
+        readonly?: boolean
     }) {
         this.m_path = path.join(options.path, 'Block');
         this.m_blockHeaderType = options.blockHeaderType;
         this.m_transactionType = options.transactionType;
+        this.m_receiptType = options.receiptType;
         this.m_logger = options.logger;
+        this.m_readonly = !!options.readonly;
     }
 
+    private m_readonly: boolean;
     private m_blockHeaderType: new () => BlockHeader;
     private m_transactionType: new () => Transaction;
+    private m_receiptType: new () => Receipt;
     private m_path: string;
     private m_logger: LoggerInstance;
 
@@ -50,9 +56,15 @@ export class BlockStorage implements IBlockStorage {
     }
 
     public get(blockHash: string): Block | undefined {
-        let blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
+        let blockRaw;
+        try {
+            blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
+        } catch (error) {
+            this.m_logger.warn(`readBlockFile ${this._pathOfBlock(blockHash)} failed.`);
+        }
+        
         if (blockRaw) {
-            let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType });
+            let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType, receiptType: this.m_receiptType });
             let err = block.decode(new BufferReader(blockRaw));
             if (err) {
                 this.m_logger.error(`load block ${blockHash} from storage failed!`);
@@ -69,6 +81,9 @@ export class BlockStorage implements IBlockStorage {
     }
 
     public add(block: Block): ErrorCode {
+        if (this.m_readonly) {
+            return ErrorCode.RESULT_NOT_SUPPORT;
+        }
         let hash = block.hash;
         if (this.has(hash)) {
             return ErrorCode.RESULT_ALREADY_EXIST;

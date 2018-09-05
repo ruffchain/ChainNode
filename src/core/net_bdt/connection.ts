@@ -1,7 +1,7 @@
 import {ErrorCode} from '../error_code';
 import {IConnection} from '../net';
 
-const P2P = require('../../../bdt/p2p/p2p');
+const {P2P} = require('bdt-p2p');
 
 export class BdtConnection extends IConnection {
     private m_bdt_connection: any;

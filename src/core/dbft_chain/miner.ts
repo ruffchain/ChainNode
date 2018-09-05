@@ -20,7 +20,8 @@ class DbftMinerChain extends DbftChain {
             logger: this.m_logger,
             headerStorage: this.m_headerStorage!,
             blockHeaderType: this._getBlockHeaderType(),
-            transactionType: this._getTransactionType()
+            transactionType: this._getTransactionType(),
+            receiptType: this._getReceiptType(),
         });
         // 这里用sa的adderss初始化吧， sa部署的时候过略非miner地址的连接；
         //      因为没有同步之前无法知道当前的validators是哪些

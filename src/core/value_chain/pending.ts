@@ -1,4 +1,4 @@
-import {PendingTransactions, TransactionWithTime, Chain} from '../chain';
+import {PendingTransactions, TransactionWithTime, Chain, Transaction} from '../chain';
 import { ErrorCode } from '../error_code';
 import {ValueTransaction} from './transaction';
 import {BigNumber} from 'bignumber.js';
@@ -72,11 +72,7 @@ export class ValuePendingTransactions extends PendingTransactions {
 
     protected async checkSmallNonceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<ErrorCode> {
         if (txNew.fee.gt(txOld.fee)) {
-            let br = await this.getBalance(txNew.address as string);
-            if (br.err) {
-                return br.err;
-            }
-            return this._updateBalance(txNew.address as string, br.value!.plus(txOld.value).minus(txNew.value).plus(txOld.fee).minus(txNew.fee));
+            return ErrorCode.RESULT_OK;
         }
 
         return ErrorCode.RESULT_FEE_TOO_SMALL;
@@ -106,5 +102,14 @@ export class ValuePendingTransactions extends PendingTransactions {
         }
         this.m_transactions.splice(pos, 0, txTime);
         this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce);
+    }
+
+    protected async onReplaceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<void> {
+        let br = await this.getBalance(txNew.address as string);
+        if (br.err) {
+            return ;
+        }
+        await this._updateBalance(txNew.address as string, br.value!.plus(txOld.value).minus(txNew.value).plus(txOld.fee).minus(txNew.fee));
+        return ;
     }
 }

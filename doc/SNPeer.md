@@ -3,7 +3,7 @@ SN(SuperNode)服务为BDT栈提供的通用服务，一个开启了SN服务的BD
 snPeer.js为BDT提供的工具程序，用于启动一个仅有SN服务和DHT服务的BDT节点，用于提供内网穿透，也可充当节点发现的初始节点
 
 启动snPeer的命令行如下：
-```node bdt/snPeer.js <参数名>=<参数值>```
+```node_modules\.bin\startSN <参数名>=<参数值>```
 
 param列表如下：
 参数名|类型|默认值|是否必须|说明
@@ -22,7 +22,7 @@ SNPeer的使用：
 ```--sn SNPeerID@SN外网IP@TCP端口@UDP端口```
 
 >假设服务器外网地址为12.34.56.78，给SNPeer配置端口为tcp 10000, udp 10001; 启动SNPeer的命令行为<br/>
-```node bdt/snPeer.js peerid=SN_PEER_TEST out_host=12.34.56.78 tcpPort=10000 udpPort=10001```
+```node_modules\.bin\startSN peerid=SN_PEER_TEST out_host=12.34.56.78 tcpPort=10000 udpPort=10001```
 
 >启动miner或peer的参数为<br/>
 >```--sn SN_PEER_TEST@12.34.56.78@10000@10001```

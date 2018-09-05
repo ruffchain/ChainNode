@@ -1,5 +1,5 @@
 import { BigNumber } from 'bignumber.js';
-import {Transaction} from '../chain';
+import {Transaction, Receipt} from '../chain';
 import { BufferWriter, BufferReader, ErrorCode } from '../serializable';
 
 export class ValueTransaction extends Transaction {
@@ -60,3 +60,52 @@ export class ValueTransaction extends Transaction {
         return obj;
     }
 }
+
+export class ValueReceipt extends Receipt {
+    private m_cost: BigNumber;
+    constructor() {
+        super();    
+        this.m_cost = new BigNumber(0);
+    }
+
+    get cost(): BigNumber {
+        const b = this.m_cost;
+        return b;
+    }
+
+    set cost(c: BigNumber) {
+        this.m_cost = c;
+    }
+
+    public encode(writer: BufferWriter): ErrorCode {
+        const err = super.encode(writer);
+        if (err) {
+            return err;
+        }
+        try {
+            writer.writeBigNumber(this.m_cost);
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
+    public decode(reader: BufferReader): ErrorCode {
+        const err = super.decode(reader);
+        if (err) {
+            return err;
+        }
+        try {
+            this.m_cost = reader.readBigNumber();
+        } catch (e) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
+    stringify(): any {
+        let obj = super.stringify();
+        obj.cost = this.m_cost.toString();
+        return obj;
+    }
+ }
