@@ -506,13 +506,13 @@ export class JsonStorage extends Storage {
 
         return ErrorCode.RESULT_OK;
     }
-/*
+
     public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
         let buf = await fs.readFile(this.m_filePath);
         let hash = digest.hash256(buf).toString('hex');
         return { err: ErrorCode.RESULT_OK, value: hash };
     }
-*/
+
     public async getReadableDataBase(name: string) {
         let err = Storage.checkDataBaseName(name);
         if (err) {
@@ -554,12 +554,6 @@ export class JsonStorage extends Storage {
         }
         const s = toStringifiable(this.m_root, true);
         await fs.writeJSON(this.m_filePath, s, {spaces: 4, flag: 'w'});
-    }
-
-    public async messageDigest(): Promise<{ err: ErrorCode, value: ByteString }> {
-        let buf = new Buffer(JSON.stringify(toStringifiable(this.m_root, true)));
-        let hash = digest.hash256(buf).toString('hex');
-        return { err: ErrorCode.RESULT_OK, value: hash };
     }
     
 }
