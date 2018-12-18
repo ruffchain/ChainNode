@@ -517,8 +517,8 @@ export class Chain extends EventEmitter {
         _instanceOptions.ignoreVerify = !isNullOrUndefined(instanceOptions.ignoreVerify) ? instanceOptions.ignoreVerify : false;
 
         _instanceOptions.pendingOvertime = !isNullOrUndefined(instanceOptions.pendingOvertime) ? instanceOptions.pendingOvertime : 60 * 60;
-        _instanceOptions.pendingOvertime = !isNullOrUndefined(instanceOptions.maxPendingCount) ? instanceOptions.maxPendingCount : 10000;
-        _instanceOptions.pendingOvertime = !isNullOrUndefined(instanceOptions.warnPendingCount) ? instanceOptions.warnPendingCount : 5000;
+        _instanceOptions.maxPendingCount = !isNullOrUndefined(instanceOptions.maxPendingCount) ? instanceOptions.maxPendingCount : 10000;
+        _instanceOptions.warnPendingCount = !isNullOrUndefined(instanceOptions.warnPendingCount) ? instanceOptions.warnPendingCount : 5000;
 
         this.m_instanceOptions = _instanceOptions;
 
