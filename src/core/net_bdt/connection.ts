@@ -1,14 +1,17 @@
 import {ErrorCode} from '../error_code';
 import {IConnection} from '../net';
+import * as assert from 'assert';
 
 const {P2P} = require('bdt-p2p');
 
 export class BdtConnection extends IConnection {
     private m_bdt_connection: any;
     private m_remote: string;
+    private m_network?: string;
     protected m_nTimeDelta: number = 0;
     constructor(options: {bdt_connection: any, remote: string}) {
         super();
+        assert(options.bdt_connection);
         this.m_bdt_connection = options.bdt_connection;
 
         this.m_bdt_connection.on(P2P.Connection.EVENT.drain, () => {
@@ -31,11 +34,17 @@ export class BdtConnection extends IConnection {
     }
 
     send(data: Buffer): number {
-        return this.m_bdt_connection.send(data);
+        if (this.m_bdt_connection) {
+            return this.m_bdt_connection.send(data);
+        }
+        return -1;
     }
     
     close(): Promise<ErrorCode> {
         if (this.m_bdt_connection) {
+            this.m_bdt_connection.removeAllListeners('drain');
+            this.m_bdt_connection.removeAllListeners('data');
+            this.m_bdt_connection.removeAllListeners('error');
             this.m_bdt_connection.close();
             delete this.m_bdt_connection;
         }
@@ -43,18 +52,29 @@ export class BdtConnection extends IConnection {
     }
     destroy(): Promise<void> {
         if (this.m_bdt_connection) {
+            this.m_bdt_connection.removeAllListeners('drain');
+            this.m_bdt_connection.removeAllListeners('data');
+            this.m_bdt_connection.removeAllListeners('error');
             this.m_bdt_connection.close(true);
             delete this.m_bdt_connection;
         }
         return Promise.resolve();
     }
 
-    getRemote(): string {
+    get remote(): string {
         return this.m_remote;
     }
 
-    setRemote(s: string) {
+    set remote(s: string) {
         this.m_remote = s;
+    }
+
+    get network(): string {
+        return this.m_network!;
+    }
+
+    set network(s: string) {
+        this.m_network = s;
     }
 
     getTimeDelta(): number {

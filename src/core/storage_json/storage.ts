@@ -175,7 +175,7 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
         
     }
 
-    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
+    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: {key: string, value: any}[]; }> {
         try {
             if (isUndefined(this.m_root[key])) {
                 return { err: ErrorCode.RESULT_NOT_FOUND};
@@ -318,7 +318,7 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
             this.m_root[key].push(deepCopy(value));
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
-            this.logger.error(`lpush ${key} `, e);
+            this.logger.error(`rpush ${key} `, e);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
@@ -508,9 +508,14 @@ export class JsonStorage extends Storage {
     }
 
     public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
-        let buf = await fs.readFile(this.m_filePath);
-        let hash = digest.hash256(buf).toString('hex');
-        return { err: ErrorCode.RESULT_OK, value: hash };
+        try {
+            const raw = JSON.stringify(this.m_root, undefined, 4);
+            let hash = digest.hash256(Buffer.from(raw, 'utf8')).toString('hex');
+            return { err: ErrorCode.RESULT_OK, value: hash };
+        }   catch (e) {
+            this.m_logger.error('json storage messagedigest exception ', e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
 
     public async getReadableDataBase(name: string) {

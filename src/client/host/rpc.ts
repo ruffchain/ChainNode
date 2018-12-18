@@ -1,7 +1,7 @@
 import {RPCServer} from '../lib/rpc_server';
 import {Options as CommandOptions} from '../lib/simple_command';
 
-import {ErrorCode, Chain, Miner, Transaction, ValueTransaction, ValueHandler, BufferReader, toStringifiable, LoggerInstance} from '../../core';
+import {ErrorCode, Chain, Miner, Transaction, ValueTransaction, toStringifiable, LoggerInstance} from '../../core';
 import { isUndefined } from 'util';
 
 function promisify(f: any) {
@@ -45,12 +45,12 @@ export class ChainServer {
 
     _initMethods() {
         this.m_server!.on('sendTransaction', async (params: {tx: any}, resp) => {
-            let tx = new ValueTransaction();
-            let err = tx.decode(new BufferReader(Buffer.from(params.tx, 'hex')));
-            if (err) {
-                await promisify(resp.write.bind(resp)(JSON.stringify(err)));
+            let tx = ValueTransaction.fromRaw(Buffer.from(params.tx, 'hex'), ValueTransaction);
+            if (!tx) {
+                await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_FORMAT)));
             } else {
-                err = await this.m_chain.addTransaction(tx);
+                this.m_logger.debug(`rpc server txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
+                const err = await this.m_chain.addTransaction(tx);
                 await promisify(resp.write.bind(resp)(JSON.stringify(err)));
             }
             await promisify(resp.end.bind(resp)());
@@ -101,33 +101,26 @@ export class ChainServer {
             if (hr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({err: hr.err})));
             } else {
-                let l = new ValueHandler().getMinerWageListener();
-                let wage = await l(hr.header!.number);
-                let header = hr.header!.stringify();
-                header.reward = wage;
                 // 是否返回 block的transactions内容
                 if (params.transactions) {
                     let block = await this.m_chain.getBlock(hr.header!.hash);
                     if ( block ) {
                         // 处理block content 中的transaction, 然后再响应请求
                         let transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
-                        if (transactions && transactions.length !== 0) {
-                            let totalFee = 0;
-                            transactions.forEach(function(value, index) {
-                                totalFee += value.fee
-                            });
-                            header.fee = totalFee
-                        } else {
-                            header.fee = 0;
-                        }
-                        let res = {err: ErrorCode.RESULT_OK, block: header, transactions};
+                        let res = {err: ErrorCode.RESULT_OK, block: hr.header!.stringify(), transactions};
                         await promisify(resp.write.bind(resp)(JSON.stringify(res)));
                     }
                 } else {
-                    await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: header})));
+                    await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
                 }
             }
             await promisify(resp.end.bind(resp))();
+        });
+
+        this.m_server!.on('getPeers', async (args, resp) => {
+            let peers = this.m_chain.node.getNetwork()!.node.dumpConns();
+            await promisify(resp.write.bind(resp)(JSON.stringify(peers)));
+            await promisify(resp.end.bind(resp)());
         });
     }
 

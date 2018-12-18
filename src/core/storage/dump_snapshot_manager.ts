@@ -7,19 +7,24 @@ import { StorageDumpSnapshot, IStorageSnapshotManager } from './dump_snapshot';
 import { LoggerInstance } from '../lib/logger_util';
 
 export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
-    constructor(options: {logger: LoggerInstance, path: string}) {
+    constructor(options: {logger: LoggerInstance, path: string, readonly?: boolean}) {
         this.m_path = path.join(options.path, 'dump');
         this.m_logger = options.logger;
+        this.m_readonly = !!(options && options.readonly);
     }
     protected m_logger: LoggerInstance;
     protected m_path: string;
+    private m_readonly: boolean;
 
     public recycle() {
 
     }
 
     public async init(): Promise<ErrorCode> {
-        fs.ensureDirSync(this.m_path);
+        if (!this.m_readonly) {
+            fs.ensureDirSync(this.m_path);
+        }
+        
         return ErrorCode.RESULT_OK;
     }
 
@@ -61,7 +66,7 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     public removeSnapshot(blockHash: string): ErrorCode {
         const snapshot = new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
         try {
-            fs.removeSync(snapshot.filePath);
+            fs.unlinkSync(snapshot.filePath);
         } catch (e) {
             this.m_logger.error(`removeSnapshot ${blockHash} `, e);
             return ErrorCode.RESULT_EXCEPTION;

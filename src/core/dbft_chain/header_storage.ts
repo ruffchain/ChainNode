@@ -16,12 +16,16 @@ export class DbftHeaderStorage {
         db: sqlite.Database,
         headerStorage: IHeaderStorage,
         logger: LoggerInstance,
-        globalOptions: any
+        globalOptions: any,
+        readonly?: boolean,
     }) {
+        this.m_readonly = !!(options && options.readonly);
         this.m_db = options.db;
         this.m_logger = options.logger;
         this.m_headerStorage = options.headerStorage;
+        this.m_globalOptions = options.globalOptions;
     }
+    private m_readonly: boolean;
     protected m_db: sqlite.Database;
     protected m_logger: LoggerInstance;
     protected m_cache: LRUCache<string, {m: string[], v: number}> = new LRUCache(12);
@@ -29,23 +33,29 @@ export class DbftHeaderStorage {
     protected m_headerStorage: IHeaderStorage;
 
     public async init(): Promise<ErrorCode> {
-        try {
-            await this.m_db!.run(initHeadersSql);
-            return ErrorCode.RESULT_OK;
-        } catch (e) {
-            this.m_logger.error(e);
-            return ErrorCode.RESULT_EXCEPTION;
+        if (!this.m_readonly) {
+            try {
+                await this.m_db!.run(initHeadersSql);
+            } catch (e) {
+                this.m_logger.error(e);
+                return ErrorCode.RESULT_EXCEPTION;
+            }
         }
+        return ErrorCode.RESULT_OK;
     }
-
+    
     uninit() {
         // do nothing
+    }
+
+    public updateGlobalOptions(globalOptions: any) {
+        this.m_globalOptions = globalOptions;
     }
 
     public async _getHeader(hash: string): Promise<{err: ErrorCode, miners?: string[], totalView?: number}> {
         let c = this.m_cache.get(hash);
         if (c) {
-            return {err: ErrorCode.RESULT_OK, miners: c.m};
+            return {err: ErrorCode.RESULT_OK, miners: c.m, totalView: c.v};
         }
 
         try {
@@ -56,7 +66,7 @@ export class DbftHeaderStorage {
             }
             let miners = JSON.parse(gm.miners);
             this.m_cache.set(hash, {m: miners, v: gm.totalView});
-            return {err: ErrorCode.RESULT_OK, miners: miners!};
+            return {err: ErrorCode.RESULT_OK, miners: miners!, totalView: gm.totalView};
         } catch (e) {
             this.m_logger.error(e);
             return {err: ErrorCode.RESULT_EXCEPTION};
@@ -64,8 +74,8 @@ export class DbftHeaderStorage {
     }
 
     public async addHeader(header: DbftBlockHeader, storageManager: StorageManager ): Promise<ErrorCode> {
-        let miners;
-        if (!DbftContext.isElectionBlockNumber(this.m_globalOptions, header.number)) {
+        let miners: string[] = [];
+        if (DbftContext.isElectionBlockNumber(this.m_globalOptions, header.number)) {
             const gs = await storageManager.getSnapshotView(header.hash);
             if (gs.err) {
                 return gs.err;
@@ -75,8 +85,8 @@ export class DbftHeaderStorage {
             storageManager.releaseSnapshotView(header.hash);
             if (gmr.err) {
                 return gmr.err;
-            }   
-            miners = gmr.miners!;
+            }
+            miners =  gmr.miners!;
         }
         let totalView = 0;
         if (header.number !== 0) {
@@ -86,7 +96,7 @@ export class DbftHeaderStorage {
             }
             totalView = ghr.totalView!;
         }
-        totalView += Math.pow(2, header.view);
+        totalView += Math.pow(2, header.view + 1) - 1;
         try {
             await this.m_db!.run(addHeaderSql, {$hash: header.hash, $miners: JSON.stringify(miners), $totalView: totalView});
             return ErrorCode.RESULT_OK;
@@ -97,7 +107,8 @@ export class DbftHeaderStorage {
     }
 
     public async getTotalView(header: DbftBlockHeader): Promise<{err: ErrorCode, totalView?: number}> {
-        return this._getHeader(header.hash);
+        this.m_logger.debug(`getTotalView, hash=${header.hash}`);
+        return await this._getHeader(header.hash);
     }
 
     public async getMiners(header: DbftBlockHeader): Promise<{err: ErrorCode, miners?: string[]}> {

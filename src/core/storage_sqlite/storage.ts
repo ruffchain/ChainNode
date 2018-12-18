@@ -180,7 +180,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
         
     }
 
-    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
+    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: {key: string, value: any}[]; }> {
         try {
             const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, key);
 
@@ -498,8 +498,15 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
         }
         const fullName = Storage.getKeyValueFullName(this.name, name);
         // 先判断表是否存在
-        let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
-        if (ret[0] > 0) {
+        let count;
+        try {
+            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
+            count = ret['COUNT(*)'];
+        } catch (e) {
+            this.logger.error(`select table name failed `, e);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+        if (count > 0) {
             err = ErrorCode.RESULT_ALREADY_EXIST;
         } else {
             err = ErrorCode.RESULT_OK;
@@ -545,10 +552,23 @@ export class SqliteStorage extends Storage {
         try {
             this.m_db = await sqlite.open(this.m_filePath, options);
         } catch (e) {
+            this.m_logger.error(`open sqlite database file ${this.m_filePath} failed `, e);
             err = ErrorCode.RESULT_EXCEPTION;
         }
-        // await this.m_db.migrate({ force: 'latest', migrationsPath: path.join(__dirname, 'migrations') });
-       
+
+        if (!err) {
+            this.m_isInit = true;
+        }
+
+        try {
+            this.m_db!.run('PRAGMA journal_mode = MEMORY');
+            this.m_db!.run('PRAGMA synchronous = OFF');
+            this.m_db!.run('PRAGMA locking_mode = EXCLUSIVE');
+        } catch (e) {
+            this.m_logger.error(`pragma some options on sqlite database file ${this.m_filePath} failed `, e);
+            err = ErrorCode.RESULT_EXCEPTION;
+        }
+        
         if (!err) {
             this.m_isInit = true;
         }

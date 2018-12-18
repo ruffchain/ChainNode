@@ -1,22 +1,20 @@
 import {ErrorCode} from '../error_code';
 import {isNullOrUndefined} from 'util';
-import {Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor} from '../value_chain';
+import {Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableKeyValue, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor, ChainContructOptions} from '../value_chain';
 import {DbftBlockHeader} from './block';
 import {DbftContext} from './context';
 import {DbftBlockExecutor} from './executor';
 import * as ValueContext from '../value_chain/context';
-import {LoggerOptions} from '../lib/logger_util';
 import {DbftHeaderStorage} from './header_storage'; 
-import {ValidatorsNode} from './validators_node';
 
 export type DbftTransactionContext = {
-    register: (caller: string, address: string, pubkey: string, pubkeySign: string) => Promise<ErrorCode>;
-    unregister: (caller: string, address: string, addressSign: string) => Promise<ErrorCode>;
+    register: (caller: string, address: string) => Promise<ErrorCode>;
+    unregister: (caller: string, address: string) => Promise<ErrorCode>;
 } & ValueTransactionContext;
 
 export type DbftEventContext = {
-    register: (caller: string, address: string, pubkey: string, pubkeySign: string) => Promise<ErrorCode>;
-    unregister: (caller: string, address: string, addressSign: string) => Promise<ErrorCode>;
+    register: (caller: string, address: string) => Promise<ErrorCode>;
+    unregister: (caller: string, address: string) => Promise<ErrorCode>;
 } & ValueEventContext;
 
 export type DbftViewContext = {
@@ -27,8 +25,18 @@ export type DbftViewContext = {
 export class DbftChain extends ValueChain {
     protected m_dbftHeaderStorage?: DbftHeaderStorage;
     
-    constructor(options: LoggerOptions) {
+    constructor(options: ChainContructOptions) {
         super(options);
+    }
+
+    // 都不需要验证内容
+    protected get _ignoreVerify(): boolean {
+        return true;
+    }
+
+    // 不会分叉
+    protected get _morkSnapshot(): boolean {
+        return false;
     }
 
     public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
@@ -44,11 +52,11 @@ export class DbftChain extends ValueChain {
         };
         
         let context = new DbftContext(storage, this.globalOptions, this.logger);
-        externalContext.register = async (address: string): Promise<ErrorCode> => {
-           return await context.registerToCandidate(block.number, address);
+        externalContext.register = async (caller: string, address: string): Promise<ErrorCode> => {
+           return await context.registerToCandidate(caller, block.number, address);
         };
-        externalContext.unregister = async (address: string): Promise<ErrorCode> => {
-            return await context.unRegisterFromCandidate(address);
+        externalContext.unregister = async (caller: string, address: string): Promise<ErrorCode> => {
+            return await context.unRegisterFromCandidate(caller, address);
         };
 
         externalContext.getMiners = async (): Promise<string[]> => {
@@ -68,7 +76,7 @@ export class DbftChain extends ValueChain {
             return im.isminer!;
         };
 
-        let executor = new DbftBlockExecutor({logger: this.logger, block, storage, handler: this.handler, externContext: externalContext, globalOptions: this.globalOptions});
+        let executor = new DbftBlockExecutor({logger: this.logger, block, storage, handler: this.m_handler, externContext: externalContext, globalOptions: this.m_globalOptions});
         return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
     }
 
@@ -76,7 +84,7 @@ export class DbftChain extends ValueChain {
         let nvex = await super.newViewExecutor(header, storage, method, param);
         let externalContext = nvex.executor!.externContext;
 
-        let dbftProxy = new DbftContext(storage, this.globalOptions, this.logger);
+        let dbftProxy = new DbftContext(storage, this.m_globalOptions, this.logger);
         externalContext.getMiners = async (): Promise<string[]> => {
             let gm = await dbftProxy.getMiners();
             if (gm.err) {
@@ -98,6 +106,25 @@ export class DbftChain extends ValueChain {
         return nvex;
     }
 
+    public async initComponents(options?: {readonly?: boolean}) {
+        let err = await super.initComponents(options);
+        if (err) {
+            return err;
+        }
+        this.m_dbftHeaderStorage = new DbftHeaderStorage({
+            db: this.m_db!,
+            headerStorage: this.m_headerStorage!,
+            globalOptions: this.globalOptions,
+            logger: this.logger!,
+            readonly: this.m_readonly
+        });
+        err = await this.m_dbftHeaderStorage.init();
+        if (err) {
+            this.logger.error(`dbft header storage init err `, err);
+        }
+        return err;
+    }
+
     public async uninitComponents() {
         if (this.m_dbftHeaderStorage) {
             this.m_dbftHeaderStorage.uninit();
@@ -112,21 +139,7 @@ export class DbftChain extends ValueChain {
     }
 
     protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
-        return this.m_dbftHeaderStorage!.addHeader(block.header as DbftBlockHeader, this.m_storageManager!);
-    }
-
-    protected async _onLoadGlobalOptions(): Promise<ErrorCode> {
-        this.m_dbftHeaderStorage = new DbftHeaderStorage({
-            db: this.m_db!,
-            headerStorage: this.m_headerStorage!,
-            globalOptions: this.globalOptions,
-            logger: this.logger!
-        });
-        const err = await this.m_dbftHeaderStorage.init();
-        if (err) {
-            this.logger.error(`dbft header storage init err `, err);
-        }
-        return err;
+        return await this.m_dbftHeaderStorage!.addHeader(block.header as DbftBlockHeader, this.m_storageManager!);
     }
 
     protected _onCheckGlobalOptions(globalOptions: any): boolean {
@@ -157,12 +170,12 @@ export class DbftChain extends ValueChain {
             this.m_logger.error(`globalOptions should has superAdmin`);
             return false;
         }
-        if (isNullOrUndefined(globalOptions.agreeRate)) {
-            this.m_logger.error(`globalOptions should has superAdmin`);
+        if (isNullOrUndefined(globalOptions.agreeRateNumerator)) {
+            this.m_logger.error(`globalOptions should has agreeRateNumerator`);
             return false;
         }
-        if (isNullOrUndefined(globalOptions.systemAddress)) {
-            this.m_logger.error(`globalOptions should has systemAddress`);
+        if (isNullOrUndefined(globalOptions.agreeRateDenominator)) {
+            this.m_logger.error(`globalOptions should has agreeRateDenominator`);
             return false;
         }
         return true;
@@ -176,6 +189,12 @@ export class DbftChain extends ValueChain {
         return this.m_dbftHeaderStorage!;
     }
 
+    protected async _calcuteReqLimit(fromHeader: string, limit: number) {
+        let hr = await this.getHeader(fromHeader);
+        let reSelectionBlocks = this.globalOptions!.reSelectionBlocks;
+        return reSelectionBlocks - (hr.header!.number % reSelectionBlocks);
+    }
+    
     async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions: any): Promise<ErrorCode> {
         let err = await super.onCreateGenesisBlock(block, storage, genesisOptions);
         if (err) {

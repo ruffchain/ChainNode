@@ -1,26 +1,29 @@
+import * as fs from 'fs-extra';
+import * as path from 'path';
 import {ErrorCode, stringifyErrorCode} from './error_code';
 import {BigNumber} from 'bignumber.js';
+import { TmpManager } from './lib/tmp_manager';
 import {ChainCreator} from './chain_creator';
 import {JsonStorage} from './storage_json/storage';
+import {SqliteStorage} from './storage_sqlite/storage';
 import { LoggerInstance } from './lib/logger_util';
 import {Chain, Block, Transaction, BlockHeader, Receipt, BlockHeightListener} from './chain';
-import {ValueTransaction, ValueBlockHeader, ValueBlockExecutor, ValueReceipt} from './value_chain';
+import {ValueTransaction, ValueBlockHeader, ValueBlockExecutor, ValueReceipt, BlockContent} from './value_chain';
 import {createKeyPair, addressFromSecretKey} from './address';
-import {StorageDumpSnapshotManager, StorageManager, StorageLogSnapshotManager} from './storage';
-import { isArray } from 'util';
-import { SqliteStorage } from './storage_sqlite/storage';
+import {Storage, StorageDumpSnapshotManager, StorageManager, StorageLogSnapshotManager} from './storage';
+import { isArray, isNullOrUndefined } from 'util';
 
 export class ValueChainDebugSession {
-    constructor(private readonly debuger: ValueMemoryDebuger) {
+    constructor(private readonly debuger: ValueChainDebuger) {
         
     }
     private m_dumpSnapshotManager?: StorageDumpSnapshotManager;
     private m_storageManager?: StorageManager;
-    async init(storageDir: string): Promise<ErrorCode> {
+    async init(options: {storageDir: string}): Promise<ErrorCode> {
         const chain = this.debuger.chain;
         const dumpSnapshotManager = new StorageDumpSnapshotManager({
             logger: chain.logger,
-            path: storageDir
+            path: options.storageDir
         });
         this.m_dumpSnapshotManager = dumpSnapshotManager;
         const snapshotManager = new StorageLogSnapshotManager({
@@ -30,14 +33,24 @@ export class ValueChainDebugSession {
             logger: chain.logger,
             dumpSnapshotManager
         });
+        const tmpManager = new TmpManager({
+            root: options.storageDir, 
+            logger: chain.logger
+        });
+        let err = tmpManager.init({clean: true});
+        if (err) {
+            chain.logger.error(`ValueChainDebugSession init tmpManager init failed `, stringifyErrorCode(err));
+            return err;
+        }
         const storageManager = new StorageManager({
-            path: storageDir,
+            tmpManager, 
+            path: options.storageDir,
             storageType: JsonStorage,
             logger: chain.logger,
             snapshotManager
         });
         this.m_storageManager = storageManager;
-        let err = await this.m_storageManager.init();
+        err = await this.m_storageManager.init();
         if (err) {
             chain.logger.error(`ValueChainDebugSession init storageManager init failed `, stringifyErrorCode(err));
             return err;
@@ -133,12 +146,17 @@ export class ValueChainDebugSession {
 }
 
 export class ValueIndependDebugSession {
-    private m_storage?: JsonStorage;
-    private m_curHeader?: ValueBlockHeader;
+    private m_storage?: Storage;
+    private m_curBlock?: {
+        header: ValueBlockHeader,
+        transactions: ValueTransaction[],
+        receipts: Receipt[]
+    };
     private m_accounts?: Buffer[];
     private m_interval?: number;
-    constructor(private readonly debuger: ValueMemoryDebuger) {
-        
+    private m_fakeNonces: Map<string, number>;
+    constructor(private readonly debuger: ValueChainDebuger) {
+        this.m_fakeNonces = new Map();
     }
 
     async init(options: {
@@ -146,13 +164,24 @@ export class ValueIndependDebugSession {
         accounts: Buffer[] | number, 
         coinbase: number,
         interval: number,
-        preBalance?: number
-    }): Promise<ErrorCode> {
-        const csr = await this.debuger.createStorage();
+        preBalance?: BigNumber,
+        memoryStorage?: boolean,
+        storageDir?: string
+    }): Promise<{err: ErrorCode, blocks?: Block[]}> {
+        const storageOptions = Object.create(null);
+        storageOptions.memory = options.memoryStorage;
+        if (!(isNullOrUndefined(options.memoryStorage) || options.memoryStorage)) {
+            const storageDir = options.storageDir!;
+            fs.ensureDirSync(storageDir);
+            const storagePath = path.join(storageDir, `${Date.now()}`);
+            storageOptions.path = storagePath;
+        }
+        const csr = await this.debuger.createStorage(storageOptions);
         if (csr.err) {
-            return csr.err;
+            return {err: csr.err};
         }
         this.m_storage = csr.storage!;
+        this.m_storage.createLogger();
         if (isArray(options.accounts)) {
             this.m_accounts = options.accounts.map((x) => Buffer.from(x));
         } else {
@@ -176,77 +205,147 @@ export class ValueIndependDebugSession {
             this.m_accounts.forEach((value) => {
                 genesissOptions.preBalances.push({address: addressFromSecretKey(value), amount: options.preBalance});
             });
-        }
+        }  
         const err = await chain.onCreateGenesisBlock(block, csr.storage!, genesissOptions);
         if (err) {
             chain.logger.error(`onCreateGenesisBlock failed for `, stringifyErrorCode(err));
-            return err;
+            return {err};
         }
-        gh.updateHash();
-        await this.debuger.debugBlock(this.m_storage, block);
+        block.header.updateHash();
+        const dber = await this.debuger.debugBlockEvent(this.m_storage!, block.header, {preBlock: true});
+        if (dber.err) {
+            return {err};
+        }
+        this.m_curBlock = {
+            header: block.header as ValueBlockHeader,
+            transactions: [],
+            receipts: []
+        };
+        this.m_curBlock.receipts.push(...dber.receipts!);
         if (options.height > 0) {
-            const _err = this.updateHeightTo(options.height, options.coinbase);
-            if (_err) {
-                return _err;
-            }
-        } else {
-            this.m_curHeader = block.header as ValueBlockHeader;
+            return await this.updateHeightTo(options.height, options.coinbase);
         }
-        return ErrorCode.RESULT_OK;
+        return {err: ErrorCode.RESULT_OK};
     }
 
-    async updateHeightTo(height: number, coinbase: number, isExecuteBlockEvent: boolean = false): Promise<ErrorCode> {
-        if (height <= this.m_curHeader!.number) {
-            this.debuger.chain.logger.error(`updateHeightTo ${height} failed for current height ${this.m_curHeader!.number} is larger`); 
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-        let curHeader = this.m_curHeader!;
-        const offset = height - curHeader.number;
-        for (let i = 0; i <= offset; ++i) {
-            if (isExecuteBlockEvent) {
-                // execute curBlock PostBlockEvent
-                const {err, executor} = await this.debuger.chain.newBlockExecutor(this.debuger.chain.newBlock(curHeader), this.m_storage!);
-                let listeners = await this.debuger.chain.handler.getPostBlockListeners(curHeader.number);
-                for (let l of listeners) {
-                    const err1 = await executor!.executeBlockEvent(l); 
-                    this.debuger.chain.logger.info(`debugger run post event at ${curHeader.number}, ret ${err1}`);
-                }
-            }
-            let header = this.debuger.chain.newBlockHeader() as ValueBlockHeader;
-            header.timestamp = curHeader.timestamp + this.m_interval!;
-            header.coinbase = addressFromSecretKey(this.m_accounts![coinbase])!;
-            header.setPreBlock(curHeader);
-            curHeader = header;
-            if (isExecuteBlockEvent) {
-                // execute curBlock PostBlockEvent
-                const {err, executor} = await this.debuger.chain.newBlockExecutor(this.debuger.chain.newBlock(curHeader), this.m_storage!);
-                let listeners = await this.debuger.chain.handler.getPreBlockListeners(curHeader.number);
-                for (let l of listeners) {
-                    const err1 = await executor!.executeBlockEvent(l); 
-                    this.debuger.chain.logger.error(`debugger run pre event at ${curHeader.number}, ret ${err1}`);
-                }
-            }
-        }
-        this.m_curHeader = curHeader;
-        return ErrorCode.RESULT_OK;
+    get curHeader(): ValueBlockHeader {
+        return this.m_curBlock!.header;
     }
 
-    transaction(options: {caller: number, method: string, input: any, value: BigNumber}): Promise<{err: ErrorCode, receipt?: Receipt}> {
+    get storage(): Storage {
+        return this.m_storage!;
+    }
+
+    async updateHeightTo(height: number, coinbase: number): Promise<{err: ErrorCode, blocks?: Block[]}> {
+        if (height <= this.m_curBlock!.header.number) {
+            this.debuger.chain.logger.error(`updateHeightTo ${height} failed for current height ${this.m_curBlock!.header.number} is larger`); 
+            return {err: ErrorCode.RESULT_INVALID_PARAM};
+        }
+        const offset = height - this.m_curBlock!.header.number;
+        let blocks = [];
+        for (let i = 0; i < offset; ++i) {
+            const nhr = await this._nextHeight(coinbase, []);
+            if (nhr.err) {
+                return {err: nhr.err};
+            }
+            blocks.push(nhr.block!);
+        }
+        return {err: ErrorCode.RESULT_OK, blocks};
+    }
+
+    nextHeight(coinbase: number, transactions: ValueTransaction[]): Promise<{err: ErrorCode, block?: Block}> {
+        return this._nextHeight(coinbase, transactions);
+    }
+
+    protected async _nextHeight(coinbase: number, transactions: ValueTransaction[]): Promise<{err: ErrorCode, block?: Block}> {
+        let curHeader =  this.m_curBlock!.header;
+
+        for (let tx of transactions) {
+            const dtr = await this.debuger.debugTransaction(this.m_storage!, curHeader, tx);
+            if (dtr.err) {
+                return {err: dtr.err};
+            }
+            this.m_curBlock!.transactions.push(tx);
+            this.m_curBlock!.receipts.push(dtr.receipt!);
+        }
+
+        let dber = await this.debuger.debugBlockEvent(this.m_storage!, curHeader, {postBlock: true});
+        if (dber.err) {
+            return {err: dber.err};
+        }
+        this.m_curBlock!.receipts.push(...dber.receipts!);
+
+        let block = this.debuger.chain.newBlock(this.m_curBlock!.header);
+        for (const tx of this.m_curBlock!.transactions) {
+            block.content.addTransaction(tx);
+        }
+        block.content.setReceipts(this.m_curBlock!.receipts);
+        block.header.updateHash();
+        
+        let header = this.debuger.chain.newBlockHeader() as ValueBlockHeader;
+        header.timestamp = curHeader.timestamp + this.m_interval!;
+        header.coinbase = addressFromSecretKey(this.m_accounts![coinbase])!;
+        header.setPreBlock(block.header);
+        this.m_curBlock = {
+            header: header as ValueBlockHeader,
+            transactions: [],
+            receipts: []
+        };
+        dber = await this.debuger.debugBlockEvent(this.m_storage!, curHeader, 
+            {preBlock: true});
+        if (dber.err) {
+            return {err: dber.err};
+        }
+        this.m_curBlock!.receipts.push(...dber.receipts!);
+        return {err: ErrorCode.RESULT_OK, block};
+    }
+
+    createTransaction(options: {caller: number|Buffer, method: string, input: any, value: BigNumber, fee: BigNumber, nonce?: number}): ValueTransaction {
         const tx = new ValueTransaction();
         tx.fee = new BigNumber(0);
         tx.value = new BigNumber(options.value);
         tx.method = options.method;
         tx.input = options.input;
-        tx.sign(this.m_accounts![options.caller]!);
-        return this.debuger.debugTransaction(this.m_storage!, this.m_curHeader!, tx);
+        tx.fee = options.fee;
+        let pk: Buffer;
+        if (Buffer.isBuffer(options.caller)) {
+            pk = options.caller;
+        } else {
+            pk = this.m_accounts![options.caller]!;
+        }
+        tx.nonce = isNullOrUndefined(options.nonce) ? 0 : options.nonce;
+        tx.sign(pk);
+        return tx;
+    }
+
+    async transaction(options: {caller: number|Buffer, method: string, input: any, value: BigNumber, fee: BigNumber, nonce?: number}): Promise<{err: ErrorCode, receipt?: Receipt}> {
+        let pk: Buffer;
+        if (Buffer.isBuffer(options.caller)) {
+            pk = options.caller;
+        } else {
+            pk = this.m_accounts![options.caller]!;
+        }
+        let addr = addressFromSecretKey(pk)!;
+        const nonce = this.m_fakeNonces.has(addr) ? this.m_fakeNonces.get(addr)! : 0;
+        this.m_fakeNonces.set(addr, nonce + 1);
+        const txop = Object.create(options);
+        txop.nonce = nonce;
+        const tx = this.createTransaction(txop);
+        const dtr = await this.debuger.debugTransaction(this.m_storage!, this.m_curBlock!.header, tx);
+        if (dtr.err) {
+            return {err: dtr.err};
+        } 
+        this.m_curBlock!.transactions.push(tx);
+        this.m_curBlock!.receipts.push(dtr.receipt!);
+        return dtr;
     }
 
     wage(): Promise<{err: ErrorCode}> {
-        return this.debuger.debugMinerWageEvent(this.m_storage!, this.m_curHeader!);
+        return this.debuger.debugMinerWageEvent(this.m_storage!, this.m_curBlock!.header!);
     }
 
     view(options: {method: string, params: any}): Promise<{err: ErrorCode, value?: any}> {
-        return this.debuger.debugView(this.m_storage!, this.m_curHeader!, options.method, options.params);
+        return this.debuger.debugView(this.m_storage!, this.m_curBlock!.header, options.method, options.params);
     }
 
     getAccount(index: number): string {
@@ -254,16 +353,26 @@ export class ValueIndependDebugSession {
     }
 }
 
-class MemoryDebuger {
+class ChainDebuger {
     constructor(public readonly chain: Chain, protected readonly logger: LoggerInstance) {
 
     }
 
-    async createStorage(): Promise<{err: ErrorCode, storage?: JsonStorage}> {
-        const storage = new JsonStorage({
-            filePath: '',
-            logger: this.logger
-        });
+    async createStorage(options: {memory?: boolean, path?: string}): Promise<{err: ErrorCode, storage?: Storage}> {
+        const inMemory = (isNullOrUndefined(options.memory) || options.memory);
+        let storage: Storage;
+        if (inMemory) {
+            storage = new JsonStorage({
+                filePath: '',
+                logger: this.logger
+            });
+        } else {
+            storage = new SqliteStorage({
+                filePath: options.path!,
+                logger: this.logger
+            });
+        }
+        
         const err = await storage.init();
         if (err) {
             this.chain.logger.error(`init storage failed `, stringifyErrorCode(err));
@@ -273,7 +382,7 @@ class MemoryDebuger {
         return {err: ErrorCode.RESULT_OK, storage};
     }
 
-    async debugTransaction(storage: JsonStorage, header: BlockHeader, tx: Transaction): Promise<{err: ErrorCode, receipt?: Receipt}> {
+    async debugTransaction(storage: Storage, header: BlockHeader, tx: Transaction): Promise<{err: ErrorCode, receipt?: Receipt}> {
         const block = this.chain.newBlock(header);
         
         const nber = await this.chain.newBlockExecutor(block, storage);
@@ -288,20 +397,45 @@ class MemoryDebuger {
         return {err: ErrorCode.RESULT_OK, receipt: etr.receipt};
     }
 
-    async debugBlockEvent(storage: JsonStorage, header: BlockHeader, listener: BlockHeightListener): Promise<{err: ErrorCode}> {
+    async debugBlockEvent(storage: Storage, header: BlockHeader, options: {
+            listener?: BlockHeightListener,
+            preBlock?: boolean,
+            postBlock?: boolean
+        }): Promise<{err: ErrorCode, receipts?: Receipt[]}> {
         const block = this.chain.newBlock(header);
         
         const nber = await this.chain.newBlockExecutor(block, storage);
         if (nber.err) {
             return {err: nber.err};
         }
-
-        const err = await nber.executor!.executeBlockEvent(listener);
-        return {err};
-
+        if (options.listener) {
+            const ebr = await nber.executor!.executeBlockEvent(options.listener);
+            if (ebr.err) {
+                return {err: ebr.err};
+            } else {
+                return {err: ErrorCode.RESULT_OK, receipts: [ebr.receipt!]};
+            }
+        } else {
+            let receipts = [];
+            if (options.preBlock) {
+                const ebr = await nber.executor!.executePreBlockEvent();
+                if (ebr.err) {
+                    return {err: ebr.err};
+                }
+                receipts.push(...ebr.receipts!);
+            }
+            if (options.postBlock) {
+                const ebr = await nber.executor!.executePostBlockEvent();
+                if (ebr.err) {
+                    return {err: ebr.err};
+                }
+                receipts.push(...ebr.receipts!);
+            }
+            return {err: ErrorCode.RESULT_OK, receipts};
+        }
     }
 
-    async debugView(storage: JsonStorage, header: BlockHeader, method: string, params: any): Promise<{err: ErrorCode, value?: any}> {
+    async debugView(storage: Storage, header: BlockHeader, method: string, params: any): Promise<{err: ErrorCode, value?: any}> {
         const nver = await this.chain.newViewExecutor(header, storage, method, params);
 
         if (nver.err) {
@@ -311,7 +445,7 @@ class MemoryDebuger {
         return nver.executor!.execute();
     }
 
-    async debugBlock(storage: JsonStorage, block: Block): Promise<{err: ErrorCode}> {
+    async debugBlock(storage: Storage, block: Block): Promise<{err: ErrorCode}> {
         const nber = await this.chain.newBlockExecutor(block, storage);
         if (nber.err) {
             return {err: nber.err};
@@ -322,8 +456,8 @@ class MemoryDebuger {
     }
 }
 
-export class ValueMemoryDebuger extends MemoryDebuger {
-    async debugMinerWageEvent(storage: JsonStorage, header: BlockHeader): Promise<{err: ErrorCode}> {
+export class ValueChainDebuger extends ChainDebuger {
+    async debugMinerWageEvent(storage: Storage, header: BlockHeader): Promise<{err: ErrorCode}> {
         const block = this.chain.newBlock(header);
         
         const nber = await this.chain.newBlockExecutor(block, storage);
@@ -341,8 +475,12 @@ export class ValueMemoryDebuger extends MemoryDebuger {
     }
 
     async createChainSession(storageDir: string): Promise<{err: ErrorCode, session?: ValueChainDebugSession}> {
+        let err = await this.chain.initComponents();
+        if (err) {
+            return {err};
+        }
         const session = new ValueChainDebugSession(this);
-        const err = await session.init(storageDir);
+        err = await session.init({storageDir});
         if (err) {
             return {err};
         }
@@ -350,16 +488,11 @@ export class ValueMemoryDebuger extends MemoryDebuger {
     }
 }
 
-export async function createValueDebuger(chainCreator: ChainCreator, dataDir: string): Promise<{err: ErrorCode, debuger?: ValueMemoryDebuger}> {
-    const ccir = await chainCreator.createChainInstance(dataDir, {readonly: true});
+export async function createValueDebuger(chainCreator: ChainCreator, dataDir: string): Promise<{err: ErrorCode, debuger?: ValueChainDebuger}> {
+    const ccir = await chainCreator.createChainInstance(dataDir, {readonly: true, initComponents: false});
     if (ccir.err) {
         chainCreator.logger.error(`create chain instance from ${dataDir} failed `, stringifyErrorCode(ccir.err));
         return {err: ccir.err};
     }
-    const err = await ccir.chain!.setGlobalOptions(ccir.globalOptions!);
-    if (err) {
-        chainCreator.logger.error(`setGlobalOptions failed `, stringifyErrorCode(err));
-        return {err};
-    }
-    return {err: ErrorCode.RESULT_OK, debuger: new ValueMemoryDebuger(ccir.chain!, chainCreator.logger)};
+    return {err: ErrorCode.RESULT_OK, debuger: new ValueChainDebuger(ccir.chain!, chainCreator.logger)};
 }

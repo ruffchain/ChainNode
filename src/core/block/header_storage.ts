@@ -63,21 +63,23 @@ export class HeaderStorage implements IHeaderStorage {
     protected m_cacheHeight: LRUCache<number, BlockHeaderEntry>;
     protected m_cacheHash: LRUCache<string, BlockHeaderEntry>;
     private m_transactionLock = new Lock();
-
+    private m_readonly: boolean;
     protected m_txView: ITxStorage;
 
     constructor(options: {
         logger: LoggerInstance;
         blockHeaderType: new () => BlockHeader, 
         db: sqlite.Database, 
-        blockStorage: BlockStorage
+        blockStorage: BlockStorage,
+        readonly?: boolean
     }) {
+        this.m_readonly = !!(options && options.readonly);
         this.m_db = options.db;
         this.m_blockHeaderType = options.blockHeaderType;
         this.m_logger = options.logger;
         this.m_cacheHeight = new LRUCache<number, BlockHeaderEntry>(100);
         this.m_cacheHash = new LRUCache<string, BlockHeaderEntry>(100);
-        this.m_txView = new TxStorage({logger: options.logger, db: options.db, blockstorage: options.blockStorage});
+        this.m_txView = new TxStorage({logger: options.logger, db: options.db, blockstorage: options.blockStorage, readonly: this.m_readonly});
     }
 
     get txView(): ITxStorage {
@@ -85,14 +87,15 @@ export class HeaderStorage implements IHeaderStorage {
     }
 
     public async init(): Promise<ErrorCode> {
-        try {
-            let stmt = await this.m_db.run(initHeaderSql);
-            stmt = await this.m_db.run(initBestSql);
-        } catch (e) {
-            this.m_logger.error(e);
-            return ErrorCode.RESULT_EXCEPTION;
+        if (!this.m_readonly) {
+            try {
+                let stmt = await this.m_db.run(initHeaderSql);
+                stmt = await this.m_db.run(initBestSql);
+            } catch (e) {
+                this.m_logger.error(e);
+                return ErrorCode.RESULT_EXCEPTION;
+            }
         }
-
         return await this.m_txView.init();
     }
 
@@ -179,7 +182,7 @@ export class HeaderStorage implements IHeaderStorage {
             } else {
                 let headerEntry: BlockHeaderEntry|null = this.m_cacheHash.get(arg as string);
                 if (headerEntry) {
-                    this.m_logger.debug(`get header storage directly from cache hash: ${headerEntry.blockheader.hash} number: ${headerEntry.blockheader.number} verified: ${headerEntry.verified}`);
+                    // this.m_logger.debug(`get header storage directly from cache hash: ${headerEntry.blockheader.hash} number: ${headerEntry.blockheader.number} verified: ${headerEntry.verified}`);
                     return {err: ErrorCode.RESULT_OK, header: headerEntry.blockheader, verified: headerEntry.verified};
                 }
 

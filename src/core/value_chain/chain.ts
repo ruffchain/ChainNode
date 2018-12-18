@@ -2,10 +2,9 @@ import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
 const assert = require('assert');
 import {isValidAddress} from '../address';
-import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 
 import { Storage } from '../storage';
-import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor} from '../chain';
+import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor, ChainContructOptions} from '../chain';
 import { ValueBlockHeader} from './block';
 import { ValueTransaction, ValueReceipt } from './transaction';
 import { ValueBlockExecutor} from './executor';
@@ -14,6 +13,7 @@ import {ValuePendingTransactions} from './pending';
 
 export type ValueTransactionContext = {
     value: BigNumber;
+    fee: BigNumber;
     getBalance: (address: string) => Promise<BigNumber>;
     transferTo: (address: string, amount: BigNumber) => Promise<ErrorCode>;
     cost: (fee: BigNumber) => ErrorCode;
@@ -32,7 +32,7 @@ export type ValueChainGlobalOptions = ChainGlobalOptions;
 export type ValueChainInstanceOptions = ChainInstanceOptions;
 
 export class ValueChain extends Chain {
-    constructor(options: LoggerOptions) {
+    constructor(options: ChainContructOptions) {
         super(options);
     }
 
@@ -43,10 +43,10 @@ export class ValueChain extends Chain {
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
-        externContext.transferTo = (address: string, amount: BigNumber): Promise<ErrorCode> => {
-            return ve.transferTo(ValueChain.sysAddress, address, amount);
+        externContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
+            return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.handler, externContext, globalOptions: this.m_globalOptions!});
+        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.m_handler, externContext, globalOptions: this.m_globalOptions});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
@@ -58,7 +58,7 @@ export class ValueChain extends Chain {
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
-        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.handler, externContext});
+        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.m_handler, externContext});
         return {err: ErrorCode.RESULT_OK, executor};
     }
 
@@ -75,7 +75,14 @@ export class ValueChain extends Chain {
     }
 
     protected _createPending(): ValuePendingTransactions {
-        return new ValuePendingTransactions({ storageManager: this.m_storageManager!, logger: this.logger, txlivetime: this.m_globalOptions!.txlivetime, handler: this.m_handler!});
+        return new ValuePendingTransactions({ 
+            storageManager: this.m_storageManager!, 
+            logger: this.logger, 
+            overtime: this.m_instanceOptions!.pendingOvertime!, 
+            handler: this.m_handler!,
+            maxCount: this.m_instanceOptions!.maxPendingCount!,
+            warnCount: this.m_instanceOptions!.warnPendingCount!
+        });
     }
 
     async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions?: any): Promise<ErrorCode> {

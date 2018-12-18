@@ -4,17 +4,18 @@ import * as digest from './lib/digest';
 import { StaticWriter } from './lib/staticwriter';
 import * as base58 from './lib/base58';
 import { isString } from 'util';
+import { BufferReader } from '../client';
 
 // prefix can identify different network
 // will be readed from consensus params
-const prefix = 0x00;
+const defaultPrefix = 0x00;
 
-function pubKeyToBCFormat(publickey: Buffer, netPrefix: number): Buffer {
+function pubKeyToBCFormat(publickey: Buffer): Buffer {
     const keyHash = digest.hash160(publickey);
     const size = 5 + keyHash.length;
     const bw = new StaticWriter(size);
 
-    bw.writeU8(netPrefix);
+    bw.writeU8(defaultPrefix);
 
     bw.writeBytes(keyHash);
     bw.writeChecksum();
@@ -50,7 +51,7 @@ export function addressFromPublicKey(publicKey: Buffer|string): string | undefin
     if (isString(publicKey)) {
         publicKey = Buffer.from(publicKey, 'hex');
     }
-    return base58.encode(pubKeyToBCFormat(publicKey, prefix));
+    return base58.encode(pubKeyToBCFormat(publicKey));
 }
 
 export function publicKeyFromSecretKey(secret: Buffer|string): Buffer | undefined {
@@ -101,5 +102,17 @@ export function verify(md: Buffer|string, signature: Buffer, publicKey: Buffer):
 
 export function isValidAddress(address: string): boolean {
     let buf = base58.decode(address);
-    return buf.length === 25;
+    if (buf.length !== 25) {
+        return false;
+    }
+    let br = new BufferReader(buf);
+    br.readU8();
+    br.readBytes(20);
+    try {
+        br.verifyChecksum();
+    } catch (error) {
+        return false;
+    }
+    
+    return true;
 }

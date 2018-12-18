@@ -1,14 +1,13 @@
+import * as assert from 'assert';
 import {ErrorCode} from '../error_code';
 import {IConnection, NodeConnection, INode} from '../net';
 import {BdtConnection} from './connection';
-import { randomBytes } from 'crypto';
-const {P2P, Util} = require('bdt-p2p');
+const {P2P, Util, DHTAPPID} = require('bdt-p2p');
 
 export class BdtNode extends INode {
     private m_options: any;
     private m_bdtStack: any;
     private m_dht: any;
-    private m_snPeerid: any;
     private m_host: any;
     private m_tcpListenPort: number;
     private m_udpListenPort: number;
@@ -21,9 +20,10 @@ export class BdtNode extends INode {
     // @param options { 
     //              logger.level ['off', 'all', 'debug', 'info', 'trace', 'warn']
     // }
-    constructor(options: {host: string, tcpport: number, udpport: number, peerid: string, 
+    constructor(options: {network: string, host: string, tcpport: number, udpport: number, peerid: string, 
         snPeer: {peerid: string, eplist: string[]},
-        bdtLoggerOptions: {level: string, file_dir: string}}
+        dhtAppID: number,
+        bdtLoggerOptions: {level: string, file_dir: string, file_name: string}, initDHTEntry?: {peerid: string, eplist: string[]}[]}
     ) {
         super(options);
 
@@ -47,7 +47,7 @@ export class BdtNode extends INode {
         P2P.debug({
             level: this.m_options.bdtLoggerOptions.level,
             file_dir: this.m_options.bdtLoggerOptions.file_dir,
-            file_name: 'bdt',
+            file_name: this.m_options.bdtLoggerOptions.file_name,
         });
         // 初始化 bdt
         await this.createBDTStack();
@@ -58,11 +58,15 @@ export class BdtNode extends INode {
 
         // bdt 里0.0.0.0 只能找到公网ip, 这样会导致单机多进程或单机单进程的节点找不到对方
         // 为了方便测试， 补充加入本机的内网192 IP
+        // 从配置文件里读取初始的DHT表
         let ips = Util.NetHelper.getLocalIPV4().filter((ip: string) => ip.match(/^192.168.\d+.\d+/));
         let addrList = [this.m_host, ...ips];
+        let dhtEntry = [this.m_options.snPeer];
+        if (this.m_options.initDHTEntry) {
+            dhtEntry = dhtEntry.concat(this.m_options.initDHTEntry);
+        }
         let bdtInitParams: any = {};
         bdtInitParams['peerid'] = this.m_peerid;
-        bdtInitParams['dhtEntry'] = [this.m_options.snPeer];
         if (this.m_tcpListenPort !== 0) {
             bdtInitParams['tcp'] = {
                 addrList,
@@ -78,55 +82,62 @@ export class BdtNode extends INode {
             };
         }
 
-        let {result, p2p, bdtStack} = await P2P.create4BDTStack(bdtInitParams);
-
-        // 检查是否创建成功
-        if ( result !== 0 ) {
+        // 增加指定地址
+        // 部分机器会因为监听'0.0.0.0'相同端口，监听本地IP时发生冲突，最终漏掉本地地址，导致同局域网地址连接不上
+        let listenerEPList: any = [];
+        addrList.forEach((host) => {
+            listenerEPList.push(Util.EndPoint.toString({address: host, port: this.m_tcpListenPort, family: Util.EndPoint.FAMILY.IPv4, protocol: Util.EndPoint.PROTOCOL.tcp}));
+            listenerEPList.push(Util.EndPoint.toString({address: host, port: this.m_udpListenPort, family: Util.EndPoint.FAMILY.IPv4, protocol: Util.EndPoint.PROTOCOL.udp}));
+        });
+        bdtInitParams['listenerEPList'] = listenerEPList;
+        let {result, p2p} = await P2P.create(bdtInitParams);
+        if (result !== 0) {
             throw Error(`init p2p peer error ${result}. please check the params`);
         }
 
-        this.m_snPeerid = this.m_options.snPeer.peerid;
-        this.m_dht = p2p.m_dht;
-        this.m_bdtStack = bdtStack;
+        // 加入区块链应用DHT网络，并做为默认DHT网络，准备妥当再正式提供服务
+        p2p.joinDHT(dhtEntry, {manualActiveLocalPeer: true, dhtAppID: this.m_options.dhtAppID, asDefault: true});
+        this.m_logger.info(`bdt add network use id ${this.m_options.dhtAppID}`);
+        // 加入SN的DHT网络，用于通信穿透，但不参与SN服务
+        p2p.joinDHT(dhtEntry, {manualActiveLocalPeer: true, dhtAppID: DHTAPPID.sn});
+        result = await p2p.startupBDTStack(bdtInitParams.options);
+        if (result !== 0) {
+            throw Error(`init p2p peer error ${result}. please check the params`);
+        }
 
-        // 启动p2p的时候 先把当前peer的ready设置为0， 避免在listen前被其他节点发现并连接
-        this.m_dht.updateLocalPeerAdditionalInfo('ready', 0);
+        this.m_dht = p2p.dht;
+        this.m_bdtStack = p2p.bdtStack;
     }
 
     _ready() {
-        this.m_dht.updateLocalPeerAdditionalInfo('ready', 1);
+        this.m_dht.rootDHT.activeLocalPeer();
     }
 
-    // 通过发现自身， 来找到一些peers, 然后尝试每个握手一下
-    // 在测试阶段这种方法实现比较及时, 后面可能考虑用会dht中的randomPeers
     async randomPeers(count: number, excludes: string[]): Promise<{ err: ErrorCode, peers: string[], ignore0: boolean }> {
-        let res = await this.m_dht.getRandomPeers(count, false);
-        this.m_logger.info(`first find ${res.peerlist.length} peers, ${JSON.stringify(res.peerlist.map((value: any) => value.peerid))}`);
-        const ignore0 = !res || !res.peerlist || res.peerlist.length === 0;
         // 过滤掉自己和种子peer
-        let peers: any[] = res.peerlist.filter((val: any) => {
-            if (!val.peerid) {
-                this.m_logger.debug(`exclude undefined peerid, ${JSON.stringify(val)}`);
+        const filter = (peer: any) => {
+            if (!peer.peerid) {
+                // this.m_logger.debug(`exclude undefined peerid, ${JSON.stringify(peer)}`);
                 return false;
             }
-            if (this.m_skipList.includes(val.peerid)) {
-                this.m_logger.debug(`exclude ${val.peerid} from skipList`);
+            if (this.m_skipList.includes(peer.peerid)) {
+                // this.m_logger.debug(`exclude ${peer.peerid} from skipList`);
                 return false;
             }
-            if (excludes.includes(val.peerid)) {
-                this.m_logger.debug(`exclude ${val.peerid} from excludesList`);
-                return false;
-            }
-            let ready = val.getAdditionalInfo('ready');
-            if ( ready !== 1 ) {
-                this.m_logger.debug(`exclude ${val.peerid} not ready`);
+            if (excludes.includes(peer.peerid)) {
+                // this.m_logger.debug(`exclude ${peer.peerid} from excludesList`);
                 return false;
             }
             return true;
-        });
+        };
 
+        let res = await this.m_dht.getRandomPeers(count, false, {filter});
+        // this.m_logger.info(`first find ${res.peerlist.length} peers, ${JSON.stringify(res.peerlist.map((value: any) => value.peerid))}`);
+        const ignore0 = !res || !res.peerlist || res.peerlist.length === 0;
+
+        const peers: any[] = (res && res.peerlist) ? res.peerlist : [];
         let peerids = peers.map((value) => value.peerid);
-        this.m_logger.info(`find ${peerids.length} peers after filter, count ${count}, ${JSON.stringify(peerids)}`);
+        // this.m_logger.info(`find ${peerids.length} peers after filter, count ${count}, ${JSON.stringify(peerids)}`);
 
         // 如果peer数量比传入的count多， 需要随机截取
         if ( peerids.length > count ) {

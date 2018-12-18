@@ -25,25 +25,29 @@ export class TxStorage implements ITxStorage {
     private m_db: sqlite.Database;
     private m_logger: LoggerInstance;
     private m_blockStorage: BlockStorage;
+    private m_readonly: boolean;
 
     constructor(options: {
         logger: LoggerInstance;
         db: sqlite.Database;
         blockstorage: BlockStorage;
+        readonly?: boolean;
     }) {
+        this.m_readonly = !!(options && options.readonly);
         this.m_db = options.db;
         this.m_logger = options.logger;
         this.m_blockStorage = options.blockstorage;
     }
 
     public async init(): Promise<ErrorCode> {
-        try {
-            await this.m_db.run(initSql);
-        } catch (e) {
-            this.m_logger.error(e);
-            return ErrorCode.RESULT_EXCEPTION;
+        if (!this.m_readonly) {
+            try {
+                await this.m_db.run(initSql);
+            } catch (e) {
+                this.m_logger.error(e);
+                return ErrorCode.RESULT_EXCEPTION;
+            }
         }
-
         return ErrorCode.RESULT_OK;
     }
 

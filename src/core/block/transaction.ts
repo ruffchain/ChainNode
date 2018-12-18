@@ -1,6 +1,9 @@
+const assert = require('assert');
 import { BufferReader, BufferWriter, Serializable, ErrorCode, SerializableWithHash, toStringifiable, fromStringifiable } from '../serializable';
 import { Encoding } from '../lib/encoding';
 import * as Address from '../address';
+import { isString, isBuffer, isNullOrUndefined } from 'util';
+import { write } from 'fs-extra';
 
 export class Transaction extends SerializableWithHash {
     private m_publicKey: Buffer;
@@ -138,6 +141,23 @@ export class Transaction extends SerializableWithHash {
         obj.caller = this.address;
         return obj;
     }
+
+    static fromRaw(raw: string|Buffer, T: new () => Transaction): Transaction|undefined {
+        let buffer: Buffer;
+        if (isString(raw)) {
+            buffer = Buffer.from(raw, 'hex');
+        } else if (isBuffer(raw)) {
+            buffer = raw;
+        } else {
+            return undefined;
+        }
+        let tx = new T();
+        let err = tx.decode(new BufferReader(buffer));
+        if (err) {
+            return undefined;
+        }
+        return tx;
+    }
 }
 
 export class EventLog implements Serializable {
@@ -155,6 +175,14 @@ export class EventLog implements Serializable {
         return this.m_event;
     }
 
+    set index(o: object|undefined) {
+
+    }
+
+    get index(): object|undefined {
+        return undefined;
+    }
+
     set param(p: any) {
         this.m_params = p;
     }
@@ -167,6 +195,7 @@ export class EventLog implements Serializable {
     public encode(writer: BufferWriter): ErrorCode {
         let input: string;
         try {
+            writer.writeVarString(this.m_event);
             if (this.m_params) {
                 input = JSON.stringify(toStringifiable(this.m_params, true));  
             } else {
@@ -181,6 +210,7 @@ export class EventLog implements Serializable {
 
     public decode(reader: BufferReader): ErrorCode {
         try {
+            this.m_event = reader.readVarString();
             this.m_params = fromStringifiable(JSON.parse(reader.readVarString()));
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
@@ -196,21 +226,52 @@ export class EventLog implements Serializable {
     }
 }
 
+export enum ReceiptSourceType {
+    preBlockEvent = 0,
+    postBlockEvent,
+    transaction
+}
+
 export class Receipt implements Serializable {
-    private m_transactionHash: string;
+    private m_transactionHash?: string;
+    private m_eventIndex?: number;
+    private m_sourceType?: ReceiptSourceType;
     private m_returnCode: number;
     private m_eventLogs: EventLog[];
     constructor() {
-        this.m_transactionHash = '';
         this.m_returnCode = 0;
         this.m_eventLogs = new Array<EventLog>();
     }
 
-    set transactionHash(s: string) {
-        this.m_transactionHash = s;
+    setSource(source: {
+        sourceType: ReceiptSourceType;
+        txHash?: string;
+        eventIndex?: number
+    }) {
+        this.m_sourceType = source.sourceType;
+        if (source.sourceType === ReceiptSourceType.preBlockEvent) {
+            assert(!isNullOrUndefined(source.eventIndex), `invalid source event id`);
+            this.m_eventIndex = source.eventIndex;
+        } else if (source.sourceType === ReceiptSourceType.postBlockEvent) {
+            assert(!isNullOrUndefined(source.eventIndex), `invalid source event id`);
+            this.m_eventIndex = source.eventIndex;
+        } else if (source.sourceType === ReceiptSourceType.transaction) {
+            assert(source.txHash, `invalid source transaction hash`);
+            this.m_transactionHash = source.txHash;
+        } else {
+            assert(false, `invalid source type ${source.sourceType}`);
+        }
     }
     get transactionHash(): string {
-        return this.m_transactionHash;
+        return this.m_transactionHash!;
+    }
+
+    get eventId(): number {
+        return this.m_eventIndex!;
+    }
+
+    get sourceType(): ReceiptSourceType {
+        return this.m_sourceType!;
     }
 
     set returnCode(n: number) {
@@ -231,8 +292,17 @@ export class Receipt implements Serializable {
     }
 
     public encode(writer: BufferWriter): ErrorCode {
+        if (isNullOrUndefined(this.m_sourceType)) {
+            return ErrorCode.RESULT_INVALID_FORMAT;
+        }
         try {
-            writer.writeVarString(this.m_transactionHash);
+            writer.writeU8(this.m_sourceType);
+            if (this.m_sourceType === ReceiptSourceType.transaction) {
+                writer.writeVarString(this.m_transactionHash!);
+            } else {
+                writer.writeU16(this.m_eventIndex!);
+            }
+            
             writer.writeI32(this.m_returnCode);
             writer.writeU16(this.m_eventLogs.length);
         } catch (e) {
@@ -251,7 +321,14 @@ export class Receipt implements Serializable {
 
     public decode(reader: BufferReader): ErrorCode {
         try {
-            this.m_transactionHash = reader.readVarString();
+            this.m_sourceType = reader.readU8();
+            if (this.m_sourceType === ReceiptSourceType.transaction) {
+                this.m_transactionHash = reader.readVarString();
+            } else if (this.m_sourceType === ReceiptSourceType.preBlockEvent 
+                || this.m_sourceType === ReceiptSourceType.postBlockEvent) {
+                this.m_eventIndex = reader.readU16();
+            }
+            
             this.m_returnCode = reader.readI32();
             let nCount: number = reader.readU16();
             for (let i = 0; i < nCount; i++) {

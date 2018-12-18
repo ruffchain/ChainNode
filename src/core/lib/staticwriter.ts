@@ -27,8 +27,9 @@ export class StaticWriter {
     private data: Buffer;
     private offset: number;
     constructor(size: number) {
-        if (!(this instanceof StaticWriter))
+        if (!(this instanceof StaticWriter)) {
             return new StaticWriter(size);
+        }
 
         this.data = size ? Buffer.allocUnsafe(size) : EMPTY;
         this.offset = 0;
@@ -42,8 +43,9 @@ export class StaticWriter {
 
     public static pool(size: number) {
         if (size <= POOLSIZE) {
-            if (!POOL)
+            if (!POOL) {
                 POOL = Buffer.allocUnsafeSlow(POOLSIZE);
+            }
 
             const bw = new StaticWriter(0);
             bw.data = POOL.slice(0, size);
@@ -51,7 +53,7 @@ export class StaticWriter {
         }
 
         return new StaticWriter(size);
-    };
+    }
 
     /**
      * Allocate and render the final buffer.
@@ -63,7 +65,7 @@ export class StaticWriter {
         assert(this.offset === data.length);
         this.destroy();
         return data;
-    };
+    }
 
     /**
      * Get size of data written so far.
@@ -72,7 +74,7 @@ export class StaticWriter {
 
     public getSize() {
         return this.offset;
-    };
+    }
 
     /**
      * Seek to relative offset.
@@ -81,7 +83,7 @@ export class StaticWriter {
 
     public seek(offset: number) {
         this.offset += offset;
-    };
+    }
 
     /**
      * Destroy the buffer writer.
@@ -90,7 +92,7 @@ export class StaticWriter {
     public destroy() {
         this.data = EMPTY;
         this.offset = 0;
-    };
+    }
 
     /**
      * Write uint8.
@@ -99,7 +101,7 @@ export class StaticWriter {
 
     public writeU8(value: number) {
         this.offset = this.data.writeUInt8(value, this.offset, true);
-    };
+    }
 
     /**
      * Write uint16le.
@@ -108,7 +110,7 @@ export class StaticWriter {
 
     public writeU16(value: number) {
         this.offset = this.data.writeUInt16LE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write uint16be.
@@ -117,7 +119,7 @@ export class StaticWriter {
 
     public writeU16BE(value: number) {
         this.offset = this.data.writeUInt16BE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write uint32le.
@@ -126,7 +128,7 @@ export class StaticWriter {
 
     public writeU32(value: number) {
         this.offset = this.data.writeUInt32LE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write uint32be.
@@ -135,7 +137,7 @@ export class StaticWriter {
 
     public writeU32BE(value: number) {
         this.offset = this.data.writeUInt32BE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write uint64le.
@@ -144,7 +146,7 @@ export class StaticWriter {
 
     public writeU64(value: number) {
         this.offset = Encoding.writeU64(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write uint64be.
@@ -153,7 +155,7 @@ export class StaticWriter {
 
     public writeU64BE(value: number) {
         this.offset = Encoding.writeU64BE(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write int8.
@@ -162,7 +164,7 @@ export class StaticWriter {
 
     public writeI8(value: number) {
         this.offset = this.data.writeInt8(value, this.offset, true);
-    };
+    }
 
     /**
      * Write int16le.
@@ -171,7 +173,7 @@ export class StaticWriter {
 
     public writeI16(value: number) {
         this.offset = this.data.writeInt16LE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write int16be.
@@ -180,7 +182,7 @@ export class StaticWriter {
 
     public writeI16BE(value: number) {
         this.offset = this.data.writeInt16BE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write int32le.
@@ -189,7 +191,7 @@ export class StaticWriter {
 
     public writeI32(value: number) {
         this.offset = this.data.writeInt32LE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write int32be.
@@ -198,7 +200,7 @@ export class StaticWriter {
 
     public writeI32BE(value: number) {
         this.offset = this.data.writeInt32BE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write int64le.
@@ -207,7 +209,7 @@ export class StaticWriter {
 
     public writeI64(value: number) {
         this.offset = Encoding.writeI64(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write int64be.
@@ -216,7 +218,7 @@ export class StaticWriter {
 
     public writeI64BE(value: number) {
         this.offset = Encoding.writeI64BE(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write float le.
@@ -225,7 +227,7 @@ export class StaticWriter {
 
     public writeFloat(value: number) {
         this.offset = this.data.writeFloatLE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write float be.
@@ -234,7 +236,7 @@ export class StaticWriter {
 
     public writeFloatBE(value: number) {
         this.offset = this.data.writeFloatBE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write double le.
@@ -243,7 +245,7 @@ export class StaticWriter {
 
     public writeDouble(value: number) {
         this.offset = this.data.writeDoubleLE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write double be.
@@ -252,7 +254,7 @@ export class StaticWriter {
 
     public writeDoubleBE(value: number) {
         this.offset = this.data.writeDoubleBE(value, this.offset, true);
-    };
+    }
 
     /**
      * Write a varint.
@@ -261,7 +263,7 @@ export class StaticWriter {
 
     public writeVarint(value: number) {
         this.offset = Encoding.writeVarint(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write a varint (type 2).
@@ -270,7 +272,7 @@ export class StaticWriter {
 
     public writeVarint2(value: number) {
         this.offset = Encoding.writeVarint2(this.data, value, this.offset);
-    };
+    }
 
     /**
      * Write bytes.
@@ -278,13 +280,14 @@ export class StaticWriter {
      */
 
     public writeBytes(value: Buffer) {
-        if (value.length === 0)
+        if (value.length === 0) {
             return;
+        }
 
         value.copy(this.data, this.offset);
 
         this.offset += value.length;
-    };
+    }
 
     /**
      * Write bytes with a varint length before them.
@@ -294,7 +297,7 @@ export class StaticWriter {
     public writeVarBytes(value: Buffer) {
         this.writeVarint(value.length);
         this.writeBytes(value);
-    };
+    }
 
     /**
      * Copy bytes.
@@ -306,12 +309,13 @@ export class StaticWriter {
     public copy(value: Buffer, start: number, end: number) {
         const len = end - start;
 
-        if (len === 0)
+        if (len === 0) {
             return;
+        }
 
         value.copy(this.data, this.offset, start, end);
         this.offset += len;
-    };
+    }
 
     /**
      * Write string to buffer.
@@ -320,15 +324,16 @@ export class StaticWriter {
      */
 
     public writeString(value: string, enc?: string) {
-        if (value.length === 0)
+        if (value.length === 0) {
             return;
+        }
 
         const size = Buffer.byteLength(value, enc);
 
         this.data.write(value, this.offset, undefined, enc);
 
         this.offset += size;
-    };
+    }
 
     /**
      * Write a 32 byte hash.
@@ -344,7 +349,7 @@ export class StaticWriter {
         assert(value.length === 64);
         this.data.write(value, this.offset, undefined, 'hex');
         this.offset += 32;
-    };
+    }
 
     /**
      * Write a string with a varint length before it.
@@ -364,7 +369,7 @@ export class StaticWriter {
         this.data.write(value, this.offset, undefined, enc);
 
         this.offset += size;
-    };
+    }
 
     /**
      * Write a null-terminated string.
@@ -375,7 +380,7 @@ export class StaticWriter {
     public writeNullString(value: string, enc?: string) {
         this.writeString(value, enc);
         this.writeU8(0);
-    };
+    }
 
     /**
      * Calculate and write a checksum for the data written so far.
@@ -386,7 +391,7 @@ export class StaticWriter {
         const hash = digest.hash256(data);
         hash.copy(this.data, this.offset, 0, 4);
         this.offset += 4;
-    };
+    }
 
     /**
      * Fill N bytes with value.
@@ -397,10 +402,11 @@ export class StaticWriter {
     public fill(value: number, size: number) {
         assert(size >= 0);
 
-        if (size === 0)
+        if (size === 0) {
             return;
+        }
 
         this.data.fill(value, this.offset, this.offset + size);
         this.offset += size;
-    };
+    }
 }

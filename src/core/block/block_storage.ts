@@ -39,7 +39,9 @@ export class BlockStorage implements IBlockStorage {
     private m_logger: LoggerInstance;
 
     public init(): ErrorCode {
-        fs.mkdirsSync(this.m_path);
+        if (!this.m_readonly) {
+            fs.mkdirsSync(this.m_path);
+        }
         return ErrorCode.RESULT_OK;
     }
 

@@ -1,10 +1,11 @@
 const assert = require('assert');
 import {ErrorCode} from '../error_code';
-import {Chain, BlockHeader, Storage, Transaction, EventLog, Receipt} from '../chain';
-import {TxListener, BlockHeightListener} from './handler';
+import {Chain, BlockHeader, Storage, Transaction, EventLog, Receipt, ReceiptSourceType} from '../chain';
+import {TxListener, BlockHeightListener, ChainEventDefinations, BaseHandler} from './handler';
 
 import { LoggerInstance } from '../lib/logger_util';
 import { isNumber } from 'util';
+import { addressFromPublicKey } from '../../client';
 const {LogShim} = require('../lib/log_shim');
 
 export type TransactionExecuteflag = {
@@ -13,8 +14,11 @@ export type TransactionExecuteflag = {
 
 class BaseExecutor {
     protected m_logger: LoggerInstance;
-    constructor(logger: LoggerInstance) {
-        this.m_logger = logger;
+    protected m_logs: EventLog[] = [];
+    protected m_eventDefinations: ChainEventDefinations;
+    constructor(options: {eventDefinations: ChainEventDefinations, logger: LoggerInstance}) {
+        this.m_logger = options.logger;
+        this.m_eventDefinations = options.eventDefinations;
     }
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
         let database =  (await storage.getReadWritableDatabase(Chain.dbUser)).value!;
@@ -30,10 +34,6 @@ class BaseExecutor {
                 value: blockHeader.timestamp
             } 
         );
-        
-        // context.getHeight = (): number => {
-        //     return blockHeader.number;
-        // };
 
         Object.defineProperty(
             context, 'height', {
@@ -42,16 +42,24 @@ class BaseExecutor {
             } 
         );
 
-        // context.getStorage = (): IReadWritableKeyValue => {
-        //     return kv;
-        // }
-
         Object.defineProperty(
             context, 'storage', {
                 writable: false,
                 value: database
             } 
         );
+
+        context.emit = (name: string, param?: any) => {
+            if (this.m_eventDefinations.has(name)) {
+                let log: EventLog = new EventLog();
+                log.name = name;
+                log.param = param;
+                this.m_logs.push(log);
+            } else {
+                this.m_logger.error(`undefined event ${name}`);
+                assert(false, `undefined event ${name}`);
+            }
+        };
 
         return context;
     }
@@ -60,10 +68,13 @@ class BaseExecutor {
 export class TransactionExecutor extends BaseExecutor {
     protected m_listener: TxListener;
     protected m_tx: Transaction;
-    protected m_logs: EventLog[] = [];
+    protected m_addrIndex = 0;
 
-    constructor(listener: TxListener, tx: Transaction, logger: LoggerInstance) {
-        super(new LogShim(logger).bind(`[transaction: ${tx.hash}]`, true).log);
+    constructor(handler: BaseHandler, listener: TxListener, tx: Transaction, logger: LoggerInstance) {
+        super({
+            eventDefinations: handler.getEventDefinations(),
+            logger: new LogShim(logger).bind(`[transaction: ${tx.hash}]`, true).log
+        });
         this.m_listener = listener;
         this.m_tx = tx;
     }
@@ -81,7 +92,7 @@ export class TransactionExecutor extends BaseExecutor {
            nonce = nonceInfo.value as number;
         }
         if (tx.nonce !== nonce + 1) {
-            this.m_logger.error(`methodexecutor, _dealNonce, nonce error,nonce should ${nonce + 1}, but ${tx.nonce}, txhash=${tx.hash}`);
+            this.m_logger.error(`methodexecutor, _dealNonce, nonce error,nonce should ${nonce + 1}, but ${tx.nonce}, txhash=${tx.hash} address=${tx.address}`);
             return ErrorCode.RESULT_ERROR_NONCE_IN_TX;
         }
         await kvr.kv!.set(tx.address!, tx.nonce);
@@ -109,7 +120,7 @@ export class TransactionExecutor extends BaseExecutor {
             this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=`, receipt.returnCode);
             return {err: ErrorCode.RESULT_INVALID_PARAM};
         }
-        receipt.transactionHash = this.m_tx.hash;
+        receipt.setSource({sourceType: ReceiptSourceType.transaction, txHash: this.m_tx.hash});
         if (receipt.returnCode) {
             this.m_logger.warn(`handler return code=${receipt.returnCode}, will rollback storage`);
             await work.value!.rollback();
@@ -128,7 +139,7 @@ export class TransactionExecutor extends BaseExecutor {
 
     protected async _execute(env: any, input: any): Promise<ErrorCode> {
         try {
-            this.m_logger.info(`will execute tx ${this.m_tx.hash}: ${this.m_tx.method}, params ${JSON.stringify(this.m_tx.input)}`);
+            this.m_logger.info(`will execute tx ${this.m_tx.hash}: ${this.m_tx.method},from ${this.m_tx.address}, params ${JSON.stringify(this.m_tx.input)}`);
             return await this.m_listener(env, this.m_tx.input);
         } catch (e) {
             this.m_logger.error(`execute method linstener e=`, e.stack);
@@ -140,16 +151,6 @@ export class TransactionExecutor extends BaseExecutor {
         let context = await super.prepareContext(blockHeader, storage, externContext);
 
         // 执行上下文
-        context.emit = (name: string, param?: any) => {
-            let log: EventLog = new EventLog();
-            log.name = name;
-            log.param = param;
-            this.m_logs.push(log);
-        };
-
-        // context.getCaller = ():string =>{
-        //     return this.m_tx.address!;
-        // };
 
         Object.defineProperty(
             context, 'caller', {
@@ -157,6 +158,12 @@ export class TransactionExecutor extends BaseExecutor {
                 value: this.m_tx.address!
             } 
         );
+
+        context.createAddress = () => {
+            let buf = Buffer.from(this.m_tx.address! + this.m_tx.nonce + this.m_addrIndex);
+            this.m_addrIndex++;
+            return addressFromPublicKey(buf);
+        };
 
         return context;
     }
@@ -166,12 +173,15 @@ export class EventExecutor extends BaseExecutor {
     protected m_listener: BlockHeightListener;
     protected m_bBeforeBlockExec = true;
 
-    constructor(listener: BlockHeightListener, logger: LoggerInstance) {
-        super(logger);
+    constructor(handler: BaseHandler, listener: BlockHeightListener, logger: LoggerInstance) {
+        super({
+            eventDefinations: handler.getEventDefinations(), 
+            logger 
+        });
         this.m_listener = listener;
     }
 
-    public async execute(blockHeader: BlockHeader, storage: Storage, externalContext: any): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
+    public async execute(blockHeader: BlockHeader, storage: Storage, externalContext: any): Promise<{err: ErrorCode, receipt?: Receipt}> {
         this.m_logger.debug(`execute event on ${blockHeader.number}`);
         let context: any = await this.prepareContext(blockHeader, storage, externalContext);
         let work = await storage.beginTransaction();
@@ -179,7 +189,8 @@ export class EventExecutor extends BaseExecutor {
             this.m_logger.error(`eventexecutor, beginTransaction error,storagefile=${storage.filePath}`);
             return {err: work.err};
         }
-        let returnCode: ErrorCode;
+        let receipt = new Receipt();
+        let returnCode;
         try {
             returnCode = await this.m_listener(context);
         } catch (e) {
@@ -189,10 +200,10 @@ export class EventExecutor extends BaseExecutor {
         assert(isNumber(returnCode), `event handler return code invalid ${returnCode}`);
         if (!isNumber(returnCode)) {
             this.m_logger.error(`execute event failed for invalid return code`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            returnCode = ErrorCode.RESULT_INVALID_PARAM;
         }
-
-        if (returnCode === ErrorCode.RESULT_OK) {
+        receipt.returnCode = returnCode;
+        if (receipt.returnCode === ErrorCode.RESULT_OK) {
             this.m_logger.debug(`event handler commit storage`);
             let err = await work.value!.commit();
             if (err) {
@@ -204,6 +215,6 @@ export class EventExecutor extends BaseExecutor {
             await work.value!.rollback();
         }
        
-        return {err: ErrorCode.RESULT_OK, returnCode};
+        return {err: ErrorCode.RESULT_OK, receipt};
     }
 }

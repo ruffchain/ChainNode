@@ -8,33 +8,50 @@ import {ValueBlockHeader} from './block';
 export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();
 
-    public async addTransaction(tx: ValueTransaction): Promise<ErrorCode> {
-        let br = await this.getBalance(tx.address as string);
+    protected async _onCheck(txTime: TransactionWithTime,  txOld?: TransactionWithTime): Promise<ErrorCode> {
+        let ret = await super._onCheck(txTime, txOld);
+        if (ret) {
+            return ret;
+        }
+
+        let br = await this.getBalance(txTime.tx.address as string);
         if (br.err) {
             return br.err;
         }
         let balance = br.value!;
-        let totalUse: BigNumber = tx.value;
-        if (balance.lt(totalUse.plus(tx.fee))) {
-            this.m_logger.error(`addTransaction failed, need fee ${tx.fee.toString()} but balance ${balance.toString()}`);
+        let txValue: ValueTransaction = txTime.tx as ValueTransaction;
+        let totalUse: BigNumber = txValue.value.plus(txValue.fee);
+        if (txOld) {
+            let txOldValue: ValueTransaction = txOld.tx as ValueTransaction;
+            totalUse = totalUse.minus(txOldValue.value).minus(txOldValue.fee);
+        }
+        if (balance.lt(totalUse)) {
+            this.m_logger.error(`addTransaction failed, need total ${totalUse.toString()} but balance ${balance.toString()}`);
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
-
-        let err = await super.addTransaction(tx);
-        if (err) {
-            return err;
+        return ErrorCode.RESULT_OK;
+    }
+    protected async _onAddedTx(txTime: TransactionWithTime, txOld?: TransactionWithTime): Promise<ErrorCode> {
+        let br = await this.getBalance(txTime.tx.address as string);
+        if (br.err) {
+            return br.err;
         }
+        let balance = br.value!;
+        let txValue: ValueTransaction = txTime.tx as ValueTransaction;
+        if (txOld) {
+            let txOldValue: ValueTransaction = txOld.tx as ValueTransaction;
+            balance = balance.plus(txOldValue.fee).plus(txOldValue.value).minus(txValue.fee).minus(txValue.value); 
+        } else {
+            balance = balance.minus(txValue.fee).minus(txValue.value);
+        }
+        this.m_balance.set(txTime.tx.address as string, balance);
 
-        return this._updateBalance(tx.address as string, balance.minus(totalUse));
+        return await super._onAddedTx(txTime);
     }
 
     public async updateTipBlock(header: ValueBlockHeader): Promise<ErrorCode> {
-        let err = super.updateTipBlock(header);
-        if (err) {
-            return err;
-        }
         this.m_balance = new Map();
-        return err;
+        return await super.updateTipBlock(header);
     }
 
     protected async getStorageBalance(s: string): Promise<{err: ErrorCode, value?: BigNumber}> {
@@ -70,7 +87,7 @@ export class ValuePendingTransactions extends PendingTransactions {
         return this.getStorageBalance(s);
     }
 
-    protected async checkSmallNonceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<ErrorCode> {
+    protected async _checkSmallNonceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<ErrorCode> {
         if (txNew.fee.gt(txOld.fee)) {
             return ErrorCode.RESULT_OK;
         }
@@ -78,21 +95,8 @@ export class ValuePendingTransactions extends PendingTransactions {
         return ErrorCode.RESULT_FEE_TOO_SMALL;
     }
 
-    protected async _updateBalance(address: string, v: BigNumber): Promise<ErrorCode> {
-        let br = await this.getStorageBalance(address);
-        if (br.err) {
-            return br.err;
-        }
-        if (br.value!.isEqualTo(v) && this.m_balance.has(address)) {
-            this.m_balance.delete(address);
-        } else {
-            this.m_balance.set(address, v);
-        }
-        return ErrorCode.RESULT_OK;
-    }
-
-    protected addToQueue(txTime: TransactionWithTime) {
-        let pos: number = 0;
+    protected _addToQueue(txTime: TransactionWithTime, pos: number) {
+        pos = 0;
         for (let i = 0; i < this.m_transactions.length; i++) {
             if (this.m_transactions[i].tx.address === txTime.tx.address) {
                 pos = this.m_transactions[i].tx.nonce < txTime.tx.nonce ? i + 1 : i;
@@ -101,15 +105,19 @@ export class ValuePendingTransactions extends PendingTransactions {
             }
         }
         this.m_transactions.splice(pos, 0, txTime);
-        this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce);
     }
 
-    protected async onReplaceTx(txNew: ValueTransaction, txOld: ValueTransaction): Promise<void> {
-        let br = await this.getBalance(txNew.address as string);
-        if (br.err) {
-            return ;
+    public popTransactionWithFee(maxFee: BigNumber): ValueTransaction[] {
+        let txs: ValueTransaction[] = [];
+        let total: BigNumber = new BigNumber(0);
+        for (let pos = 0; pos < this.m_transactions.length; pos++) {
+            total = total.plus((this.m_transactions[pos].tx as ValueTransaction).fee);
+            if (total.gt(maxFee)) {
+                break;
+            }
+            txs.push(this.m_transactions[pos].tx as ValueTransaction);
         }
-        await this._updateBalance(txNew.address as string, br.value!.plus(txOld.value).minus(txNew.value).plus(txOld.fee).minus(txNew.fee));
-        return ;
+
+        return txs;
     }
 }

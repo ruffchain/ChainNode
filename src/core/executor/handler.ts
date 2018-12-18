@@ -1,11 +1,15 @@
 import {ErrorCode} from '../error_code';
 import {Transaction} from '../block';
+import { isNullOrUndefined } from 'util';
 
 export type TxListener = (context: any, params: any) => Promise<ErrorCode>;
 export type TxPendingChecker = (tx: Transaction) => ErrorCode;
 export type BlockHeigthFilter = (height: number) => Promise<boolean>;
 export type BlockHeightListener = (context: any) => Promise<ErrorCode>;
 export type ViewListener = (context: any, params: any) => Promise<any>;
+
+export type ChainEventDefination = {indices?: string[]};
+export type ChainEventDefinations = Map<string, ChainEventDefination>;
 
 export class BaseHandler {
     protected m_txListeners: Map<string, {listener: TxListener, checker?: TxPendingChecker}> = new Map();
@@ -53,6 +57,10 @@ export class BaseHandler {
         return this.m_viewListeners.get(name) as ViewListener;
     }
 
+    public getViewMethodNames(): Array<string> {
+        return [...this.m_viewListeners.keys()];
+    }
+
     public addPreBlockListener(filter: BlockHeigthFilter, listener: BlockHeightListener) {
         this.m_preBlockListeners.push({filter, listener});
     }
@@ -61,23 +69,40 @@ export class BaseHandler {
         this.m_postBlockListeners.push({filter, listener});
     }
 
-    public getPreBlockListeners(h: number): BlockHeightListener[] {
+    public getPreBlockListeners(h?: number): {index: number, listener: BlockHeightListener}[] {
         let listeners = [];
-        for (let l of this.m_preBlockListeners) {
-            if (l.filter(h)) {
-                listeners.push(l.listener);
-            }
+        for (let index = 0; index < this.m_preBlockListeners.length; ++index) {
+            let s = this.m_preBlockListeners[index];
+            if (isNullOrUndefined(h) || s.filter(h)) {
+                listeners.push({listener: s.listener, index});
+            } 
         }
         return listeners;
     }
 
-    public getPostBlockListeners(h: number): BlockHeightListener[] {
+    public getPostBlockListeners(h: number): {index: number, listener: BlockHeightListener}[] {
         let listeners = [];
-        for (let l of this.m_postBlockListeners) {
-            if (l.filter(h)) {
-                listeners.push(l.listener);
-            }
+        for (let index = 0; index < this.m_postBlockListeners.length; ++index) {
+            let s = this.m_postBlockListeners[index];
+            if (isNullOrUndefined(h) || s.filter(h)) {
+                listeners.push({listener: s.listener, index});
+            } 
         }
         return listeners;
     }
+
+    defineEvent(name: string, def: ChainEventDefination) {
+        this.m_eventDefinations.set(name, def);
+    }
+
+    getEventDefination(name: string): ChainEventDefination|undefined {
+        return this.m_eventDefinations.get(name);
+    }
+
+    getEventDefinations(): ChainEventDefinations {
+        const d = this.m_eventDefinations;
+        return d;
+    }
+
+    protected m_eventDefinations: ChainEventDefinations = new Map();
 }

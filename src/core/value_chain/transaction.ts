@@ -56,7 +56,7 @@ export class ValueTransaction extends Transaction {
     stringify(): any {
         let obj = super.stringify();
         obj.value = this.value.toString();
-        obj.fee = this.value.toString();
+        obj.fee = this.fee.toString();
         return obj;
     }
 }

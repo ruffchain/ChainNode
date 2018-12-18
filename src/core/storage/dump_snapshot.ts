@@ -37,7 +37,7 @@ export class StorageDumpSnapshot {
 
     public remove(): ErrorCode {
         if (fs.existsSync(this.filePath!)) {
-            fs.removeSync(this.filePath!);
+            fs.unlinkSync(this.filePath!);
             return ErrorCode.RESULT_OK;
         }
         return ErrorCode.RESULT_NOT_FOUND;
@@ -48,7 +48,8 @@ export type StorageSnapshotManagerOptions = {
     path: string,
     headerStorage: IHeaderStorage, 
     storageType: new (options: StorageOptions) => Storage,
-    logger: LoggerInstance
+    logger: LoggerInstance,
+    readonly?: boolean
 };
 
 export interface IStorageSnapshotManager {

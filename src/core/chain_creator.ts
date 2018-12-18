@@ -1,21 +1,32 @@
-import { ErrorCode } from './error_code';
-import { LoggerInstance, initLogger, LoggerOptions } from './lib/logger_util';
-import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner } from './chain';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as process from 'process';
+import { ErrorCode } from './error_code';
+import { LoggerInstance, initLogger, LoggerOptions } from './lib/logger_util';
+import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner, NetworkCreator } from './chain';
+
+export type ChainCreatorConfig = {handler: BaseHandler, 
+    typeOptions: ChainTypeOptions, 
+    globalOptions: ChainGlobalOptions};
 
 type ChainTypeInstance = {
     newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): BaseHandler;
-    newChain(creator: ChainCreator, typeOptions: ChainTypeOptions): Chain;
-    newMiner(creator: ChainCreator, typeOptions: ChainTypeOptions): Miner; 
+    newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): Chain;
+    newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): Miner; 
 };
 
 export class ChainCreator {
     private m_logger: LoggerInstance;
     private m_instances: Map<string, ChainTypeInstance> = new Map();
-    constructor(options: LoggerOptions) {
+    private m_networkCreator: NetworkCreator;
+
+    constructor(options: LoggerOptions & {networkCreator: NetworkCreator}) {
         this.m_logger = initLogger(options);
+        this.m_networkCreator = options.networkCreator;
+    }
+
+    public get networkCreator(): NetworkCreator {
+        return this.m_networkCreator;
     }
 
     public registerChainType(consesus: string, instance: ChainTypeInstance) {
@@ -64,7 +75,7 @@ export class ChainCreator {
         if (lcr.err) {
             return {err: lcr.err};
         }
-        let err = await cmir.miner!.create(lcr.config!.globalOptions, genesisOptions);
+        let err = await cmir.miner!.create(genesisOptions);
         if (err) {
             return {err};
         }
@@ -153,15 +164,15 @@ export class ChainCreator {
         if (!instance) {
             return {err: ErrorCode.RESULT_INVALID_TYPE};
         }
-        let miner = instance.newMiner(this, lcr.config!.typeOptions);
-        let err = await miner.initComponents(dataDir, lcr.config!.handler);
+        let miner = instance.newMiner(this, dataDir, lcr.config!);
+        let err = await miner.initComponents();
         if (err) {
             return {err};
         }
         return {err: ErrorCode.RESULT_OK, miner, globalOptions: lcr.config!.globalOptions};
     }
 
-    public async createChainInstance(dataDir: string, options?: {readonly?: boolean}): Promise<{ err: ErrorCode, chain?: Chain, globalOptions?: any }> {
+    public async createChainInstance(dataDir: string, options: {readonly?: boolean, initComponents?: boolean}): Promise<{ err: ErrorCode, chain?: Chain}> {
         if (!path.isAbsolute(dataDir)) {
             dataDir = path.join(process.cwd(), dataDir);
         }
@@ -173,11 +184,13 @@ export class ChainCreator {
         if (!instance) {
             return {err: ErrorCode.RESULT_INVALID_TYPE};
         }
-        let chain = instance.newChain(this, lcr.config!.typeOptions);
-        let err = await chain.initComponents(dataDir, lcr.config!.handler, options);
-        if (err) {
-            return {err};
-        }
-        return {err: ErrorCode.RESULT_OK, chain, globalOptions: lcr.config!.globalOptions};
+        let chain = instance.newChain(this, dataDir, lcr.config!);
+        if (options.initComponents) {
+            let err = await chain.initComponents({readonly: options.readonly});
+            if (err) {
+                return {err};
+            }
+        } 
+        return {err: ErrorCode.RESULT_OK, chain};
     }
 }
