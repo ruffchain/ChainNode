@@ -49,10 +49,7 @@ export function SetFromObject(input: Array<any>): Set<any> {
     }
 
     let ret = new Set();
-    do {
-        const item = input.shift();
-        ret.add(item);
-    } while (input.length > 0);
+    input.forEach((v) => ret.add(v));
 
     return ret;
 }

@@ -4,6 +4,7 @@ import {ErrorCode} from '../error_code';
 import {Block, Transaction, Receipt, Storage, ReceiptSourceType} from '../chain';
 import {BaseHandler, TxListener, BlockHeightListener} from './handler';
 import {EventExecutor, TransactionExecutor, TransactionExecuteflag} from './transaction';
+import {BlockExecutorExternParam} from './external_param';
 import { LoggerInstance } from '../lib/logger_util';
 
 export type BlockExecutorOptions = {
@@ -12,7 +13,9 @@ export type BlockExecutorOptions = {
     handler: BaseHandler, 
     logger: LoggerInstance,
     externContext: any,
-    globalOptions: any
+    globalOptions: any,
+    // 额外参数
+    externParams: BlockExecutorExternParam[],
 };
 
 export class BlockExecutor {
@@ -22,12 +25,15 @@ export class BlockExecutor {
     protected m_externContext: any;
     protected m_logger: LoggerInstance;
     protected m_globalOptions: any;
+    protected m_externParams: any;
+
     constructor(options: BlockExecutorOptions) {
         this.m_storage = options.storage;
         this.m_handler = options.handler;
         this.m_block = options.block;
         this.m_externContext = options.externContext;
         this.m_logger = options.logger;
+        this.m_externParams = options.externParams.slice(0);
         Object.defineProperty(
             this.m_externContext, 'logger', {
                 writable: false,
@@ -35,6 +41,12 @@ export class BlockExecutor {
             }
         );
         this.m_globalOptions = options.globalOptions;
+    }
+
+    public finalize() {
+        for (const ep of this.m_externParams) {
+            ep.finalize();
+        }
     }
 
     public get externContext(): any {

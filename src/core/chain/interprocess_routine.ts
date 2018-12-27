@@ -15,6 +15,7 @@ import {Storage} from '../storage';
 import {SqliteStorage} from '../storage_sqlite/storage';
 import {BlockExecutorRoutine, IBlockExecutorRoutineManager, BlockExecutorRoutineState} from './executor_routine';
 import {Chain} from './chain';
+import { BlockExecutorExternParam } from '../executor';
 
 enum RoutineType {
     execute, 
@@ -26,24 +27,25 @@ export type BlockExecutorWorkerRoutineParams = {
     name: string, 
     chain: Chain,
     block: Block, 
-    storage: Storage
+    storage: Storage,
+    externParams: BlockExecutorExternParam[]
 };
 
 export type BlockExecutorWorkerRoutineResult = {
-        err: ErrorCode,
-        chain: Chain, 
-        name: string,
-        type: RoutineType,   
-        block?: Block, 
-        storage?: Storage,
-        valid?: ErrorCode
-    };
+    err: ErrorCode,
+    chain: Chain, 
+    name: string,
+    type: RoutineType,   
+    block?: Block, 
+    storage?: Storage,
+    valid?: ErrorCode
+};
 
 export class BlockExecutorWorkerRoutine {
     constructor() {
     }
 
-    static encodeParams(params: BlockExecutorWorkerRoutineParams): {err: ErrorCode, message?: any} {
+    static async encodeParams(params: BlockExecutorWorkerRoutineParams): Promise<{err: ErrorCode, message?: any}> {
         const writer = new BufferWriter();
         let err;
         if (params.type === RoutineType.execute) {
@@ -65,14 +67,20 @@ export class BlockExecutorWorkerRoutine {
             params.chain.logger.error(`write block to ${blockPath} failed `, e);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        
+
+        const epr = await params.chain.executorParamCreator.interprocessEncode(params.externParams);
+        if (epr.err) {
+            return {err: epr.err};
+        }
+
         try {
             const message = {
                 type: params.type, 
                 name: params.name, 
                 dataDir: params.chain.dataDir, 
                 blockPath, 
-                storagePath: params.storage.filePath
+                storagePath: params.storage.filePath,
+                externParams: epr.encoded
             };
             return {err: ErrorCode.RESULT_OK, message};
         } catch (e) {
@@ -122,7 +130,20 @@ export class BlockExecutorWorkerRoutine {
             return {err};
         }
 
-        return {err: ErrorCode.RESULT_OK, params: {type: message.type, chain, storage, block, name: message.name}};
+        const dpr = await chain.executorParamCreator.interprocessDecode(message.externParams);
+        if (dpr.err) {
+            return {err: dpr.err};
+        }
+        return {
+            err: ErrorCode.RESULT_OK, 
+            params: {
+                type: message.type, 
+                chain, 
+                storage, 
+                block, 
+                name: message.name,
+                externParams: dpr.params!
+            }};
     }
 
     static encodeResult(result: BlockExecutorWorkerRoutineResult): {err: ErrorCode, message?: any} {
@@ -249,7 +270,7 @@ export class BlockExecutorWorkerRoutine {
         result.type = params.type;
         do {
             params.storage.createLogger();
-            const nber = await params.chain.newBlockExecutor(params.block, params.storage);
+            const nber = await params.chain.newBlockExecutor(params);
             if (nber.err) {
                 result.err = nber.err;
                 break;
@@ -290,7 +311,7 @@ export class InterprocessRoutineManager implements IBlockExecutorRoutineManager 
             name: options.name, 
             chain: this.m_chain,
             block: options.block,
-            storage: options.storage
+            storage: options.storage,
         });
         return {err: ErrorCode.RESULT_OK, routine};
     }
@@ -307,7 +328,7 @@ class InterprocessRoutine extends BlockExecutorRoutine {
             name: options.name, 
             logger: options.chain.logger,
             block: options.block,
-            storage: options.storage
+            storage: options.storage,
         });
         this.m_chain = options.chain;
     }
@@ -324,12 +345,17 @@ class InterprocessRoutine extends BlockExecutorRoutine {
         this.m_state = BlockExecutorRoutineState.running;
         
         this.m_worker = new WorkerProxy(this.m_logger);
+        const epr = await this.m_chain.prepareExternParams(this.m_block, this.m_storage);
+        if (epr.err) {
+            return {err: epr.err};
+        }
         const result = await this.m_worker.run({
             type, 
             name: this.m_name, 
             chain: this.m_chain, 
             block: this.m_block,
-            storage: this.m_storage
+            storage: this.m_storage,
+            externParams: epr.params!
         });
         if (this.m_cancelSet) {
             return {err: ErrorCode.RESULT_CANCELED};
@@ -372,7 +398,7 @@ class WorkerProxy {
 
     async run(params: BlockExecutorWorkerRoutineParams): Promise<BlockExecutorWorkerRoutineResult> {
         await params.storage.uninit();
-        const epr = BlockExecutorWorkerRoutine.encodeParams(params);
+        const epr = await BlockExecutorWorkerRoutine.encodeParams(params);
         if (epr.err) {
             return {err: ErrorCode.RESULT_INVALID_PARAM, type: params.type, chain: params.chain, name: params.name};
         }

@@ -21,31 +21,8 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
         return await this._verifyMiner(chain);
     }
 
-    public async getTimeIndex(chain: Chain): Promise<{err: ErrorCode, index?: number}> {
-        let hr = await chain.getHeader(0);
-        if (hr.err) {
-            return {err: hr.err};
-        }
-        // TODO: 可以兼容一些误差?
-        let offset = this.timestamp - hr.header!.timestamp;
-        if (offset < 0) {
-            chain.logger.error(`error offset ${offset}, timestamp ${this.timestamp}, genesis ${hr.header!.timestamp}`);
-            return {err: ErrorCode.RESULT_OK};
-        }
-        // 不能偏离太远
-        let src = Math.trunc(offset / chain.globalOptions.blockInterval);
-        let min = Math.trunc((offset - chain.globalOptions.maxBlockIntervalOffset) / chain.globalOptions.blockInterval);
-        let max = Math.trunc((offset + chain.globalOptions.maxBlockIntervalOffset) / chain.globalOptions.blockInterval);
-        if (src === min && src === max) {
-            return {err: ErrorCode.RESULT_OK, index: src};
-        } else if (src !== min) {
-            return {err: ErrorCode.RESULT_OK, index: src};
-        } else if (src !== max) {
-            return {err: ErrorCode.RESULT_OK, index: max};
-        } else {
-            assert(false);
-            return {err: ErrorCode.RESULT_OK};
-        }
+    public getTimeIndex(chain: Chain): number {
+        return Math.ceil((this.timestamp - (chain as DposChain).epochTime) / chain.globalOptions.blockInterval) + 1;
     }
 
     private async _verifyMiner(chain: Chain): Promise<{ err: ErrorCode, valid?: boolean }> {
@@ -75,25 +52,17 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
         if (!this.number) {
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        let tir = await this.getTimeIndex(chain);
-        if (tir.err) {
-            chain.logger.error(`getTimeIndex failed, err ${tir.err}`);
-            return {err: tir.err};
-        }
-        if (!tir.index) {
-            chain.logger.error(`getTimeIndex failed, no tir.index`);
-            return {err: ErrorCode.RESULT_OK};
-        }
-        
-        let thisIndex = tir.index;
+        let thisIndex = this.getTimeIndex(chain as DposChain);
+
         let gcr = await (chain as DposChain).getMiners(this);
         if (gcr.err) {
             chain.logger.error(`getMiners failed, err ${gcr.err}`);
             return {err: gcr.err};
         }
+
         let electionHeader = gcr.header!;
-        tir = await electionHeader.getTimeIndex(chain);
-        let electionIndex = tir.index!;
+        let electionIndex = electionHeader.getTimeIndex(chain as DposChain);
+
         let index = (thisIndex - electionIndex) % gcr.creators!.length;
         if (index < 0) {
             chain.logger.error(`calcute index failed, thisIndex ${thisIndex}, electionIndex ${electionIndex}, creators length ${gcr.creators!.length}`);

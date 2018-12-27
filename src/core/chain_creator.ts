@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import * as process from 'process';
 import { ErrorCode } from './error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from './lib/logger_util';
-import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner, NetworkCreator } from './chain';
+import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner, NetworkCreator, BlockExecutorExternParamCreator } from './chain';
 
 export type ChainCreatorConfig = {handler: BaseHandler, 
     typeOptions: ChainTypeOptions, 
@@ -23,6 +23,7 @@ export class ChainCreator {
     constructor(options: LoggerOptions & {networkCreator: NetworkCreator}) {
         this.m_logger = initLogger(options);
         this.m_networkCreator = options.networkCreator;
+        
     }
 
     public get networkCreator(): NetworkCreator {

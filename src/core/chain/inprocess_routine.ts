@@ -3,7 +3,7 @@ import {Block, Transaction, Receipt} from '../block';
 import {Storage} from '../storage';
 import {BlockExecutorRoutine, IBlockExecutorRoutineManager, BlockExecutorRoutineState} from './executor_routine';
 import {Chain} from './chain';
-import { BlockExecutor, BlockHeightListener, TransactionExecuteflag } from '../executor';
+import { BlockExecutor, BlockHeightListener, TransactionExecuteflag, BlockExecutorExternParam } from '../executor';
 
 export class InprocessRoutineManager implements IBlockExecutorRoutineManager {
     constructor(chain: Chain) {
@@ -33,7 +33,7 @@ class InprogressRoutine extends BlockExecutorRoutine {
             name: options.name, 
             logger: options.chain.logger,
             block: options.block,
-            storage: options.storage
+            storage: options.storage,
         });
         this.m_chain = options.chain;
     }
@@ -58,6 +58,9 @@ class InprogressRoutine extends BlockExecutorRoutine {
         if (this.m_cancelSet && !this.m_canceled) {
             this.m_canceled = true;
         }
+
+        await ner.executor!.finalize();
+
         this.m_state = BlockExecutorRoutineState.finished;
         if (this.m_canceled) {
             return {err: ErrorCode.RESULT_CANCELED};
@@ -81,6 +84,9 @@ class InprogressRoutine extends BlockExecutorRoutine {
         if (this.m_cancelSet && !this.m_canceled) {
             this.m_canceled = true;
         }
+
+        await ner.executor!.finalize();
+
         this.m_state = BlockExecutorRoutineState.finished;
         if (this.m_canceled) {
             return {err: ErrorCode.RESULT_CANCELED};
@@ -100,7 +106,7 @@ class InprogressRoutine extends BlockExecutorRoutine {
     }
 
     protected async _newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let nber = await this.m_chain.newBlockExecutor(block, storage);
+        let nber = await this.m_chain.newBlockExecutor({block, storage});
         if (nber.err) {
             this.m_canceled = true;
             return nber;

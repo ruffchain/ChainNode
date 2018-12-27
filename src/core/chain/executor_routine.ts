@@ -3,7 +3,6 @@ import { ErrorCode } from '../error_code';
 import { LoggerInstance } from '../lib/logger_util';
 import {Block} from '../block';
 import {StorageManager, Storage} from '../storage';
-import { BlockExecutor } from '../executor';
 
 export interface IBlockExecutorRoutineManager {
     create(options: { name: string, block: Block, storage: Storage}): {err: ErrorCode, routine: BlockExecutorRoutine};

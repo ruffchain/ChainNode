@@ -19,9 +19,11 @@ class InnerChain extends DposChain {
 }
 
 export class DposMiner extends ValueMiner {
-    private m_secret?: Buffer;
+    protected m_secret?: Buffer;
     private m_address?: string;
     private m_timer?: NodeJS.Timer;
+    protected m_nowSlot: number = 0;
+    protected m_epochTime: number = 0;
 
     get chain(): DposChain {
         return this.m_chain as DposChain;
@@ -70,10 +72,24 @@ export class DposMiner extends ValueMiner {
         if (err) {
             return err;
         }
+
+        let hr = await this.m_chain!.getHeader(0);
+        if (hr.err) {
+            return hr.err;
+        }
+        this.m_epochTime = hr.header!.timestamp;
+        let now = Date.now() / 1000;
+        let blockInterval = this.m_chain!.globalOptions.blockInterval;
+        this.m_nowSlot = Math.floor((now - this.m_epochTime) / blockInterval) + 1;
+
         this.m_logger.info(`begin Mine...`);
         this._resetTimer();
 
         return ErrorCode.RESULT_OK;
+    }
+
+    protected createHeader(): DposBlockHeader {
+        return new DposBlockHeader();
     }
 
     protected async _resetTimer(): Promise<ErrorCode> {
@@ -90,10 +106,17 @@ export class DposMiner extends ValueMiner {
         this.m_timer = setTimeout(async () => {
             delete this.m_timer;
             let now = Date.now() / 1000;
+            if (now >= this.m_nowSlot * this.m_chain!.globalOptions.blockInterval + this.m_epochTime) {
+                // 都到了当前slot的右边缘时间（下个slot的开始时间）了才执行，难道是程序太卡导致timer延后了，不管如何不出块
+                this._resetTimer();
+                return;
+            }
+
             let tip = this.m_chain!.tipBlockHeader! as DposBlockHeader;
-            let blockHeader = new DposBlockHeader();
+            let blockHeader = this.createHeader();
             blockHeader.setPreBlock(tip);
-            blockHeader.timestamp = now;
+            // 都以当前slot的左边缘时间为块的时间,便于理解和计算。
+            blockHeader.timestamp = this.m_epochTime + (this.m_nowSlot - 1) * this.m_chain!.globalOptions.blockInterval;
             blockHeader.pubkey = (Address.publicKeyFromSecretKey(this.m_secret!) as Buffer);
             let dmr = await blockHeader.getDueMiner(this.m_chain as Chain);
             if (dmr.err) {
@@ -121,14 +144,16 @@ export class DposMiner extends ValueMiner {
     }
 
     protected async _nextBlockTimeout(): Promise<{err: ErrorCode, timeout?: number}> {
-        let hr = await this.m_chain!.getHeader(0);
-        if (hr.err) {
-            return {err: hr.err};
-        }
-        let now = Date.now() / 1000;
-        let blockInterval = this.m_chain!.globalOptions.blockInterval;
-        let nextTime = (Math.floor((now - hr.header!.timestamp) / blockInterval) + 1) * blockInterval;
-
-        return {err: ErrorCode.RESULT_OK, timeout: (nextTime + hr.header!.timestamp - now) * 1000};
+        let blockInterval: number = this.m_chain!.globalOptions.blockInterval;
+        do {
+            this.m_nowSlot++;
+            let nowSlotBeginTimeOffset: number = (this.m_nowSlot - 1) * blockInterval; 
+            let now = Date.now() / 1000;
+            if (this.m_epochTime + nowSlotBeginTimeOffset > now) {
+                let ret = {err: ErrorCode.RESULT_OK, timeout: (this.m_epochTime + nowSlotBeginTimeOffset - now) * 1000};
+                this.m_logger.debug(`dpos _nextTimeout nowslot=${this.m_nowSlot}, timeout=${ret.timeout}`);
+                return ret;
+            }
+        } while (true);
     }
 }

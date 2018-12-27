@@ -1,6 +1,6 @@
 import {ErrorCode} from '../error_code';
 import {isNullOrUndefined} from 'util';
-import {Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableKeyValue, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor, ChainContructOptions} from '../value_chain';
+import {Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableKeyValue, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor, ChainContructOptions, BlockExecutorExternParam} from '../value_chain';
 import {DbftBlockHeader} from './block';
 import {DbftContext} from './context';
 import {DbftBlockExecutor} from './executor';
@@ -35,11 +35,11 @@ export class DbftChain extends ValueChain {
     }
 
     // 不会分叉
-    protected get _morkSnapshot(): boolean {
-        return false;
+    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
+        return {err: ErrorCode.RESULT_OK};
     }
 
-    public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
@@ -76,7 +76,15 @@ export class DbftChain extends ValueChain {
             return im.isminer!;
         };
 
-        let executor = new DbftBlockExecutor({logger: this.logger, block, storage, handler: this.m_handler, externContext: externalContext, globalOptions: this.m_globalOptions});
+        let executor = new DbftBlockExecutor({
+            logger: this.logger, 
+            block, 
+            storage, 
+            handler: this.m_handler, 
+            externContext: externalContext, 
+            globalOptions: this.m_globalOptions,
+            externParams
+        });
         return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
     }
 
@@ -226,5 +234,9 @@ export class DbftChain extends ValueChain {
             return ir.err;
         }
         return ErrorCode.RESULT_OK;
+    }
+
+    public getLastIrreversibleBlockNumber() {
+        return this.m_tip!.number;
     }
 }

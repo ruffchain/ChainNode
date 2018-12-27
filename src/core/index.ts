@@ -32,6 +32,8 @@ import {BdtNode} from './net_bdt/node';
 import {RandomOutNetwork} from './block/random_outbound_network';
 import {ValidatorsNetwork} from './dbft_chain/validators_network';
 
+import {DposBftNetwork, DposBftChain, DposBftMiner} from './dpos_bft_chain';
+
 export function initChainCreator(options: LoggerOptions): ChainCreator {
     const logger = initLogger(options);
     const networkCreator = new NetworkCreator({logger});
@@ -150,6 +152,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
 
     networkCreator.registerNetwork('random', RandomOutNetwork);
     networkCreator.registerNetwork('validators', ValidatorsNetwork);
+    networkCreator.registerNetwork('dposbft', DposBftNetwork);
 
     let _creator = new ChainCreator({logger, networkCreator});
     _creator.registerChainType('pow', { 
@@ -183,6 +186,17 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         },
         newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DbftMiner {
             return new DbftMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+        }
+    });
+    _creator.registerChainType('dposbft', { 
+        newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
+            return new ValueHandler();
+        }, 
+        newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposBftChain {
+            return new DposBftChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+        },
+        newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposBftMiner {
+            return new DposBftMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         }
     });
     return _creator;

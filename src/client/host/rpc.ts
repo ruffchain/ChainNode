@@ -122,6 +122,12 @@ export class ChainServer {
             await promisify(resp.write.bind(resp)(JSON.stringify(peers)));
             await promisify(resp.end.bind(resp)());
         });
+
+        this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
+            let num = this.m_chain.getLastIrreversibleBlockNumber();
+            await promisify(resp.write.bind(resp)(JSON.stringify(num)));
+            await promisify(resp.end.bind(resp)());
+        });
     }
 
     private m_chain: Chain;

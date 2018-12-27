@@ -9,17 +9,17 @@ import { isNumber, isBoolean, isString, isNullOrUndefined, isArray, isObject } f
 import { ErrorCode, stringifyErrorCode } from '../error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 import { TmpManager } from '../lib/tmp_manager';
+import { MapFromObject} from '../serializable';
 
 import { INode, NodeConnection } from '../net/node';
 import { IHeaderStorage, HeaderStorage, VERIFY_STATE, BlockStorage, Transaction, Receipt, BlockHeader, Block, Network, BAN_LEVEL, NetworkInstanceOptions, NetworkCreator } from '../block';
 import { StorageManager, Storage, StorageDumpSnapshot, IReadableStorage, IReadableDatabase, IReadWritableDatabase, StorageLogger } from '../storage';
 import { SqliteStorage } from '../storage_sqlite/storage';
-import { BlockExecutor, ViewExecutor, BaseHandler } from '../executor';
+import { BlockExecutor, ViewExecutor, BaseHandler, BlockExecutorExternParam, BlockExecutorExternParamCreator } from '../executor';
 
 import { PendingTransactions } from './pending';
 import { ChainNode, HeadersEventParams, BlocksEventParams} from './chain_node';
 import { IBlockExecutorRoutineManager, BlockExecutorRoutine } from './executor_routine';
-import { MapFromObject } from '../../client';
 
 export type ExecutorContext = {
     now: number;
@@ -83,7 +83,12 @@ type SyncConnection = {
     moreHeaders?: boolean
 };
 
-export type ChainContructOptions =  LoggerOptions & {dataDir: string, handler: BaseHandler, globalOptions: any, networkCreator: NetworkCreator};
+export type ChainContructOptions =  LoggerOptions & {
+    dataDir: string, 
+    handler: BaseHandler, 
+    globalOptions: any, 
+    networkCreator: NetworkCreator, 
+};
 
 export class Chain extends EventEmitter {
     public static dataDirValid(dataDir: string): boolean {
@@ -110,6 +115,7 @@ export class Chain extends EventEmitter {
         Object.assign(this.m_globalOptions, options.globalOptions);
         this.m_tmpManager = new TmpManager({root: this.m_dataDir, logger: this.logger});
         this.m_networkCreator = options.networkCreator;
+        this.m_executorParamCreator = new BlockExecutorExternParamCreator({logger: this.m_logger});
     }
 
     // 存储address入链的tx的最大nonce
@@ -148,8 +154,7 @@ export class Chain extends EventEmitter {
     protected m_instanceOptions?: ChainInstanceOptions;
     protected m_globalOptions: ChainGlobalOptions;
     private m_state: ChainState = ChainState.none;
-    private m_tip?: BlockHeader;
-    private m_refSnapshots: string[] = [];
+    protected m_tip?: BlockHeader;
     private m_constSnapshots: string[] = [];
     protected m_db?: sqlite.Database;
     protected m_headerStorage?: IHeaderStorage;
@@ -167,8 +172,15 @@ export class Chain extends EventEmitter {
             sequence: new Array()
         };
     private m_node?: ChainNode;
+    private m_executorParamCreator: BlockExecutorExternParamCreator;
     private m_routineManager?: IBlockExecutorRoutineManager;
     private m_networkCreator: NetworkCreator;
+
+    private m_refSnapshots: Set<string> = new Set();
+    private m_storageMorkRequests: {
+        morking?: Set<string>,
+        pending?: Set<string>
+    } = {};
 
     // broadcast数目，广播header时会同时广播tip到这个深度的header
     protected get _broadcastDepth(): number {
@@ -193,10 +205,6 @@ export class Chain extends EventEmitter {
 
     protected get _saveMismatch(): boolean {
         return this.m_logger.level === 'debug';
-    }
-
-    protected get _morkSnapshot(): boolean {
-        return true;
     }
 
     protected m_connSyncMap: Map<string, SyncConnection> = new Map();
@@ -244,6 +252,10 @@ export class Chain extends EventEmitter {
 
     get tmpManager(): TmpManager {
         return this.m_tmpManager;
+    }
+
+    get executorParamCreator(): BlockExecutorExternParamCreator {
+        return this.m_executorParamCreator;
     }
     
     protected async _loadGenesis(): Promise<ErrorCode> {
@@ -668,41 +680,91 @@ export class Chain extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
+    protected async _morkSnapshot(hashes: Set<string>) {
+        this.m_logger.debug(`request to mork storage `, hashes);
+        if (this.m_storageMorkRequests.morking) {
+            if ( this.m_storageMorkRequests.pending) {
+                this.m_logger.debug(`ignore pending mork storage request`,  this.m_storageMorkRequests.pending);
+            }
+            this.m_storageMorkRequests.pending = new Set(hashes.values());
+            return ;
+        } 
+        this.m_storageMorkRequests.morking = new Set(hashes.values());
+
+        const doMork = async () => {
+            const morking = this.m_storageMorkRequests.morking!;
+            this.m_logger.debug(`begin to mork storage `, morking);
+            let toMork: string[] = [];
+            for (const blockHash of morking) {
+                if (!this.m_refSnapshots.has(blockHash)) {
+                    toMork.push(blockHash);
+                }
+            }
+            let toRelease: string[] = [];
+            for (const blockHash of this.m_refSnapshots) {
+                if (!morking.has(blockHash)) {
+                    toRelease.push(blockHash);
+                }
+            }
+            let morked: string[] = [];
+            for (const blockHash of toMork) {
+                this.logger.debug(`=============_updateTip get 2, hash=${blockHash}`);
+                const gsv = await this.m_storageManager!.getSnapshotView(blockHash);
+                this.logger.debug(`=============_updateTip get 2 1,hash=${blockHash}`);
+                if (gsv.err) {
+                    this.m_logger.error(`mork ${blockHash}'s storage failed`);
+                    continue;
+                }
+                morked.push(blockHash);
+            }
+            this.m_logger.debug(`morking release snapshots `, toRelease);
+            for (const hash of toRelease) {
+                this.m_storageManager!.releaseSnapshotView(hash);
+                this.m_refSnapshots.delete(hash);
+            }   
+            this.m_logger.debug(`morking add ref snapshots `, morked);
+            for (const hash of morked) {
+                this.m_refSnapshots.add(hash);
+            }
+
+            this.m_logger.debug(`recyclde snapshots`);
+            this.m_storageManager!.recycleSnapshot();
+        };
+                
+        while (this.m_storageMorkRequests.morking) {
+            await doMork();
+            delete this.m_storageMorkRequests.morking;
+            this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
+        }
+    }
+
     protected async _updateTip(tip: BlockHeader): Promise<ErrorCode> {
         this.m_tip = tip;
-        for (let blockHash of this.m_refSnapshots) {
-            this.m_storageManager!.releaseSnapshotView(blockHash);
+        let toMork = new Set([tip.hash]);
+        const msr = await this._onMorkSnapshot({tip, toMork});
+        if (msr.err) {
+            this.m_logger.error(`on mork snapshot failed for ${stringifyErrorCode(msr.err)}`);
         }
-        this.m_refSnapshots = [];
-
-        let gsv = await this.m_storageManager!.getSnapshotView(tip.hash);
-        if (gsv.err) {
-            return gsv.err;
-        }
-        this.m_refSnapshots.push(tip.hash);
-        if (this._morkSnapshot) {
-            let mork = tip.number - 2 * this._confirmDepth;
-            mork = mork >= 0 ? mork : 0;
-            if (mork !== tip.number) {
-                let hr = await this.m_headerStorage!.getHeader(mork);
-                if (hr.err) {
-                    return hr.err;
-                }
-                this.logger.info(`=============_updateTip get 2,number=${mork},hash=${hr.header!.hash}`);
-                gsv = await this.m_storageManager!.getSnapshotView(hr.header!.hash);
-                this.logger.info(`=============_updateTip get 2 1,number=${mork},hash=${hr.header!.hash}`);
-                if (gsv.err) {
-                    return gsv.err;
-                }
-                this.m_refSnapshots.push(hr.header!.hash);
-            }
-        }
-        this.m_storageManager!.recycleSnapShot();
+        this._morkSnapshot(toMork);
         let err = await this.m_pending!.updateTipBlock(tip);
         if (err) {
             return err;
         }
         return ErrorCode.RESULT_OK;
+    }
+
+    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
+        let mork = options.tip.number - 2 * this._confirmDepth;
+        mork = mork >= 0 ? mork : 0;
+        if (mork !== options.tip.number) {
+            let hr = await this.m_headerStorage!.getHeader(mork);
+            if (hr.err) {
+                this.m_logger.error(`get header ${mork} failed ${hr.err}`);
+                return {err: ErrorCode.RESULT_FAILED};
+            }
+            options.toMork.add(hr.header!.hash);
+        }
+        return {err: ErrorCode.RESULT_OK};
     }
 
     get tipBlockHeader(): BlockHeader | undefined {
@@ -721,9 +783,9 @@ export class Chain extends EventEmitter {
         return err;
     }
 
-    protected async _compareWork(left: BlockHeader, right: BlockHeader): Promise<{ err: ErrorCode, result?: number }> {
+    protected async _compareWork(comparedHeader: BlockHeader, bestChainTip: BlockHeader): Promise<{ err: ErrorCode, result?: number }> {
         // TODO: pow 用height并不安全， 因为大bits高height的工作量可能低于小bits低height 的工作量
-        return { err: ErrorCode.RESULT_OK, result: left.number - right.number };
+        return { err: ErrorCode.RESULT_OK, result: comparedHeader.number - bestChainTip.number };
     }
 
     protected async _addPendingHeaders(params: HeadersEventParams) {
@@ -996,7 +1058,7 @@ export class Chain extends EventEmitter {
                     return ErrorCode.RESULT_OK;
                 } else if (vsh.err === ErrorCode.RESULT_NOT_FOUND) {
                     // 找不到可能是因为落后太久了，先从当前tip请求吧
-                    let hsr = await this.getHeader(this.m_tip!, -this._confirmDepth + 1);
+                    let hsr = await this.getHeader(this.getLastIrreversibleBlockNumber());
                     if (hsr.err) {
                         return hsr.err;
                     }
@@ -1065,7 +1127,7 @@ export class Chain extends EventEmitter {
                     break;
                 } else if (headerResult.verified === VERIFY_STATE.invalid) {
                     this.m_logger.info(`ignore block for previous block has been verified as invalid`);
-                    this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.invalid);
+                    await this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.invalid);
                     err = ErrorCode.RESULT_INVALID_BLOCK;
                     break;
                 }
@@ -1137,8 +1199,6 @@ export class Chain extends EventEmitter {
             if (this.m_tip!.hash === block.header.hash) {
                 this.logger.debug(`emit tipBlock with ${this.m_tip!.hash} ${this.m_tip!.number}`);
                 this.emit('tipBlock', this, this.m_tip!);
-                // 在broadcast之前执行一次recycleSnapShot
-                this.m_storageManager!.recycleSnapShot();
                 let hr = await this.getHeader(this.m_tip!, -this._broadcastDepth);
                 if (hr.err) {
                     return hr.err;
@@ -1205,7 +1265,16 @@ export class Chain extends EventEmitter {
                 this.m_logger.error(`add verified block to chain failed for update verify state to header storage failed for ${err}`);
                 return err;
             }
+            err = await this._onForkedBlock(block);
+            if (err) {
+                return err;
+            }
+            
         }
+        return ErrorCode.RESULT_OK;
+    }
+
+    protected async _onForkedBlock(block: Block): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
     }
 
@@ -1226,8 +1295,32 @@ export class Chain extends EventEmitter {
         return block;
     }
 
-    public async newBlockExecutor(block: Block, storage: Storage): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
-        let executor = new BlockExecutor({logger: this.m_logger, block, storage, handler: this.m_handler, externContext: {}, globalOptions: this.m_globalOptions });
+    async newBlockExecutor(options: {block: Block, storage: Storage, externParams?: BlockExecutorExternParam[]}): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+        let {block, storage, externParams} = options;
+        if (!externParams) {
+            const ppr = await this.prepareExternParams(block, storage);
+            if (ppr.err) {
+                return {err: ppr.err};
+            }
+            externParams = ppr.params!;
+        } 
+        return this._newBlockExecutor(block, storage, externParams);
+    }
+
+    async prepareExternParams(block: Block, storage: Storage): Promise<{err: ErrorCode, params?: BlockExecutorExternParam[]}> {
+        return {err: ErrorCode.RESULT_OK, params: []};
+    }
+
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+        let executor = new BlockExecutor({
+            logger: this.m_logger, 
+            block, 
+            storage, 
+            handler: this.m_handler, 
+            externContext: {}, 
+            globalOptions: this.m_globalOptions,
+            externParams: []
+        });
         return { err: ErrorCode.RESULT_OK, executor };
     }
 
@@ -1258,7 +1351,7 @@ export class Chain extends EventEmitter {
         this.m_node!.on('outbound', async (conn: NodeConnection) => {
             let syncPeer = conn;
             assert(syncPeer);
-            let hr = await this.m_headerStorage!.getHeader((this.m_tip!.number > this._confirmDepth) ? (this.m_tip!.number - this._confirmDepth) : 0);
+            let hr = await this.m_headerStorage!.getHeader(this.getLastIrreversibleBlockNumber());
             if (hr.err) {
                 return hr.err;
             }
@@ -1464,6 +1557,14 @@ export class Chain extends EventEmitter {
     protected _getReceiptType(): new () => Receipt {
         return Receipt;
     }
+
+    public getLastIrreversibleBlockNumber() {
+        if (!this.m_tip || this.m_tip.number <= this._confirmDepth) {
+            return 0;
+        }
+
+        return this.m_tip.number - this._confirmDepth;
+    }
 }
 
 class VerifyBlockWithRedoLogRoutine extends BlockExecutorRoutine {
@@ -1471,8 +1572,14 @@ class VerifyBlockWithRedoLogRoutine extends BlockExecutorRoutine {
         block: Block, 
         storage: Storage,
         redoLog: StorageLogger
-        logger: LoggerInstance}) {
-        super(options);
+        logger: LoggerInstance
+    }) {
+        super({
+            name: options.name, 
+            block: options.block,
+            storage: options.storage,
+            logger: options.logger
+        });
         this.m_redoLog = options.redoLog;
     }
     private m_redoLog: StorageLogger;

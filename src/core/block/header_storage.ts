@@ -376,7 +376,7 @@ export class HeaderStorage implements IHeaderStorage {
             await this._commit();
         } catch (e) {
             this.m_logger.error(`changeBest ${header.hash}(${header.number}) failed, ${e}`);
-            this._rollback();
+            await this._rollback();
             return ErrorCode.RESULT_EXCEPTION;
         }
         this.m_logger.debug(`remove header storage cache hash: ${header.hash} number: ${header.number}`);

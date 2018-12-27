@@ -1,11 +1,13 @@
 import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
-import {Chain, ChainTypeOptions, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, ValueChain, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor, ChainContructOptions} from '../value_chain';
+import {Chain, ChainTypeOptions, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, ValueChain, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor, ChainContructOptions, ChainInstanceOptions, BlockExecutorExternParam} from '../value_chain';
 
 import { DposBlockHeader } from './block';
 import * as consensus from './consensus';
 import * as ValueContext from '../value_chain/context';
-import { DposBlockExecutor } from './executor';
+import { DposBlockExecutor, DposBlockExecutorOptions } from './executor';
+import {DposChainTipState} from './chain_state';
+import {DposChainTipStateManager, DposChainTipStateCreator} from './chain_state_manager';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -41,11 +43,24 @@ const updateMinersSql = 'REPLACE INTO miners (hash, miners) values ($hash, $mine
 const getMinersSql = 'SELECT miners FROM miners WHERE hash=$hash';
 
 export class DposChain extends ValueChain {
+    protected m_epochTime: number = 0;
+    protected m_stateManager: DposChainTipStateManager | undefined;
 
     constructor(options: ChainContructOptions) {
         super(options);
     }
 
+    get epochTime(): number {
+        return this.m_epochTime;
+    }
+
+    get stateManager(): DposChainTipStateManager {
+        return this.m_stateManager!;
+    }
+    
+    get chainTipState(): DposChainTipState {
+        return this.m_stateManager!.getBestChainState()!;
+    }
     // DPOS中，只广播tipheader
     protected get _broadcastDepth() {
         return 0;
@@ -53,6 +68,23 @@ export class DposChain extends ValueChain {
 
     protected get _ignoreVerify() {
         return true;
+    }
+
+    protected createChainTipStateCreator(): DposChainTipStateCreator {
+        return new DposChainTipStateCreator();
+    }
+
+    public async initialize(instanceOptions: ChainInstanceOptions): Promise<ErrorCode> {
+        let err = await super.initialize(instanceOptions);
+        if (err) {
+            return err;
+        }
+        let hr = await this.getHeader(0);
+        if (hr.err) {
+            return hr.err;
+        }
+        this.m_epochTime = hr.header!.timestamp;
+        return ErrorCode.RESULT_OK;
     }
 
     public async initComponents(options?: {readonly?: boolean}): Promise<ErrorCode> {
@@ -70,11 +102,36 @@ export class DposChain extends ValueChain {
                 return ErrorCode.RESULT_EXCEPTION;
             }
         }
-        
+
+        let hr = await this.getHeader(0);
+        if (!hr.err) {
+            let hr1 = await this.getMiners(hr.header! as DposBlockHeader);
+            if (!hr1.err) {
+                this.m_stateManager = new DposChainTipStateManager({
+                    libHeader: hr.header! as DposBlockHeader,
+                    libMiners: hr1.creators!,
+                    chain: this,
+                    globalOptions: this.globalOptions, 
+                    creator: this.createChainTipStateCreator()
+                });
+                return await this.m_stateManager.init();
+            }
+        }
         return ErrorCode.RESULT_OK;
     }
 
-    public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    async prepareExternParams(block: Block, storage: Storage): Promise<{err: ErrorCode, params?: BlockExecutorExternParam[]}> {
+        this.m_logger.debug(`begin prepare executor extern params for ${block.hash}`);
+        const csr = await this.executorParamCreator.createStorage({
+            storageManager: this.storageManager,
+            blockHash: this.chainTipState.irreversibleHash});
+        if (csr.err) {
+            return {err: csr.err};
+        }
+        return {err: ErrorCode.RESULT_OK, params: [csr.param!]};
+    }
+
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
@@ -90,7 +147,8 @@ export class DposChain extends ValueChain {
         if (dbr.err) {
             return {err: dbr.err};
         }
-        let de = new consensus.Context(dbr.value!, this.m_globalOptions, this.logger);
+
+        let de = new consensus.Context({currDatabase: dbr.value!, globalOptions: this.globalOptions,  logger: this.m_logger!});
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
             let vr = await de.vote(from, candiates);
             if (vr.err) {
@@ -154,7 +212,16 @@ export class DposChain extends ValueChain {
             return gm.creators!;
         };
 
-        let executor = new DposBlockExecutor({logger: this.logger, block, storage, handler: this.m_handler, externContext: externalContext, globalOptions: this.m_globalOptions});
+        let options: DposBlockExecutorOptions = {
+            logger: this.logger, 
+            block, 
+            storage, 
+            handler: this.m_handler, 
+            externContext: externalContext, 
+            globalOptions: this.m_globalOptions, 
+            externParams
+        };
+        let executor = new DposBlockExecutor(options);
         return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
     }
 
@@ -166,7 +233,7 @@ export class DposChain extends ValueChain {
         if (dbr.err) {
             return {err: dbr.err};
         }
-        let de = new consensus.ViewContext(dbr.value!, this.m_globalOptions, this.logger);
+        let de = new consensus.ViewContext({currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger});
 
         externalContext.getVote = async (): Promise<Map<string, BigNumber> > => {
             let gvr = await de.getVote();
@@ -203,23 +270,53 @@ export class DposChain extends ValueChain {
         return nvex;
     }
 
-    protected async _compareWork(left: DposBlockHeader, right: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
-        // 更长的链优先
-        let height = left.number - right.number;
+    protected async _verifyAndSaveHeaders(headers: BlockHeader[]): Promise<{ err: ErrorCode, toRequest?: BlockHeader[] }> {
+        if (headers.length === 0) {
+            return await super._verifyAndSaveHeaders(headers);
+        }
+
+        let header = headers[headers.length - 1];
+        let now = Math.ceil(Date.now() / 1000);
+        if (header.timestamp > now) {
+            this.logger.error(`dpos chain _verifyAndSaveHeaders last block time ${header.timestamp} must small now ${now}`);
+            return {err: ErrorCode.RESULT_INVALID_BLOCK};
+        }
+        let hr = await this.getHeader(headers[0].preBlockHash);
+        if (hr.err) {
+            this.logger.warn(`dpos chain _verifyAndSaveHeaders get prev header failed prevhash=${headers[0].preBlockHash} hash=${headers[0].hash}`);
+            return { err: hr.err };
+        }
+        if (headers[0].timestamp - hr.header!.timestamp < this.globalOptions.blockInterval) {
+            this.logger.error(`1 dpos chain _verifyAndSaveHeaders curr block time ${headers[0].timestamp} - prevtime ${hr.header!.timestamp} small blockinterval ${this.globalOptions.blockInterval}`);
+            return {err: ErrorCode.RESULT_INVALID_BLOCK};
+        }
+
+        for (let i = 1; i < headers.length; i++) {
+            if (headers[i].timestamp - headers[i - 1].timestamp < this.globalOptions.blockInterval) {
+                this.logger.error(`2 dpos chain _verifyAndSaveHeaders curr block time ${headers[i].timestamp} - prevtime ${headers[i - 1].timestamp} small blockinterval ${this.globalOptions.blockInterval}`);
+                return {err: ErrorCode.RESULT_INVALID_BLOCK};
+            }
+        }
+
+        return await super._verifyAndSaveHeaders(headers);
+    }
+
+    protected async _compareWork(comparedHeader: DposBlockHeader, bestChainTip: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
+        let hr = await this.m_stateManager!.compareIrreversibleBlockNumer(comparedHeader, bestChainTip);
+        if (hr.err) {
+            return {err: hr.err};
+        }
+        if (hr.result !== 0) {
+            return hr;
+        }
+        // 不可逆点相同，更长的链优先
+        let height = comparedHeader.number - bestChainTip.number;
         if (height !== 0) {
             return {err: ErrorCode.RESULT_OK, result: height};
         }
         // 高度相同更晚的优先
-        let tir = await left.getTimeIndex(this);
-        if (tir.err) {
-            return {err: tir.err};
-        }
-        let leftIndex = tir.index!;
-        tir = await right.getTimeIndex(this);
-        if (tir.err) {
-            return {err: tir.err};
-        }
-        let rightIndex = tir.index!;
+        let leftIndex = comparedHeader.getTimeIndex(this);
+        let rightIndex = bestChainTip.getTimeIndex(this);
         let time = leftIndex - rightIndex;
         if (time !== 0) {
             return {err: ErrorCode.RESULT_OK, result: time};
@@ -232,6 +329,12 @@ export class DposChain extends ValueChain {
         let hr = await this.getHeader(fromHeader);
         let reSelectionBlocks = this.globalOptions!.reSelectionBlocks;
         return reSelectionBlocks - (hr.header!.number % reSelectionBlocks);
+    }
+
+    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
+        // TODO: add irrerveriable 
+        options.toMork.add(this.chainTipState.irreversibleHash);
+        return {err: ErrorCode.RESULT_OK};
     }
 
     public async getMiners(header: DposBlockHeader): Promise<{err: ErrorCode, header?: DposBlockHeader, creators?: string[]}> {
@@ -263,6 +366,27 @@ export class DposChain extends ValueChain {
     }
 
     protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
+        let err = await this.saveMiners(block);
+        if (err) {
+            return err;
+        }
+
+        if (block.number === 0) {
+            return ErrorCode.RESULT_OK;
+        }
+
+        let hr = await this.m_stateManager!.updateBestChainTip(block.header as DposBlockHeader);
+        if (hr.err) {
+            return hr.err;
+        }
+        this.logger.info(`==========dpos chain state=${this.chainTipState.dump()}`);
+        return ErrorCode.RESULT_OK;
+    }
+    protected async _onForkedBlock(block: Block): Promise<ErrorCode> {
+        return await this.saveMiners(block);
+    }
+
+    protected async saveMiners(block: Block): Promise<ErrorCode> {
         if (block.number !== 0 && block.number % this.globalOptions.reSelectionBlocks !== 0) {
             return ErrorCode.RESULT_OK;
         }
@@ -275,8 +399,8 @@ export class DposChain extends ValueChain {
         if (dbr.err) {
             return dbr.err;
         }
-        let denv = new consensus.ViewContext(dbr.value!, this.globalOptions, this.m_logger!);
-        let minersInfo = await denv.getNextMiners();
+        let viewDenv = new consensus.ViewContext({currDatabase: dbr.value!, globalOptions: this.globalOptions,  logger: this.m_logger!});
+        let minersInfo = await viewDenv.getNextMiners();
         this.storageManager.releaseSnapshotView(block.hash);
         if (minersInfo.err) {
             return minersInfo.err;
@@ -328,7 +452,8 @@ export class DposChain extends ValueChain {
         if (kvr.err) {
             return kvr.err;
         }
-        let denv = new consensus.Context(dbr.value!, this.globalOptions, this.m_logger);
+
+        let denv = new consensus.Context({currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger!});
 
         let ir = await denv.init(genesisOptions.candidates, genesisOptions.miners);
         if (ir.err) {
@@ -336,5 +461,9 @@ export class DposChain extends ValueChain {
         }
 
         return ErrorCode.RESULT_OK;
+    }
+
+    public getLastIrreversibleBlockNumber() {
+        return this.chainTipState.irreversible;
     }
 }

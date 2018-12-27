@@ -60,7 +60,7 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     }
 
     public releaseSnapshot(blockHash: string): void {
-
+        
     }
 
     public removeSnapshot(blockHash: string): ErrorCode {

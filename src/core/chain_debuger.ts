@@ -385,7 +385,7 @@ class ChainDebuger {
     async debugTransaction(storage: Storage, header: BlockHeader, tx: Transaction): Promise<{err: ErrorCode, receipt?: Receipt}> {
         const block = this.chain.newBlock(header);
         
-        const nber = await this.chain.newBlockExecutor(block, storage);
+        const nber = await this.chain.newBlockExecutor({block, storage});
         if (nber.err) {
             return {err: nber.err};
         }
@@ -393,6 +393,8 @@ class ChainDebuger {
         if (etr.err) {
             return {err: etr.err};
         }
+
+        await nber.executor!.finalize();
         
         return {err: ErrorCode.RESULT_OK, receipt: etr.receipt};
     }
@@ -404,35 +406,47 @@ class ChainDebuger {
         }): Promise<{err: ErrorCode, receipts?: Receipt[]}> {
         const block = this.chain.newBlock(header);
         
-        const nber = await this.chain.newBlockExecutor(block, storage);
+        const nber = await this.chain.newBlockExecutor({block, storage});
         if (nber.err) {
             return {err: nber.err};
         }
-        if (options.listener) {
-            const ebr = await nber.executor!.executeBlockEvent(options.listener);
-            if (ebr.err) {
-                return {err: ebr.err};
+
+        let result;
+        do {
+            
+            if (options.listener) {
+                const ebr = await nber.executor!.executeBlockEvent(options.listener);
+                if (ebr.err) {
+                    result = {err: ebr.err};
+                    break;
+                } else {
+                    result = {err: ErrorCode.RESULT_OK, receipts: [ebr.receipt!]};
+                    break;
+                }
             } else {
-                return {err: ErrorCode.RESULT_OK, receipts: [ebr.receipt!]};
-            }
-        } else {
-            let receipts = [];
-            if (options.preBlock) {
-                const ebr = await nber.executor!.executePreBlockEvent();
-                if (ebr.err) {
-                    return {err: ebr.err};
+                let receipts = [];
+                if (options.preBlock) {
+                    const ebr = await nber.executor!.executePreBlockEvent();
+                    if (ebr.err) {
+                        result = {err: ebr.err};
+                        break;
+                    }
+                    receipts.push(...ebr.receipts!);
                 }
-                receipts.push(...ebr.receipts!);
-            }
-            if (options.postBlock) {
-                const ebr = await nber.executor!.executePostBlockEvent();
-                if (ebr.err) {
-                    return {err: ebr.err};
+                if (options.postBlock) {
+                    const ebr = await nber.executor!.executePostBlockEvent();
+                    if (ebr.err) {
+                        result = {err: ebr.err};
+                        break;
+                    }
+                    receipts.push(...ebr.receipts!);
                 }
-                receipts.push(...ebr.receipts!);
+                result = {err: ErrorCode.RESULT_OK, receipts};
             }
-            return {err: ErrorCode.RESULT_OK, receipts};
-        }
+        } while (false);
+
+        await nber.executor!.finalize();
+        return result;
     }
 
     async debugView(storage: Storage, header: BlockHeader, method: string, params: any): Promise<{err: ErrorCode, value?: any}> {
@@ -446,12 +460,15 @@ class ChainDebuger {
     }
 
     async debugBlock(storage: Storage, block: Block): Promise<{err: ErrorCode}> {
-        const nber = await this.chain.newBlockExecutor(block, storage);
+        const nber = await this.chain.newBlockExecutor({block, storage});
         if (nber.err) {
             return {err: nber.err};
         }
 
         const err = await nber.executor!.execute();
+
+        await nber.executor!.finalize();
+
         return {err};
     }
 }
@@ -460,12 +477,15 @@ export class ValueChainDebuger extends ChainDebuger {
     async debugMinerWageEvent(storage: Storage, header: BlockHeader): Promise<{err: ErrorCode}> {
         const block = this.chain.newBlock(header);
         
-        const nber = await this.chain.newBlockExecutor(block, storage);
+        const nber = await this.chain.newBlockExecutor({block, storage});
         if (nber.err) {
             return {err: nber.err};
         }
 
         const err = await (nber.executor! as ValueBlockExecutor).executeMinerWageEvent();
+        
+        await nber.executor!.finalize();
+        
         return {err};
 
     }

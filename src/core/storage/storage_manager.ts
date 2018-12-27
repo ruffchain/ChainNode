@@ -207,7 +207,7 @@ export class StorageManager {
         }
     }
 
-    public recycleSnapShot() {
+    public recycleSnapshot() {
         return this.m_snapshotManager.recycle();
     }
 }

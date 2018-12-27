@@ -4,7 +4,7 @@ const assert = require('assert');
 import {isValidAddress} from '../address';
 
 import { Storage } from '../storage';
-import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor, ChainContructOptions} from '../chain';
+import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor, ChainContructOptions, BlockExecutorExternParam} from '../chain';
 import { ValueBlockHeader} from './block';
 import { ValueTransaction, ValueReceipt } from './transaction';
 import { ValueBlockExecutor} from './executor';
@@ -36,7 +36,7 @@ export class ValueChain extends Chain {
         super(options);
     }
 
-    public async newBlockExecutor(block: Block, storage: Storage): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.Context(kvBalance);
         let externContext = Object.create(null);
@@ -46,7 +46,15 @@ export class ValueChain extends Chain {
         externContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
             return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        let executor = new ValueBlockExecutor({logger: this.logger, block, storage, handler: this.m_handler, externContext, globalOptions: this.m_globalOptions});
+        let executor = new ValueBlockExecutor({
+            logger: this.logger, 
+            block, 
+            storage, 
+            handler: this.m_handler, 
+            externContext, 
+            globalOptions: this.m_globalOptions,
+            externParams
+        });
         return {err: ErrorCode.RESULT_OK, executor};
     }
 

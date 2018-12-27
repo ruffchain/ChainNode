@@ -56,7 +56,7 @@ export class ValueMiner extends Miner {
             this.m_coinbase = options.coinbase;
         }
         this.m_feelimit = options.feelimit;
-        return super.initialize(options);
+        return await super.initialize(options);
     }
 
     protected async _decorateBlock(block: Block) {

@@ -62,19 +62,34 @@ export function onCheckGlobalOptions(globalOptions: any) {
     if (isNullOrUndefined(globalOptions.dposVoteMaxProducers)) {
         return false;
     }
-    if (isNullOrUndefined(globalOptions.maxBlockIntervalOffset)) {
-        return false;
-    }
     return true;
 }
 
-export class ViewContext {
-    constructor(protected m_database: IReadableDatabase, protected globalOptions: any, protected logger: LoggerInstance) {
+enum BanStatus {
+    NoBan = 0, 
+    Delay = 1, // 已经达到禁用条件，但是延时生效(产生不可逆块后才生效)
+    Ban = 2, // 判断用，value大于等于它就表示已经ban了
+}
 
+export type ViewContextOptions = {
+    currDatabase: IReadableDatabase,
+    globalOptions: any,
+    logger: LoggerInstance,
+};
+
+export class ViewContext {
+    protected m_currDatabase: IReadableDatabase;
+    protected m_globalOptions: any;
+    protected m_logger: LoggerInstance;
+
+    constructor(options: ViewContextOptions) {
+        this.m_currDatabase = options.currDatabase;
+        this.m_globalOptions = options.globalOptions;
+        this.m_logger = options.logger;
     }
 
-    get database(): IReadableDatabase {
-        return this.m_database;
+    get currDatabase(): IReadableDatabase {
+        return this.m_currDatabase;
     }
 
     public static kvDPOS: string = 'dpos';
@@ -89,6 +104,9 @@ export class ViewContext {
     // 生产者最后一次出块时间
     public static keyNewBlockTime: string = 'newblocktime';
 
+    // 提议miners,成为提议miner后未必能进入出块序列，成为提议后这个块成为不可逆后才能成为真正miners
+    public static keyProposeMiners: string = 'proposeminer';
+
     static getElectionBlockNumber(globalOptions: any, _number: number): number {
         if (_number === 0) {
             return 0;
@@ -98,7 +116,7 @@ export class ViewContext {
     }
 
     async getNextMiners(): Promise<{err: ErrorCode, creators?: string[]}> {
-        let kvElectionDPOS = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvElectionDPOS = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let llr = await kvElectionDPOS.llen(ViewContext.keyNextMiners);
         if (llr.err) {
             return {err: llr.err};
@@ -110,26 +128,32 @@ export class ViewContext {
         return {err: ErrorCode.RESULT_OK, creators: lrr.value};
     }
 
+    async getProposeMiners(): Promise<{err: ErrorCode, creators?: string[]}> {
+        let kvElectionDPOS = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let llr = await kvElectionDPOS.llen(ViewContext.keyProposeMiners);
+        if (llr.err) {
+            return {err: llr.err};
+        }
+        let lrr = await kvElectionDPOS.lrange(ViewContext.keyProposeMiners, 0, llr.value!);
+        if (lrr.err) {
+            return {err: lrr.err};
+        }
+        return {err: ErrorCode.RESULT_OK, creators: lrr.value};
+    }
+
     async getStake(address: string): Promise<{err: ErrorCode, stake?: BigNumber}> {
-        let kvCurDPOS = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvCurDPOS = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         // 如果投票者的权益不够，则返回
-        let her = await kvCurDPOS.hexists(ViewContext.keyStake, address);
+        let her = await kvCurDPOS.hget(ViewContext.keyStake, address);
         if (her.err) {
             return {err: her.err};
         }
-        if (!her.value) {
-            return {err: ErrorCode.RESULT_OK, stake: new BigNumber(0)};
-        } else {
-            let gr = await kvCurDPOS.hget(ViewContext.keyStake, address);
-            if (gr.err) {
-                return {err: gr.err};
-            }
-            return {err: ErrorCode.RESULT_OK, stake: gr.value!};
-        }
+
+        return {err: ErrorCode.RESULT_OK, stake: her.value!};
     }
 
     async getVote(): Promise<{err: ErrorCode, vote?: Map<string, BigNumber>}> {
-        let kvCurDPOS = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvCurDPOS = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let gr = await kvCurDPOS.hgetall(ViewContext.keyVote);
         if (gr.err) {
             return {err: gr.err};
@@ -160,7 +184,7 @@ export class ViewContext {
     }
 
     async getCandidates(): Promise<{err: ErrorCode, candidates?: string[]}> {
-        let kvDPos = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let gr = await this.getValidCandidates();
         if (gr.err) {
             return {err: gr.err};
@@ -197,14 +221,14 @@ export class ViewContext {
     }
     
     protected async getValidCandidates(): Promise<{err: ErrorCode, candidates?: string[]}> {
-        let kvDPos = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let gr = await kvDPos.hgetall(ViewContext.keyCandidate);
         if (gr.err) {
             return {err: gr.err};
         }
         let candidates: string[] = [];
         for (let v of gr.value!) {
-            if ((v.value as number) === 0) {
+            if ((v.value as number) >= BanStatus.NoBan) {
                 candidates.push(v.key);
             }
         }
@@ -213,20 +237,24 @@ export class ViewContext {
     }
 
     async isBan(address: string): Promise<{err: ErrorCode, ban?: boolean}> {
-        let kvDPos = (await this.database.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let timeInfo = await kvDPos.hget(ViewContext.keyCandidate, address);
         if (timeInfo.err) {
             return {err: ErrorCode.RESULT_OK, ban: false};
         }
 
-        return {err: ErrorCode.RESULT_OK, ban: (timeInfo.value as number) === 0 ? false : true};
+        return {err: ErrorCode.RESULT_OK, ban: (timeInfo.value as number) >= BanStatus.Ban ? true : false};
     }
 }
 
-export class Context extends ViewContext {
+export type ContextOptions = ViewContextOptions & {};
 
-    get database(): IReadWritableDatabase {
-        return this.m_database as IReadWritableDatabase;
+export class Context extends ViewContext {
+    constructor(options: ContextOptions) {
+        super(options);
+    }
+    get currDatabase(): IReadWritableDatabase {
+        return this.m_currDatabase as IReadWritableDatabase;
     }
 
     removeDuplicate(s: string[]): string[] {
@@ -244,9 +272,9 @@ export class Context extends ViewContext {
     async init(candidates: string[], miners: string[]): Promise<{err: ErrorCode}> {
         candidates = this.removeDuplicate(candidates);
         miners = this.removeDuplicate(miners);
-        let kvCurDPOS = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let candiateValues = candidates.map(() => {
-            return 0;
+            return BanStatus.NoBan;
         });
         let hmr = await kvCurDPOS.hmset(Context.keyCandidate, candidates, candiateValues);
         if (hmr.err) {
@@ -256,14 +284,18 @@ export class Context extends ViewContext {
         if (rpr.err) {
             return rpr;
         }
+        rpr = await kvCurDPOS.rpushx(Context.keyProposeMiners, miners);
+        if (rpr.err) {
+            return rpr;
+        }
         return {err: ErrorCode.RESULT_OK};
     }
 
-    async finishElection(shuffle_factor: string): Promise<{err: ErrorCode}> {
-        let kvCurDPOS = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+    async finishElection(libDatabase: IReadableDatabase, shuffleFactor: string): Promise<{err: ErrorCode}> {
+        let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let gvr = await this.getVote();
         if (gvr.err) {
-            this.logger.error(`finishElection, getvote failde,errcode=${gvr.err}`);
+            this.m_logger.error(`finishElection, getvote failde,errcode=${gvr.err}`);
             return {err: gvr.err};
         }
         
@@ -279,7 +311,7 @@ export class Context extends ViewContext {
                 return (l.vote.gt(r.vote) ? -1 : 1);
             }
         });
-        let creators = election.slice(0, this.globalOptions.maxCreator).map((x) => {
+        let creators = election.slice(0, this.m_globalOptions.maxCreator).map((x) => {
             return x.address;
         });
 
@@ -287,55 +319,61 @@ export class Context extends ViewContext {
             return {err: ErrorCode.RESULT_OK};
         }
 
-        if (creators.length < this.globalOptions.minCreator) {
-            // 这种情况下不需要更换出块序列,但是有可能有的出块者被禁止了，检查是否能补充进去
-            let minersInfo = await this.getNextMiners();
-            assert(minersInfo.err === ErrorCode.RESULT_OK, 'miners must exist');
-            let currMiners = []; 
-            for (let m of minersInfo.creators!) {
-                if (!(await this.isBan(m)).ban!) {
-                    currMiners.push(m);
-                }
-            }
-            if (currMiners.length < this.globalOptions.minCreator) {
-                // 这个时候就需要从外面补充了
-                let currLen = currMiners.length;
-                while (creators.length > 0 && currMiners.length < this.globalOptions.minCreator) {
-                    let m = creators.shift();
-                    let i = 0;
-                    for (i = 0; i < currLen; i++) {
-                        if (m === currMiners[i]) {
-                            break;
-                        }
-                    }
-                    if (i === currLen) {
-                        currMiners.push(m);
-                    }
-                }
-            }
-            if (currMiners.length < this.globalOptions.minCreator) {
-                // 补充起来后，数量都还小于最小出块人数，这种情况是不是不应该存在啊，先报错吧
-                // throw new Error();
-                creators = minersInfo.creators!;
-            } else {
-                creators = currMiners as string[];
-            }
+        let minersInfo = await this.getProposeMiners();
+        if (minersInfo.err) {
+            this.m_logger.error(`finishElection getNextMiners failed,errcode=${minersInfo.err}`);
+            return minersInfo;
         }
 
-        this._shuffle(shuffle_factor, creators);
+        if (creators.length < this.m_globalOptions.minCreator) {
+            this.m_logger.warn(`finishElection not update propose miners,for new miners count (${creators.length}) less than minCreateor(${this.m_globalOptions.minCreator})`);
+            // 总的个数比最小要求的个数还少也不补
+            return {err: ErrorCode.RESULT_OK};
+        }
 
-        let llr = await kvCurDPOS.llen(ViewContext.keyNextMiners);
+        if (creators.length < minersInfo.creators!.length) {
+            this.m_logger.warn(`finishElection not update propose miners,for new miners count (${creators.length}) less than prev propse miners count(${minersInfo.creators!.length})`);
+            // 每次更新miner的时候，总的个数不能少于上一轮的个数，否则不补
+            return {err: ErrorCode.RESULT_OK};
+        }
+
+        this._shuffle(shuffleFactor, creators);
+        this.m_logger.info(`finishElection propose miners,${JSON.stringify(creators)}`);
+
+        // 这里选举得写进提议miners
+        let llr = await kvCurDPOS.llen(ViewContext.keyProposeMiners);
         if (llr.err) {
             return {err: llr.err};
         }
-        for (let ix = 0; ix < llr.value!; ++ix) {
-            let lrr = await kvCurDPOS.lremove(ViewContext.keyNextMiners, 0);
+        for (let ix = llr.value! - 1; ix >= 0; ix--) {
+            let lrr = await kvCurDPOS.lremove(ViewContext.keyProposeMiners, ix);
             if (lrr.err) {
                 return {err: lrr.err};
             }
         }
-        let lpr = await kvCurDPOS.rpushx(ViewContext.keyNextMiners, creators);
+        let lpr = await kvCurDPOS.rpushx(ViewContext.keyProposeMiners, creators);
+        if (lpr.err) {
+            return {err: lpr.err};
+        }
 
+        // 把最近不可逆块得keyProposeMiners更新到keyNextMiners作为当前miners
+        let libDev = new ViewContext({currDatabase: libDatabase, globalOptions: this.m_globalOptions, logger: this.m_logger});
+        let hr = await libDev.getProposeMiners();
+        if (hr.err) {
+            return hr;
+        }
+        this.m_logger.info(`finishElection miners,${JSON.stringify(hr.creators!)}`);
+        llr = await kvCurDPOS.llen(ViewContext.keyNextMiners);
+        if (llr.err) {
+            return {err: llr.err};
+        }
+        for (let ix = llr.value! - 1; ix >= 0; ix--) {
+            let lrr = await kvCurDPOS.lremove(ViewContext.keyNextMiners, ix);
+            if (lrr.err) {
+                return {err: lrr.err};
+            }
+        }
+        lpr = await kvCurDPOS.rpushx(ViewContext.keyNextMiners, hr.creators!);
         if (lpr.err) {
             return {err: lpr.err};
         }
@@ -346,7 +384,7 @@ export class Context extends ViewContext {
     async mortgage(from: string, amount: BigNumber): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
         assert(amount.gt(0), 'amount must positive');
 
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let stakeInfo = await kvDPos.hget(ViewContext.keyStake, from);
         let stake: BigNumber = stakeInfo.err === ErrorCode.RESULT_OK ? stakeInfo.value : new BigNumber(0);
         await kvDPos.hset(ViewContext.keyStake, from, stake.plus(amount));
@@ -359,7 +397,7 @@ export class Context extends ViewContext {
     async unmortgage(from: string, amount: BigNumber): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
         assert(amount.gt(0), 'amount must positive');
 
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let stakeInfo = await kvDPos.hget(ViewContext.keyStake, from);
         if (stakeInfo.err) {
             return {err: stakeInfo.err};
@@ -384,7 +422,7 @@ export class Context extends ViewContext {
 
     async vote(from: string, candidates: string[]): Promise<{err: ErrorCode, returnCode?: ErrorCode}> {
         candidates = this.removeDuplicate(candidates);
-        assert(candidates.length > 0 && candidates.length <= this.globalOptions.dposVoteMaxProducers, 'candidates.length must right');
+        assert(candidates.length > 0 && candidates.length <= this.m_globalOptions.dposVoteMaxProducers, 'candidates.length must right');
         
         let cans = await this.getValidCandidates();
         if (cans.err) {
@@ -408,7 +446,7 @@ export class Context extends ViewContext {
             }
         }
 
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let stakeInfo = await kvDPos.hget(ViewContext.keyStake, from);
         if (stakeInfo.err) {
             return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_NOT_ENOUGH};
@@ -444,7 +482,7 @@ export class Context extends ViewContext {
     }
 
     async registerToCandidate(candidate: string): Promise<{err: ErrorCode, returnCode?: ErrorCode}>  {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let her = await kvDPos.hexists(ViewContext.keyCandidate, candidate);
         if (her.err) {
             return {err: her.err};
@@ -453,46 +491,65 @@ export class Context extends ViewContext {
             return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
         }
 
-        await kvDPos.hset(ViewContext.keyCandidate, candidate, 0);
+        await kvDPos.hset(ViewContext.keyCandidate, candidate, BanStatus.NoBan);
         return {err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK};
     }
 
     async unbanProducer(timestamp: number) {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
 
         // 解禁
         let candidateInfo = await kvDPos.hgetall(ViewContext.keyCandidate);
         for (let c of candidateInfo.value!) {
-            if ((c.value as number) !== 0 && (c.value as number) <= timestamp) {
-                await kvDPos.hset(ViewContext.keyCandidate, c.key, 0);
+            if ((c.value as number) >= BanStatus.Ban && (c.value as number) <= timestamp) {
+                await kvDPos.hset(ViewContext.keyCandidate, c.key, BanStatus.NoBan);
+            }
+        }
+    }
+
+    async checkIfNeedBan(timestamp: number) {
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let minersInfo = await this.getNextMiners();
+        if (minersInfo.err) {
+            return ;
+        }
+        for (let m of minersInfo.creators!) {
+            let hr = await kvDPos.hget(ViewContext.keyNewBlockTime, m);
+            if (hr.err) {
+                return;
+            }
+
+            if (timestamp - (hr.value! as number) >= this.m_globalOptions.timeOffsetToLastBlock ) {
+                await kvDPos.hset(ViewContext.keyCandidate, m, BanStatus.Delay);
             }
         }
     }
 
     async banProducer(timestamp: number) {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
-        let allTimeInfo = await kvDPos.hgetall(ViewContext.keyNewBlockTime);
-        let minersInfo = await this.getNextMiners();
-        assert( minersInfo.err === ErrorCode.RESULT_OK);
-        for (let m of minersInfo.creators!) {
-            for (let i = 0; i < allTimeInfo.value!.length; i++) {
-                if (m === allTimeInfo.value![i].key) {
-                    if (timestamp - (allTimeInfo.value![i].value as number) >= this.globalOptions.timeOffsetToLastBlock) {
-                        await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + this.globalOptions.timeBan);
-                    }
-                    break;
-                }
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let hr = await this.getNextMiners();
+        if (hr.err) {
+            return;
+        }
+        // 只会是当前得miner能出现BanStatus.Delay状态，全部给ban了
+        for (let m of hr.creators!) {
+            let candidateInfo = await kvDPos.hget(ViewContext.keyCandidate, m);
+            if (candidateInfo.err) {
+                return;
+            }
+            if ((candidateInfo.value as number) === BanStatus.Delay) {
+                await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + this.m_globalOptions.timeBan);
             }
         }
     }
 
     async updateProducerTime(producer: string, timestamp: number) {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;       
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;       
         await kvDPos.hset(ViewContext.keyNewBlockTime, producer, timestamp);
     }
 
     async maintain_producer(timestamp: number): Promise<ErrorCode> {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let minersInfo = await this.getNextMiners();
         assert( minersInfo.err === ErrorCode.RESULT_OK);
 
@@ -532,7 +589,7 @@ export class Context extends ViewContext {
     }
 
     protected async _updatevote(voteor: string, amount: BigNumber): Promise<ErrorCode> {
-        let kvDPos = (await this.database.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
+        let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let producerInfo = await kvDPos.hget(ViewContext.keyProducers, voteor);
         if (producerInfo.err === ErrorCode.RESULT_OK) {
             let producers = producerInfo.value!;

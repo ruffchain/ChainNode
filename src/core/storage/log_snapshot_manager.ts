@@ -34,21 +34,19 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
     private m_storageType: new (options: StorageOptions) => Storage;
     private m_logger: LoggerInstance;
     private m_snapshots: Map<string, { ref: number }> = new Map();
-    private m_recycling: boolean = false;
 
     public recycle() {
-        this.m_logger.info(`begin recycle snanshot`);
+        this.m_logger.debug(`begin recycle snanshot`);
         let recycledMap = new Map(this.m_snapshots);
         for (let [blockHash, stub] of recycledMap.entries()) {
             if (!stub.ref) {
-                this.m_logger.info(`delete snapshot ${blockHash}`);
+                this.m_logger.debug(`delete snapshot ${blockHash}`);
                 const err = this.m_dumpManager.removeSnapshot(blockHash);
                 if (!err) {
                     this.m_snapshots.delete(blockHash);
                 }
             }
         }
-        this.m_recycling = false;
     }
 
     async init(): Promise<ErrorCode> {

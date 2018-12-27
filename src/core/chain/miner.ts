@@ -132,12 +132,15 @@ export class Miner extends EventEmitter {
             if (err) {
                 break;
             }
-            let nber = await this.chain.newBlockExecutor(genesis, sr.storage!);
+            let nber = await this.chain.newBlockExecutor({block: genesis, storage: sr.storage!});
             if (nber.err) {
                 err = nber.err;
                 break;
             }
             err = await nber.executor!.execute();
+
+            await nber.executor!.finalize();
+
             if (err) {
                 break;
             }
