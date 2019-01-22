@@ -526,6 +526,7 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
 export class SqliteStorage extends Storage {
     private m_db?: sqlite.Database;
     private m_isInit: boolean = false;
+    private m_transcation?: SqliteStorageTransaction;
 
     protected _createLogger(): JStorageLogger {
         return new JStorageLogger();
@@ -626,11 +627,14 @@ export class SqliteStorage extends Storage {
 
     public async beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }> {
         assert(this.m_db);
-        let transcation = new SqliteStorageTransaction(this.m_db!);
+        // let transcation = new SqliteStorageTransaction(this.m_db!);
+        if (!this.m_transcation) {
+            this.m_transcation = new SqliteStorageTransaction(this.m_db!);
+        }
 
-        await transcation.beginTransaction();
+        await this.m_transcation.beginTransaction();
 
-        return { err: ErrorCode.RESULT_OK, value: transcation };
+        return { err: ErrorCode.RESULT_OK, value: this.m_transcation! };
     }
 
     public async toJsonStorage(storage: JsonStorage): Promise<{err: ErrorCode}> {

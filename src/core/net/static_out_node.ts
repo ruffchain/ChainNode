@@ -8,13 +8,12 @@ export function instance(superClass: new(...args: any[]) => INode) {
             this.m_staticPeers = (args[0]).slice(0);
         }
         private m_staticPeers: string[];
-        async randomPeers(count: number, excludes: string[]): Promise<{err: ErrorCode, peers: string[]}> {
+        async randomPeers(count: number, excludes: Set<string>): Promise<{err: ErrorCode, peers: string[]}> {
             const doubleCount = 2 * count;
             if (this.m_staticPeers.length) {
-                const ex = new Set(excludes);
                 let inc = [];
                 for (const peerid of this.m_staticPeers) {
-                    if (!ex.has(peerid)) {
+                    if (!excludes.has(peerid)) {
                         inc.push(peerid);
                     }
                 }

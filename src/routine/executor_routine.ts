@@ -1,6 +1,6 @@
 import * as process from 'process';
 import { ErrorCode, initChainCreator, BlockExecutorWorkerRoutine, BlockExecutorWorkerRoutineParams, BlockExecutorWorkerRoutineResult, initLogger } from '../core';
-import { init as initUnhandledRejection } from '../client/lib/unhandled_rejection';
+import { init as initUnhandledRejection } from '../common/unhandled_rejection';
 
 async function main() {
     const logger = initLogger({loggerOptions: {console: true, level: 'debug'}});

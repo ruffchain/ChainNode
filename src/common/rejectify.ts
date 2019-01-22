@@ -1,4 +1,4 @@
-import {ErrorCode, stringifyErrorCode} from '../../core';
+import {ErrorCode, stringifyErrorCode} from './error_code';
 
 export function rejectifyValue<T>(func: (...args: any[]) => Promise<{err: ErrorCode}&any>, _this: any, _name?: string): (...args: any[]) => Promise<T> {
     let _func = async (...args: any[]): Promise<any> => {

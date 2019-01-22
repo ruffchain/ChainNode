@@ -6,10 +6,10 @@ import { ErrorCode } from '../error_code';
 import * as assert from 'assert';
 import { LoggerInstance } from 'winston';
 import {LRUCache} from '../lib/LRUCache';
-import { isArray } from 'util';
+import { isArray, isNullOrUndefined } from 'util';
 import { Lock } from '../lib/Lock';
-import {ITxStorage, TxStorage} from './tx_storage';
 import {BlockStorage} from './block_storage';
+import {IConsistency} from './consistency';
 
 const initHeaderSql = 'CREATE TABLE IF NOT EXISTS "headers"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "pre" CHAR(64) NOT NULL, "verified" TINYINT NOT NULL, "raw" BLOB NOT NULL);';
 const initBestSql = 'CREATE TABLE IF NOT EXISTS "best"("height" INTEGER PRIMARY KEY NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL,  "timestamp" INTEGER NOT NULL);';
@@ -25,12 +25,11 @@ const getTipSql = 'SELECT h.raw, h.verified FROM headers AS h LEFT JOIN best AS 
 const updateVerifiedSql = 'UPDATE headers SET verified=$verified WHERE hash=$hash';
 const getByPreBlockSql = 'SELECT raw, verified FROM headers WHERE pre = $pre';
 
-export interface IHeaderStorage {
-    readonly txView: ITxStorage;
+export interface IHeaderStorage extends IConsistency {
     init(): Promise<ErrorCode>;
     uninit(): void;
     getHeader(arg1: string|number|'latest'): Promise<{err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE}>;
-    getHeader(arg1: string|BlockHeader, arg2: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
+    getHeader(arg1: string|BlockHeader, arg2: number, arg3?: boolean): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
     getHeightOnBest(hash: string): Promise<{ err: ErrorCode, height?: number, header?: BlockHeader }>;
     saveHeader(header: BlockHeader): Promise<ErrorCode>;
     createGenesis(genesis: BlockHeader): Promise<ErrorCode>;
@@ -64,7 +63,7 @@ export class HeaderStorage implements IHeaderStorage {
     protected m_cacheHash: LRUCache<string, BlockHeaderEntry>;
     private m_transactionLock = new Lock();
     private m_readonly: boolean;
-    protected m_txView: ITxStorage;
+    private m_relayOpt: any;
 
     constructor(options: {
         logger: LoggerInstance;
@@ -79,11 +78,6 @@ export class HeaderStorage implements IHeaderStorage {
         this.m_logger = options.logger;
         this.m_cacheHeight = new LRUCache<number, BlockHeaderEntry>(100);
         this.m_cacheHash = new LRUCache<string, BlockHeaderEntry>(100);
-        this.m_txView = new TxStorage({logger: options.logger, db: options.db, blockstorage: options.blockStorage, readonly: this.m_readonly});
-    }
-
-    get txView(): ITxStorage {
-        return this.m_txView;
     }
 
     public async init(): Promise<ErrorCode> {
@@ -96,18 +90,18 @@ export class HeaderStorage implements IHeaderStorage {
                 return ErrorCode.RESULT_EXCEPTION;
             }
         }
-        return await this.m_txView.init();
+        return ErrorCode.RESULT_OK;
     }
 
     uninit() {
-        this.m_txView.uninit();
+        
     }
 
     public async getHeader(arg1: string|number|'latest'): Promise<{err: ErrorCode, header?: BlockHeader, verified?: VERIFY_STATE}>;
-    public async getHeader(arg1: string|BlockHeader, arg2: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
-    public async getHeader(arg1: string|number|'latest'|BlockHeader, arg2?: number): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}> {
+    public async getHeader(arg1: string|BlockHeader, arg2: number, arg3?: boolean): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}>;
+    public async getHeader(arg1: string|number|'latest'|BlockHeader, arg2?: number, arg3?: boolean): Promise<{err: ErrorCode, header?: BlockHeader, headers?: BlockHeader[]}> {
         let header: BlockHeader|undefined;
-        if (arg2 === undefined || arg2 === undefined) {
+        if (isNullOrUndefined(arg2)) {
             if (arg1 instanceof BlockHeader) {
                 assert(false);
                 return {err: ErrorCode.RESULT_INVALID_PARAM};
@@ -124,8 +118,12 @@ export class HeaderStorage implements IHeaderStorage {
                 }
                 fromHeader = hr.header!;
             }
-            let headers: BlockHeader[] = []; 
-            headers.push(fromHeader);
+            const withHeaders = isNullOrUndefined(arg3) ? true : arg3;
+            let headers: BlockHeader[]|undefined;
+            if (withHeaders) {
+                headers = [];
+                headers.unshift(fromHeader);
+            }
             if (arg2 > 0) {
                 assert(false);
                 return {err: ErrorCode.RESULT_INVALID_PARAM};
@@ -139,10 +137,11 @@ export class HeaderStorage implements IHeaderStorage {
                         return hr;
                     }
                     fromHeader = hr.header!;
-                    headers.push(fromHeader);
+                    if (headers) {
+                        headers.unshift(fromHeader);
+                    }
                 }
-                headers = headers.reverse();
-                return {err: ErrorCode.RESULT_OK, header: headers[0], headers};
+                return {err: ErrorCode.RESULT_OK, header: fromHeader, headers};
             }
         }
     }
@@ -211,7 +210,7 @@ export class HeaderStorage implements IHeaderStorage {
             return { err: ErrorCode.RESULT_EXCEPTION };
         }
         let entry: BlockHeaderEntry = new BlockHeaderEntry(header, verified);
-        this.m_logger.debug(`update header storage cache hash: ${header.hash} number: ${header.number} verified: ${verified}`);
+        // this.m_logger.debug(`update header storage cache hash: ${header.hash} number: ${header.number} verified: ${verified}`);
         this.m_cacheHash.set(header.hash, entry);
         if (typeof arg === 'number') {
             this.m_cacheHeight.set(header.number, entry);
@@ -269,23 +268,9 @@ export class HeaderStorage implements IHeaderStorage {
         }
         let hash = genesis.hash;
         let headerRaw = writer.render();
-        try {
-            await this._begin();
-        } catch (e) {
-            this.m_logger.error(`createGenesis begin ${genesis.hash}(${genesis.number}) failed, ${e}`);
-            return ErrorCode.RESULT_EXCEPTION;
-        }
+        await this.m_db.run(insertHeaderSql, { $hash: genesis.hash, $pre: genesis.preBlockHash, $raw: headerRaw, $verified: VERIFY_STATE.verified });
+        await this.m_db.run(extendBestSql, {$hash: genesis.hash, $height: genesis.number, $timestamp: genesis.timestamp});
 
-        try {
-            await this.m_db.run(insertHeaderSql, { $hash: genesis.hash, $pre: genesis.preBlockHash, $raw: headerRaw, $verified: VERIFY_STATE.verified });
-            await this.m_db.run(extendBestSql, {$hash: genesis.hash, $height: genesis.number, $timestamp: genesis.timestamp});
-
-            await this._commit();
-        } catch (e) {
-            this.m_logger.error(`createGenesis ${genesis.hash}(${genesis.number}) failed, ${e}`);
-            await this._rollback();
-            return ErrorCode.RESULT_EXCEPTION;
-        }
         return ErrorCode.RESULT_OK;
     }
 
@@ -326,26 +311,40 @@ export class HeaderStorage implements IHeaderStorage {
         return ErrorCode.RESULT_OK;
     }
 
+    public async beginConsistency(): Promise<void> {
+        this.m_relayOpt = undefined;
+    }
+    public async commitConsistency(): Promise<void> {
+        this.m_relayOpt();
+    }
+
+    public async rollbackConsistency(): Promise<void> {
+        this.m_relayOpt = undefined;
+    }
+
     public async changeBest(header: BlockHeader): Promise<ErrorCode> {
         let sqls: string[] = [];
-        let txViewOp: any = [];
         sqls.push(`INSERT INTO best (hash, height, timestamp) VALUES("${header.hash}", "${header.number}", "${header.timestamp}")`);
-        txViewOp.push({op: 'add', value: header.hash});
         let forkFrom = header;
+        let delPoint: {begin: number, end: number} = {begin: 0, end: 0};
         while (true) {
             let result = await this.getHeightOnBest(forkFrom.preBlockHash);
             if (result.err === ErrorCode.RESULT_OK) {
+                let gh = await this._getBestHeight();
+                if (gh.err) {
+                    return gh.err;
+                }
                 assert(result.header);
                 forkFrom = result.header!;
                 sqls.push(`DELETE FROM best WHERE height > ${forkFrom.number}`);
-                txViewOp.push({op: 'remove', value: forkFrom.number});
+                delPoint.begin = forkFrom.number + 1;
+                delPoint.begin = gh.height!; // 这里不能直接用header.number，因为分叉前的best的高度可能高于header
                 break;
             } else if (result.err === ErrorCode.RESULT_NOT_FOUND) {
                 let _result = await this._loadHeader(forkFrom.preBlockHash);
                 assert(_result.header);
                 forkFrom = _result.header!;
                 sqls.push(`INSERT INTO best (hash, height, timestamp) VALUES("${forkFrom.hash}", "${forkFrom.number}", "${forkFrom.timestamp}")`);
-                txViewOp.push({op: 'add', value: forkFrom.hash});
                 continue;
             } else {
                 return result.err;
@@ -353,51 +352,36 @@ export class HeaderStorage implements IHeaderStorage {
         }
         sqls.push(`UPDATE headers SET verified="${VERIFY_STATE.verified}" WHERE hash="${header.hash}"`);
         sqls = sqls.reverse();
-        txViewOp = txViewOp.reverse();
-        await this._begin();
         try {
-            for (let e of txViewOp) {
-                let err;
-                if (e.op === 'add') {
-                    err = await this.m_txView.add(e.value);
-                } else if (e.op === 'remove') {
-                    err = await this.m_txView.remove(e.value);
-                } else {
-                    err = ErrorCode.RESULT_FAILED;
-                }
-
-                if (err !== ErrorCode.RESULT_OK) {
-                    throw new Error(`run txview error,code=${err}`);
-                }
-            }
             for (let sql of sqls) {
                 await this.m_db.run(sql);
             }
-            await this._commit();
         } catch (e) {
             this.m_logger.error(`changeBest ${header.hash}(${header.number}) failed, ${e}`);
-            await this._rollback();
             return ErrorCode.RESULT_EXCEPTION;
         }
         this.m_logger.debug(`remove header storage cache hash: ${header.hash} number: ${header.number}`);
-        this.m_cacheHash.remove(header.hash);
-        this.m_cacheHeight.clear();
+        this.m_relayOpt = () => {
+            // 可能先前已经添加了header，但是这次状态变化了，所以需要删除
+            this.m_cacheHash.remove(header.hash);
+            for (let i = delPoint.begin; i <= delPoint.end; i++) {
+                this.m_cacheHeight.remove(i);
+            }
+        };
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _begin() {
-        await this.m_transactionLock.enter();
-        await this.m_db.run('BEGIN;');
-    }
+    protected async _getBestHeight(): Promise<{err: ErrorCode, height?: number}> {
+        try {
+            let r = await this.m_db!.get(getBestHeightSql);
+            if (!r || !r.height) {
+                return {err: ErrorCode.RESULT_OK, height: 0};
+            }
 
-    protected async _commit() {
-        await this.m_db.run('COMMIT;');
-        this.m_transactionLock.leave();
+            return {err: ErrorCode.RESULT_OK, height: r.height};
+        } catch (e) {
+            this.m_logger.error(`_getBestHeight failed, e=${e}`);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
     }
-
-    protected async _rollback() {
-        await this.m_db.run('ROLLBACK;');
-        this.m_transactionLock.leave();
-    }
-
 }

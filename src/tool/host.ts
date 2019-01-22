@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import * as process from 'process';
 import * as path from 'path';
-import {initUnhandledRejection, parseCommand, host as chainhost, initLogger} from '../client';
+import {host as chainhost} from '../host';
+import {initUnhandledRejection, parseCommand, initLogger} from '../common/';
 
 Error.stackTraceLimit = 1000;
 

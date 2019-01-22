@@ -8,6 +8,7 @@ export class BdtConnection extends IConnection {
     private m_bdt_connection: any;
     private m_remote: string;
     private m_network?: string;
+    private m_id: string| undefined;
     protected m_nTimeDelta: number = 0;
     constructor(options: {bdt_connection: any, remote: string}) {
         super();
@@ -38,6 +39,15 @@ export class BdtConnection extends IConnection {
         this.m_remote = options.remote;
     }
 
+    get id(): string {
+        if (this.m_bdt_connection) {
+            return this.m_bdt_connection.id;
+        } else {
+            return this.m_id!;
+        }
+        
+    }
+
     send(data: Buffer): number {
         if (this.m_bdt_connection) {
             return this.m_bdt_connection.send(data);
@@ -51,6 +61,7 @@ export class BdtConnection extends IConnection {
             this.m_bdt_connection.removeAllListeners('data');
             this.m_bdt_connection.removeAllListeners('error');
             this.m_bdt_connection.close();
+            this.m_id = this.m_bdt_connection.id;
             delete this.m_bdt_connection;
         }
         return Promise.resolve(ErrorCode.RESULT_OK);
@@ -61,6 +72,7 @@ export class BdtConnection extends IConnection {
             this.m_bdt_connection.removeAllListeners('data');
             this.m_bdt_connection.removeAllListeners('error');
             this.m_bdt_connection.close(true);
+            this.m_id = this.m_bdt_connection.id;
             delete this.m_bdt_connection;
         }
         return Promise.resolve();

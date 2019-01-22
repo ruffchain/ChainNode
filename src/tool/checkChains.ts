@@ -1,4 +1,5 @@
-import { ChainClient, initLogger, ChainClientOptions, HeaderStorage, BlockHeader, Chain, ErrorCode, DposBlockHeader, PowBlockHeader, DbftBlockHeader } from '../client';
+import { initLogger, HeaderStorage, BlockHeader, Chain, ErrorCode, DposBlockHeader, PowBlockHeader, DbftBlockHeader } from '../host';
+import { ChainClient, ChainClientOptions} from '../client';
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
 import * as fs from 'fs-extra';

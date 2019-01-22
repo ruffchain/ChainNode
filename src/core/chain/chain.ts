@@ -20,6 +20,7 @@ import { BlockExecutor, ViewExecutor, BaseHandler, BlockExecutorExternParam, Blo
 import { PendingTransactions } from './pending';
 import { ChainNode, HeadersEventParams, BlocksEventParams} from './chain_node';
 import { IBlockExecutorRoutineManager, BlockExecutorRoutine } from './executor_routine';
+import {IConsistency} from '../block/consistency';
 
 export type ExecutorContext = {
     now: number;
@@ -90,7 +91,7 @@ export type ChainContructOptions =  LoggerOptions & {
     networkCreator: NetworkCreator, 
 };
 
-export class Chain extends EventEmitter {
+export class Chain extends EventEmitter implements IConsistency {
     public static dataDirValid(dataDir: string): boolean {
         if (!fs.pathExistsSync(dataDir)) {
             return false;
@@ -184,11 +185,7 @@ export class Chain extends EventEmitter {
 
     // broadcast数目，广播header时会同时广播tip到这个深度的header
     protected get _broadcastDepth(): number {
-        return this.m_instanceOptions!.confirmDepth!;
-    }
-
-    protected get _confirmDepth(): number {
-        return this.m_instanceOptions!.confirmDepth!;
+        return 1;
     }
 
     protected get _headerReqLimit(): number {
@@ -672,7 +669,7 @@ export class Chain extends EventEmitter {
         if (err || !result.header) {
             return err;
         }
-        err = await this._updateTip(result.header);
+        err = await this._onUpdateTip(result.header);
         if (err) {
             return err;
         }
@@ -738,7 +735,7 @@ export class Chain extends EventEmitter {
         }
     }
 
-    protected async _updateTip(tip: BlockHeader): Promise<ErrorCode> {
+    protected async _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
         this.m_tip = tip;
         let toMork = new Set([tip.hash]);
         const msr = await this._onMorkSnapshot({tip, toMork});
@@ -754,16 +751,6 @@ export class Chain extends EventEmitter {
     }
 
     protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
-        let mork = options.tip.number - 2 * this._confirmDepth;
-        mork = mork >= 0 ? mork : 0;
-        if (mork !== options.tip.number) {
-            let hr = await this.m_headerStorage!.getHeader(mork);
-            if (hr.err) {
-                this.m_logger.error(`get header ${mork} failed ${hr.err}`);
-                return {err: ErrorCode.RESULT_FAILED};
-            }
-            options.toMork.add(hr.header!.hash);
-        }
         return {err: ErrorCode.RESULT_OK};
     }
 
@@ -987,6 +974,7 @@ export class Chain extends EventEmitter {
             // 广播过来的可能没有请求过header，此时创建conn sync
             let cr = this._createSyncedConnection(from);
             if (cr.err) {
+                this.m_logger.error(`receive broadcast header,but create synced conn failed, from ${from},err=${cr.err}`);
                 return cr.err;
             }
             connSync = cr.connSync!;
@@ -1058,7 +1046,7 @@ export class Chain extends EventEmitter {
                     return ErrorCode.RESULT_OK;
                 } else if (vsh.err === ErrorCode.RESULT_NOT_FOUND) {
                     // 找不到可能是因为落后太久了，先从当前tip请求吧
-                    let hsr = await this.getHeader(this.getLastIrreversibleBlockNumber());
+                    let hsr = await this.getHeader(this.getLIB().number);
                     if (hsr.err) {
                         return hsr.err;
                     }
@@ -1152,10 +1140,9 @@ export class Chain extends EventEmitter {
             if (vbr.valid === ErrorCode.RESULT_OK) {
                 this.m_logger.info(`${routine.name} block verified`);
                 assert(routine.storage, `${routine.name} verified ok but storage missed`);
-                let csr = await this.m_storageManager!.createSnapshot(routine.storage!, block.hash);
+                let csr = await this.m_storageManager!.createSnapshot(routine.storage!, block.hash, true);
                 if (csr.err) {
                     this.m_logger.error(`${name} verified ok but save snapshot failed`);
-                    await routine.storage!.remove();
                     return csr.err;
                 }
                 let _err = await this._addVerifiedBlock(block, csr.snapshot!);
@@ -1239,6 +1226,55 @@ export class Chain extends EventEmitter {
         // }
     }
 
+    public async beginConsistency(): Promise<void> {
+        await this.m_headerStorage!.beginConsistency();
+    }
+
+    public async commitConsistency(): Promise<void> {
+        await this.m_headerStorage!.commitConsistency();
+    }
+
+    public async rollbackConsistency(): Promise<void> {
+        await this.m_headerStorage!.rollbackConsistency();
+    }
+
+    protected async _begin(): Promise<ErrorCode> {
+        try {
+            await this.m_db!.run('BEGIN;');
+            await this.beginConsistency();
+            return ErrorCode.RESULT_OK;
+        } catch (e) {
+            this.logger.error(`chain begin transaction exception, e=${e}`);
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+    }
+
+    protected async _commit(): Promise<ErrorCode> {
+        try {
+            await this.m_db!.run('COMMIT;');
+            await this.commitConsistency();
+            return ErrorCode.RESULT_OK;
+        } catch (e) {
+            this.logger.error(`chain commit transaction exception, e=${e}`);
+            // 让它崩溃
+            assert(false, 'commit failed'); 
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+    }
+
+    protected async _rollback(): Promise<ErrorCode> {
+        try {
+            await this.m_db!.run('ROLLBACK;');
+            await this.rollbackConsistency();
+            return ErrorCode.RESULT_OK;
+        } catch (e) {
+            this.logger.error(`chain rollback transaction exception, e=${e}`);
+            // 让它崩溃
+            assert(false, 'rollback failed'); 
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+    }
+
     protected async _addVerifiedBlock(block: Block, storage: StorageDumpSnapshot): Promise<ErrorCode> {
         this.m_logger.info(`begin add verified block to chain`);
         assert(this.m_headerStorage);
@@ -1248,37 +1284,50 @@ export class Chain extends EventEmitter {
             return cr.err;
         }
         if (cr.result! > 0) {
-            this.m_logger.info(`begin extend chain's tip`);
-            let err = await this.m_headerStorage!.changeBest(block.header);
+            let err = await this._begin();
             if (err) {
-                this.m_logger.info(`extend chain's tip failed for save to header storage failed for ${err}`);
                 return err;
             }
-            err = await this._onVerifiedBlock(block); 
-            err = await this._updateTip(block.header);
+            err = await this._onBestBlock(block.header);
+            if (err) {
+                await this._rollback();
+                this.m_logger.error(`onBestBlock ${block.number} ${block.hash} failed for ${stringifyErrorCode(err)}`);
+                return err;
+            }
+            this.m_logger.info(`begin extend chain's tip`);
+            err = await this.m_headerStorage!.changeBest(block.header);
+            if (err) {
+                await this._rollback();
+                this.m_logger.error(`extend chain's tip failed for save to header storage failed for ${err}`);
+                return err;
+            }
+            await this._commit();
+
+            err = await this._onUpdateTip(block.header);
             if (err) {
                 return err;
             }
         } else {
-            let err = await this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.verified);
+            let err = await this._onForkBlock(block.header);
+            if (err) {
+                this.m_logger.error(`onForkBlock ${block.number} ${block.hash} failed for ${stringifyErrorCode(err)}`);
+                return err;
+            }
+            err = await this.m_headerStorage!.updateVerified(block.header, VERIFY_STATE.verified);
             if (err) {
                 this.m_logger.error(`add verified block to chain failed for update verify state to header storage failed for ${err}`);
                 return err;
-            }
-            err = await this._onForkedBlock(block);
-            if (err) {
-                return err;
-            }
-            
+            } 
         }
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _onForkedBlock(block: Block): Promise<ErrorCode> {
+    // 需要保持database一致性的操作放这个里面执行，其他的放_onUpdateTip去执行
+    protected async _onBestBlock(header: BlockHeader): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
+    protected async _onForkBlock(header: BlockHeader): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
     }
 
@@ -1351,12 +1400,7 @@ export class Chain extends EventEmitter {
         this.m_node!.on('outbound', async (conn: NodeConnection) => {
             let syncPeer = conn;
             assert(syncPeer);
-            let hr = await this.m_headerStorage!.getHeader(this.getLastIrreversibleBlockNumber());
-            if (hr.err) {
-                return hr.err;
-            }
-            assert(hr.header);
-            return await this._beginSyncWithConnection({conn}, hr.header!.hash);
+            return await this._beginSyncWithConnection({conn}, this.getLIB().hash);
         });
 
         return ErrorCode.RESULT_OK;
@@ -1377,7 +1421,7 @@ export class Chain extends EventEmitter {
         storage.createLogger();
         let crr: {err: ErrorCode, routine?: BlockExecutorRoutine};
         // 通过redo log 来添加block的内容
-        if (options && options.redoLog) {
+        if (this._ignoreVerify && options && options.redoLog) {
             crr = {err: ErrorCode.RESULT_OK, routine: new VerifyBlockWithRedoLogRoutine({
                 name, 
                 block,
@@ -1470,11 +1514,21 @@ export class Chain extends EventEmitter {
         }
         assert(this.m_headerStorage && this.m_blockStorage);
         this.m_blockStorage!.add(genesis);
-        let err = await this.m_headerStorage!.createGenesis(genesis.header);
+        let err = await this._begin();
         if (err) {
             return err;
         }
-        await this._onVerifiedBlock(genesis);
+        err = await this.m_headerStorage!.createGenesis(genesis.header);
+        if (err) {
+            await this._rollback();
+            return err;
+        }
+        err = await this._onBestBlock(genesis.header);
+        if (err) {
+            await this._rollback();
+            return err;
+        }
+        await this._commit();
         return ErrorCode.RESULT_OK;
     }
 
@@ -1521,27 +1575,6 @@ export class Chain extends EventEmitter {
         return await this.m_pending!.getNonce(s);
     }
 
-    public async getTransactionReceipt(s: string): Promise<{ err: ErrorCode, block?: BlockHeader, tx?: Transaction, receipt?: Receipt }> {
-        let ret = await this.m_headerStorage!.txView.get(s);
-        if (ret.err !== ErrorCode.RESULT_OK) {
-            this.logger.error(`get transaction receipt ${s} failed for ${ret.err}`);
-            return { err: ret.err };
-        }
-
-        let block = this.getBlock(ret.blockhash!);
-        if (!block) {
-            this.logger.error(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
-            return { err: ErrorCode.RESULT_NOT_FOUND };
-        }
-        let tx: Transaction | null = block.content.getTransaction(s);
-        let receipt: Receipt | undefined = block.content.getReceipt(s);
-        if (tx && receipt) {
-            return { err: ErrorCode.RESULT_OK, block: block.header, tx, receipt };
-        }
-        assert(false, `transaction ${s} declared in ${ret.blockhash!} but not found in block`);
-        return { err: ErrorCode.RESULT_NOT_FOUND };
-    }
-
     public addTransaction(tx: Transaction): Promise<ErrorCode> {
         return this._addTransaction(tx);
     }
@@ -1558,12 +1591,8 @@ export class Chain extends EventEmitter {
         return Receipt;
     }
 
-    public getLastIrreversibleBlockNumber() {
-        if (!this.m_tip || this.m_tip.number <= this._confirmDepth) {
-            return 0;
-        }
-
-        return this.m_tip.number - this._confirmDepth;
+    getLIB(): {number: number, hash: string} {
+        return {number: this.m_tip!.number, hash: this.m_tip!.hash};
     }
 }
 

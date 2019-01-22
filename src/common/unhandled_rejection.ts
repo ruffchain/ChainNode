@@ -14,4 +14,10 @@ export function init(logger: LoggerInstance) {
         logger.error('uncaught exception at: ', err.stack);
         process.exit(-1);
     });    
+    process.on('beforeExit', () => {
+        console.log(`beforeExit fired, no exist event loop`);
+    });
+    process.on('exit', (code) => {
+        console.log(`auto exit, code=${code}`);
+    });
 }

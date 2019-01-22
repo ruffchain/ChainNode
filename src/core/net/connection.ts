@@ -34,6 +34,10 @@ export class IConnection extends EventEmitter {
 
     network: string|undefined;
 
+    get id(): string {
+        return 'conn';
+    }
+
     getTimeDelta(): number {
         return 0;
     }

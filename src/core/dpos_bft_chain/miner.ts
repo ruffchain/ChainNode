@@ -6,6 +6,7 @@ import {DposBftNetwork} from './network';
 import {DposBftBlockHeaderSignature, DposBftBlockHeader} from './block';
 import * as libAddress from '../address';
 import {DposBftChainTipState} from './chain_state';
+import {DposBftChainTipStateManager} from './chain_state_manager';
 import {Block} from '../block';
 
 export type DposBftSignEntry = {
@@ -30,14 +31,14 @@ export class DposBftMiner extends DposMiner {
 
     protected async _createBlock(header: DposBftBlockHeader): Promise<{err: ErrorCode, block?: Block}> {
         let cts: DposBftChainTipState = this.chain.chainTipState as DposBftChainTipState;
-        if (cts.irreversible >= cts.bftIrreversibleBlockNum) {
+        if (cts.IRB.number >= cts.bftIRB.number) {
             header.bftSigns = cts.bftSigns;
         }
 
         return await super._createBlock(header);
     }
 
-    protected maybeNewBftIrreversibleNumber() {
+    protected maybeNewBftIRB() {
         let checkImpl = async () => {
             let signs: DposBftBlockHeaderSignature[] = [];
             for (let [_, entry] of this.m_minerSigns) {
@@ -45,12 +46,12 @@ export class DposBftMiner extends DposMiner {
                     signs.push(entry.sign);
                 }
             }
-            let err = await (this.chain.chainTipState as DposBftChainTipState).maybeNewBftIrreversibleNumber(signs);
+            let err = await (this.chain.stateManager as DposBftChainTipStateManager).maybeNewBftIRB(signs);
             if (err) {
                 return;
             }
 
-            let lib: number = this.chain.chainTipState.irreversible;
+            let lib: number = this.chain.chainTipState.IRB.number;
             let temp = this.m_minerSigns;
             for (let [m, entry] of temp) {
                 if (entry.number > lib) {
@@ -63,7 +64,7 @@ export class DposBftMiner extends DposMiner {
                 await this.sendSign();
             }
 
-            this.m_logger.info(`---------------------checkImpl end  bftLib=${(this.chain.chainTipState as DposBftChainTipState).bftIrreversibleBlockNum} dposLib=${(this.chain.chainTipState as DposBftChainTipState).dposIrreversibleBlockNum}`);
+            this.m_logger.info(`---------------------checkImpl end  bftLib=${(this.chain.chainTipState as DposBftChainTipState).bftIRB.number} `);
         };
 
         let check = async () => {
@@ -76,7 +77,7 @@ export class DposBftMiner extends DposMiner {
             this.m_checkTimes--;
             if (this.m_checkTimes > 0) {
                 this.m_checkTimes = 0;
-                this.maybeNewBftIrreversibleNumber();
+                this.maybeNewBftIRB();
             }
         };
         check();
@@ -102,7 +103,7 @@ export class DposBftMiner extends DposMiner {
             let entry: DposBftSignEntry = {number: -1, bInBestChain: false, sign};
             let hr = await this.chain.getHeader(sign.hash);
             if (!hr.err) {
-                if (hr.header!.number <= (this.chain.chainTipState as DposBftChainTipState).bftIrreversibleBlockNum) {
+                if (hr.header!.number <= (this.chain.chainTipState as DposBftChainTipState).bftIRB.number) {
                     return;
                 }
                 entry.number = hr.header!.number;
@@ -112,17 +113,17 @@ export class DposBftMiner extends DposMiner {
                 }
             }
             this.m_minerSigns.set(address, entry);
-            this.maybeNewBftIrreversibleNumber();
+            this.maybeNewBftIRB();
         });
 
         return ErrorCode.RESULT_OK;
     }
 
     protected async sendSign() {
-        if (this.chain.tipBlockHeader!.hash === this.chain.chainTipState.irreversibleHash) {
+        if (this.chain.tipBlockHeader!.hash === this.chain.chainTipState.IRB.hash) {
             return ;
         }
-        let hr = await this.chain.getHeader(this.chain.chainTipState.irreversible + 1);
+        let hr = await this.chain.getHeader(this.chain.chainTipState.IRB.number + 1);
         if (hr.err) {
             return;
         }
@@ -132,7 +133,7 @@ export class DposBftMiner extends DposMiner {
 
         let entry: DposBftSignEntry = { number: hr.header!.number, bInBestChain: true, sign: { hash: hr.header!.hash, pubkey: this.m_pubkey!, sign } };
         this.m_minerSigns.set(this.address, entry);
-        this.maybeNewBftIrreversibleNumber();
+        this.maybeNewBftIRB();
     }
 
     protected async _onTipBlock(chain: DposBftMinerChain, tipBlock: DposBftBlockHeader): Promise<void> {

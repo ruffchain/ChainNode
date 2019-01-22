@@ -4,7 +4,7 @@ import { LoggerInstance } from '../lib/logger_util';
 import { Transaction, Receipt } from './transaction';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { ErrorCode } from '../../client';
+import { ErrorCode } from '../error_code';
 
 export interface IBlockStorage {
     init(): ErrorCode;

@@ -5,7 +5,7 @@ import {TxListener, BlockHeightListener, ChainEventDefinations, BaseHandler} fro
 
 import { LoggerInstance } from '../lib/logger_util';
 import { isNumber } from 'util';
-import { addressFromPublicKey } from '../../client';
+import { addressFromPublicKey } from '../address';
 const {LogShim} = require('../lib/log_shim');
 
 export type TransactionExecuteflag = {

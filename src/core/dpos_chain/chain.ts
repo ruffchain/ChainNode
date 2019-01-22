@@ -7,7 +7,8 @@ import * as consensus from './consensus';
 import * as ValueContext from '../value_chain/context';
 import { DposBlockExecutor, DposBlockExecutorOptions } from './executor';
 import {DposChainTipState} from './chain_state';
-import {DposChainTipStateManager, DposChainTipStateCreator} from './chain_state_manager';
+import {DposChainTipStateManager, IChainStateStorage} from './chain_state_manager';
+import {LRUCache} from '../lib/LRUCache';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -38,13 +39,17 @@ export type DposViewContext = {
     getMiners(): Promise<string[]>;
 } & ValueViewContext;
 
-const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL);';
-const updateMinersSql = 'REPLACE INTO miners (hash, miners) values ($hash, $miners)';
+const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irb" CHAR(64) default \'\')';
+const updateMinersSql = 'REPLACE INTO miners (hash, miners, irb) values ($hash, $miners, $irb)';
 const getMinersSql = 'SELECT miners FROM miners WHERE hash=$hash';
+const saveIrbSqlUpdate = 'update "miners" set irb=$irb where hash=$hash';
+const saveIrbSqlReplace = 'REPLACE INTO miners (hash, irb) values ($hash, $irb)';
+const getIrbSql = 'select irb from "miners" where hash=$hash';
 
-export class DposChain extends ValueChain {
+export class DposChain extends ValueChain implements IChainStateStorage {
     protected m_epochTime: number = 0;
     protected m_stateManager: DposChainTipStateManager | undefined;
+    protected m_cacheIRB: LRUCache<string, string> = new LRUCache(500);
 
     constructor(options: ChainContructOptions) {
         super(options);
@@ -68,10 +73,6 @@ export class DposChain extends ValueChain {
 
     protected get _ignoreVerify() {
         return true;
-    }
-
-    protected createChainTipStateCreator(): DposChainTipStateCreator {
-        return new DposChainTipStateCreator();
     }
 
     public async initialize(instanceOptions: ChainInstanceOptions): Promise<ErrorCode> {
@@ -102,29 +103,33 @@ export class DposChain extends ValueChain {
                 return ErrorCode.RESULT_EXCEPTION;
             }
         }
-
-        let hr = await this.getHeader(0);
-        if (!hr.err) {
-            let hr1 = await this.getMiners(hr.header! as DposBlockHeader);
-            if (!hr1.err) {
-                this.m_stateManager = new DposChainTipStateManager({
-                    libHeader: hr.header! as DposBlockHeader,
-                    libMiners: hr1.creators!,
-                    chain: this,
-                    globalOptions: this.globalOptions, 
-                    creator: this.createChainTipStateCreator()
-                });
-                return await this.m_stateManager.init();
-            }
+        this.m_stateManager = this._createTipStateManager();
+        err = await this.m_stateManager.init();
+        if (!this.m_tip) {
+            return ErrorCode.RESULT_OK;
         }
-        return ErrorCode.RESULT_OK;
+
+        return err;
+    }
+
+    protected _createTipStateManager() {
+        return new DposChainTipStateManager({
+            logger: this.m_logger,
+            headerStorage: this.m_headerStorage!,
+            getMiners: (h) => this.getMiners(h),
+            globalOptions: this.m_globalOptions,
+            stateStorage: this
+        });
     }
 
     async prepareExternParams(block: Block, storage: Storage): Promise<{err: ErrorCode, params?: BlockExecutorExternParam[]}> {
         this.m_logger.debug(`begin prepare executor extern params for ${block.hash}`);
+        if (block.number === 0 || block.number % this.globalOptions.reSelectionBlocks !== 0) {
+            return {err: ErrorCode.RESULT_OK, params: []};
+        }
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
-            blockHash: this.chainTipState.irreversibleHash});
+            blockHash: this.chainTipState.IRB.hash});
         if (csr.err) {
             return {err: csr.err};
         }
@@ -302,7 +307,7 @@ export class DposChain extends ValueChain {
     }
 
     protected async _compareWork(comparedHeader: DposBlockHeader, bestChainTip: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
-        let hr = await this.m_stateManager!.compareIrreversibleBlockNumer(comparedHeader, bestChainTip);
+        let hr = await this.m_stateManager!.compareIRB(comparedHeader, bestChainTip);
         if (hr.err) {
             return {err: hr.err};
         }
@@ -332,8 +337,7 @@ export class DposChain extends ValueChain {
     }
 
     protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
-        // TODO: add irrerveriable 
-        options.toMork.add(this.chainTipState.irreversibleHash);
+        options.toMork.add(this.chainTipState.IRB.hash);
         return {err: ErrorCode.RESULT_OK};
     }
 
@@ -358,40 +362,83 @@ export class DposChain extends ValueChain {
                 return {err: ErrorCode.RESULT_NOT_FOUND};
             }
 
-            return {err: ErrorCode.RESULT_OK, header: electionHeader, creators: JSON.parse(gm.miners)};
+            let creators = JSON.parse(gm.miners);
+            if (!creators.length) {
+                this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}, length=0`);
+                return {err: ErrorCode.RESULT_NOT_FOUND};
+            }
+
+            return {err: ErrorCode.RESULT_OK, header: electionHeader, creators};
         } catch (e) {
-            this.logger.error(e);
+            this.logger.error(`getMiners exception, e=${e}`);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
     }
 
-    protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
-        let err = await this.saveMiners(block);
+    protected async _onUpdateTip(header: BlockHeader): Promise<ErrorCode> {
+        const err = await super._onUpdateTip(header);
         if (err) {
             return err;
         }
-
-        if (block.number === 0) {
+        if (header.number === 0) {
             return ErrorCode.RESULT_OK;
         }
-
-        let hr = await this.m_stateManager!.updateBestChainTip(block.header as DposBlockHeader);
+        let hr = await this.m_stateManager!.onUpdateTip(header as DposBlockHeader);
         if (hr.err) {
             return hr.err;
         }
         this.logger.info(`==========dpos chain state=${this.chainTipState.dump()}`);
         return ErrorCode.RESULT_OK;
     }
-    protected async _onForkedBlock(block: Block): Promise<ErrorCode> {
-        return await this.saveMiners(block);
+
+    public async saveIRB(header: DposBlockHeader, irbHash: string): Promise<ErrorCode> {
+        try {
+            if (header.number === 0 || header.number % this.globalOptions.reSelectionBlocks === 0) {
+                await this.m_db!.run(saveIrbSqlUpdate, {$hash: header.hash, $irb: irbHash});
+            } else {
+                await this.m_db!.run(saveIrbSqlReplace, {$hash: header.hash, $irb: irbHash});
+            }
+        } catch (e) {
+            this.logger.error(`dpos chain save irb failed, e=${e}`);
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+        this.m_cacheIRB.set(header.hash, irbHash);
+        return ErrorCode.RESULT_OK;
     }
 
-    protected async saveMiners(block: Block): Promise<ErrorCode> {
-        if (block.number !== 0 && block.number % this.globalOptions.reSelectionBlocks !== 0) {
+    public async getIRB(blockHash: string): Promise<{err: ErrorCode, irbHash?: string}> {
+        let irbHash = this.m_cacheIRB.get(blockHash);
+        if (irbHash) {
+            return {err: ErrorCode.RESULT_OK, irbHash};
+        }
+        try {
+            let gh = await this.m_db!.get(getIrbSql, {$hash: blockHash});
+            if (!gh || !gh.irb || !gh.irb.length) {
+                return {err: ErrorCode.RESULT_NOT_FOUND};
+            }
+
+            this.m_cacheIRB.set(blockHash, gh.irb);
+            return {err: ErrorCode.RESULT_OK, irbHash: gh.irb};
+        } catch (e) {
+            this.m_logger.error(`dpos chain get irb exception, e=${e}`);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+    }
+
+    protected async _onBestBlock(header: BlockHeader): Promise<ErrorCode> {
+        return await this._saveMiners(header);
+    }
+
+    protected async _onForkBlock(header: BlockHeader): Promise<ErrorCode> {
+        return await this._saveMiners(header);
+    }
+
+    protected async _saveMiners(header: BlockHeader): Promise<ErrorCode> {
+        if (header.number !== 0 && header.number % this.globalOptions.reSelectionBlocks !== 0) {
             return ErrorCode.RESULT_OK;
         }
 
-        let gs = await this.storageManager.getSnapshotView(block.hash);
+        let gs = await this.storageManager.getSnapshotView(header.hash);
         if (gs.err) {
             return gs.err;
         }
@@ -401,12 +448,12 @@ export class DposChain extends ValueChain {
         }
         let viewDenv = new consensus.ViewContext({currDatabase: dbr.value!, globalOptions: this.globalOptions,  logger: this.m_logger!});
         let minersInfo = await viewDenv.getNextMiners();
-        this.storageManager.releaseSnapshotView(block.hash);
+        this.storageManager.releaseSnapshotView(header.hash);
         if (minersInfo.err) {
             return minersInfo.err;
         }
         try {
-            await this.m_db!.run(updateMinersSql, {$hash: block.hash, $miners: JSON.stringify(minersInfo.creators!)});
+            await this.m_db!.run(updateMinersSql, {$hash: header.hash, $miners: JSON.stringify(minersInfo.creators!), $irb: ''});
             return ErrorCode.RESULT_OK;
         } catch (e) {
             this.logger.error(e);
@@ -463,7 +510,7 @@ export class DposChain extends ValueChain {
         return ErrorCode.RESULT_OK;
     }
 
-    public getLastIrreversibleBlockNumber() {
-        return this.chainTipState.irreversible;
+    getLIB(): DposBlockHeader {
+        return this.chainTipState.IRB;
     }
 }

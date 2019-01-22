@@ -1,5 +1,5 @@
 let XMLHttpRequest = require('xmlhttprequest').XMLHttpRequest;
-import {LoggerInstance} from '../../core';
+import {LoggerInstance} from '../depends';
 export class RPCClient {
     private m_url: string;
     constructor(serveraddr: string, port: number, private logger: LoggerInstance ) {

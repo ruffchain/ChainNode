@@ -70,7 +70,7 @@ export class Network extends EventEmitter {
     on(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     on(event: 'inbound', listener: (conn: NodeConnection) => any): this;
     on(event: 'ban', listener: (remote: string) => any): this;
-    on(event: 'error', listener: (connRemotePeer: string, err: ErrorCode) => any): this;
+    on(event: 'error', listener: (connRemotePeer: string, id: string, err: ErrorCode) => any): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
@@ -78,7 +78,7 @@ export class Network extends EventEmitter {
     once(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     once(event: 'inbound', listener: (conn: NodeConnection) => any): this;
     once(event: 'ban', listener: (remote: string) => any): this;
-    once(event: 'error', listener: (connRemotePeer: string, err: ErrorCode) => any): this;
+    once(event: 'error', listener: (connRemotePeer: string, id: string, err: ErrorCode) => any): this;
     once(event: string, listener: any): this {
         return super.once(event, listener);
     }   
@@ -139,7 +139,7 @@ export class Network extends EventEmitter {
 
     async init(): Promise<ErrorCode> {
         this.m_node.on('error', (conn: NodeConnection, err: ErrorCode) => {
-            this.emit('error', conn.remote);
+            this.emit('error', conn.remote, conn.id);
         });
 
         // 收到net/node的ban事件, 调用 ChainNode的banConnection方法做封禁处理

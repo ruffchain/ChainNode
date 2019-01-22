@@ -1,6 +1,5 @@
 import {ErrorCode} from '../error_code';
 import {Network, NetworkOptions, NetworkInstanceOptions} from './network';
-import { parseCommand } from '../../client';
 import { isNullOrUndefined } from 'util';
 
 export type RandomOutNetworkInstanceOptions = {minOutbound: number, checkCycle: number} & NetworkInstanceOptions;
@@ -71,30 +70,32 @@ export class RandomOutNetwork extends Network {
     }
 
     protected async _newOutbounds(count: number, callback?: (count: number) => void): Promise<ErrorCode> {
-        let peerids: string[] = this.m_nodeStorage!.get('all');
         let willConn = new Set();
+        let excludes = new Set();
+        for (const pid of this.m_connecting) {
+            excludes.add(pid);
+        }
+        for (const pid of willConn) {
+            excludes.add(pid);
+        }
+        for (const ib of this.node.getInbounds()) {
+            excludes.add(ib.remote!);
+        }
+        for (const ob of this.node.getOutbounds()) {
+            excludes.add(ob.remote!);
+        }
+        
+        let peerids: string[] = this.m_nodeStorage!.get('all');
         peerids.forEach((pid) => {
-            willConn.add(pid); 
+            if (!excludes.has(pid)) {
+                willConn.add(pid); 
+            }
         });
         this.logger.debug(`will connect to peers from node storage: `, willConn);
         if (willConn.size < count) {
-            let excludes: string[] = [];
-            for (const pid of this.m_connecting) {
-                excludes.push(pid);
-            }
-            for (const pid of willConn) {
-                excludes.push(pid);
-            }
-            for (const ib of this.node.getInbounds()) {
-                excludes.push(ib.remote!);
-            }
-            for (const ob of this.node.getOutbounds()) {
-                excludes.push(ob.remote!);
-            }
             let result = await this.m_node.randomPeers(count, excludes);
-            
             if (result.peers.length === 0) {
-                result.peers = this.m_nodeStorage!.staticNodes.filter((value) => !excludes.includes(value));
+                result.peers = this.m_nodeStorage!.staticNodes.filter((value) => !excludes.has(value));
                 result.err = result.peers.length > 0 ? ErrorCode.RESULT_OK : ErrorCode.RESULT_SKIPPED;
             }
 

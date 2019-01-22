@@ -386,6 +386,9 @@ export class PendingTransactions extends EventEmitter {
         return ErrorCode.RESULT_ERROR_NONCE_IN_TX;
     }
     protected async _addToOrphanMayNonceExist(txTime: TransactionWithTime): Promise<ErrorCode> {
+        if (this._getPendingCount() >= this.m_warnPendingCount) {
+            return ErrorCode.RESULT_OUT_OF_MEMORY;
+        }
         let s: string = txTime.tx.address as string;
         let l: TransactionWithTime[];
         if (this.m_orphanTx.has(s)) {

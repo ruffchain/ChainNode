@@ -2,7 +2,7 @@
 import * as process from 'process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import {initUnhandledRejection, parseCommand, initLogger} from '../client';
+import {initUnhandledRejection, parseCommand, initLogger} from '../common';
 import {initChainCreator, createValueDebuger, ErrorCode, stringifyErrorCode} from '../core';
 
 const logger = initLogger({loggerOptions: {console: true}});

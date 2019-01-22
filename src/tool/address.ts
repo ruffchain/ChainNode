@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as process from 'process';
-import {createKeyPair, addressFromSecretKey, publicKeyFromSecretKey, addressFromPublicKey, initUnhandledRejection, parseCommand, initLogger} from '../client';
+import {createKeyPair, addressFromSecretKey, publicKeyFromSecretKey, addressFromPublicKey, initLogger} from '../host';
+import {initUnhandledRejection, parseCommand} from '../common/';
 
 initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 

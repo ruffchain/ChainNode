@@ -22,7 +22,7 @@ export class StandaloneNode extends INode {
         return ErrorCode.RESULT_OK;
     }
 
-    public async randomPeers(count: number, excludes: string[]): Promise<{err: ErrorCode, peers: string[]}> {
+    public async randomPeers(count: number, excludes: Set<string>): Promise<{err: ErrorCode, peers: string[]}> {
         return {err: ErrorCode.RESULT_SKIPPED, peers: []};
     }
 }

@@ -1,4 +1,4 @@
-import {ErrorCode, ValueTransaction, BufferWriter, LoggerInstance, fromStringifiable} from '../../core';
+import {ErrorCode, ValueTransaction, BufferWriter, LoggerInstance, fromStringifiable} from '../depends';
 import {RPCClient} from '../lib/rpc_client';
 
 export type HostClientOptions = {host: string, port: number, logger: LoggerInstance};
@@ -10,7 +10,11 @@ export class HostClient {
         this.m_client = new RPCClient(options.host, options.port, this.m_logger);
     }
 
-    async getBlock(params: {which: string|number|'lastest', transactions?: boolean}): Promise<{err: ErrorCode, block?: any, txs?: any[]}> {
+    get rpcClient(): RPCClient {
+        return this.m_client;
+    }
+
+    async getBlock(params: {which: string|number|'lastest', transactions?: boolean, eventLog?: boolean}): Promise<{err: ErrorCode, block?: any, txs?: any[], eventLogs?: any[]}> {
         let cr = await this.m_client.callAsync('getBlock', params);
         if (cr.ret !== 200) {
             return {err: ErrorCode.RESULT_FAILED};

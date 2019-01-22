@@ -2,27 +2,38 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 
-import {Options as CommandOptions} from '../lib/simple_command';
+import {Options as CommandOptions} from '../../common/simple_command';
 
 import {INode, initChainCreator, initLogger, Chain, Miner, IBlockExecutorRoutineManager, InprocessRoutineManager, InterprocessRoutineManager, ErrorCode} from '../../core';
-import {ChainEventServer} from '../event/server';
+import {HostChainContext} from '../context/context';
 import {ChainServer} from './rpc';
+import {ChainEvent} from '../event/element';
+import {TxStorage} from '../tx/element';
 
 export class ChainHost {
     constructor() {
         
     }
 
-    protected async _initEventServer(options: {chain: Chain, commandOptions: CommandOptions}): Promise<{err: ErrorCode, server?: ChainEventServer}> {
-        if (!options.commandOptions.has('eventsServer')) {
+    protected async _initContextServer(options: {chain: Chain, commandOptions: CommandOptions}): Promise<{err: ErrorCode, chainContext?: HostChainContext}> {
+        let eNames: string[] = [];
+        if (options.commandOptions.has('eventsServer')) {
+            eNames.push(ChainEvent.ElementName);
+        }
+        if (options.commandOptions.has('txServer')) {
+            eNames.push(TxStorage.ElementName);
+        }
+        if (!eNames.length) {
+            console.info('chain_host _initContextServer not need support');
             return {err: ErrorCode.RESULT_OK};
         }
-        let server = new ChainEventServer({chain: options.chain});
-        const err = await server.init({});
+        
+        let chainContext = new HostChainContext({chain: options.chain});
+        const err = await chainContext.init(eNames);
         if (err) {
             return {err};
         }
-        return {err: ErrorCode.RESULT_OK, server};
+        return {err: ErrorCode.RESULT_OK, chainContext};
     }
 
     public async initMiner(commandOptions: CommandOptions): Promise<{ret: boolean, miner?: Miner}> {
@@ -53,12 +64,12 @@ export class ChainHost {
             console.error('chain_host initMiner fail initialize');
             return {ret: false};
         }
-        const iesr = await this._initEventServer({chain: cr.miner!.chain, commandOptions});
+        const iesr = await this._initContextServer({chain: cr.miner!.chain, commandOptions});
         if (iesr.err) {
-            console.error('init events server fail parseInstanceOptions');
+            console.error('init context server fail parseInstanceOptions');
             return {ret: false};
         }
-        this.m_server = new ChainServer(logger, cr.miner!.chain!, cr.miner!);
+        this.m_server = new ChainServer(logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
         this.m_server.init(commandOptions);
         return {ret: true, miner: cr.miner};
     }
@@ -88,12 +99,12 @@ export class ChainHost {
         if (err) {
             return {ret: false};
         }
-        const iesr = await this._initEventServer({chain: cr.chain!, commandOptions});
+        const iesr = await this._initContextServer({chain: cr.chain!, commandOptions});
         if (iesr.err) {
-            console.error('init events server fail parseInstanceOptions');
+            console.error('init context server fail parseInstanceOptions');
             return {ret: false};
         }
-        this.m_server = new ChainServer(logger, cr.chain!);
+        this.m_server = new ChainServer(logger, cr.chain!, iesr.chainContext);
         this.m_server.init(commandOptions);
         return {ret: true, chain: cr.chain};
     }

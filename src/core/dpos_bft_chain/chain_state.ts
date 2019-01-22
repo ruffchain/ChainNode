@@ -6,34 +6,26 @@ import {LRUCache} from '../lib/LRUCache';
 
 export class DposBftChainTipState extends DposChainTipState {
     protected m_bftLibSigns: DposBftBlockHeaderSignature[] = [];
-    protected m_bftIrreversibleBlocknum: number = 0;
-    protected m_bftIrreversibleBlockHash: string;
+    protected m_bftIRB: DposBftBlockHeader;
     protected m_hashMinerCache: LRUCache<string, string[]> = new LRUCache(10);
 
     constructor(options: DposChainTipStateOptions) {
         super(options);
-        this.m_bftIrreversibleBlocknum = options.libHeader.number;
-        this.m_bftIrreversibleBlockHash = options.libHeader.hash;
+        this.m_bftIRB = options.libHeader as DposBftBlockHeader;
     }
 
-    get bftIrreversibleBlockNum(): number {
-        return this.m_bftIrreversibleBlocknum;
+    get bftIRB(): DposBftBlockHeader {
+        const irb = this.m_bftIRB;
+        return irb;
     }
 
-    get dposIrreversibleBlockNum(): number {
-        return super.irreversible;
-    }
-
-    get irreversible(): number {
-        return this.m_bftIrreversibleBlocknum > this.m_irreversibleBlocknum ? this.m_bftIrreversibleBlocknum : this.m_irreversibleBlocknum;
-    }
-
-    get irreversibleHash(): string {
-        return this.m_bftIrreversibleBlocknum > this.m_irreversibleBlocknum ? this.m_bftIrreversibleBlockHash : this.m_irreversibleBlockHash;
+    get IRB() {
+        return this.m_bftIRB.number > this.m_irb.number ? this.m_bftIRB : this.m_irb;
     }
 
     get bftSigns(): DposBftBlockHeaderSignature[] {
-        return this.m_bftLibSigns;
+        const signs = this.m_bftLibSigns;
+        return signs;
     }
 
     public async updateTip(header: DposBftBlockHeader): Promise<ErrorCode> {
@@ -42,39 +34,21 @@ export class DposBftChainTipState extends DposChainTipState {
             return err;
         }
 
-        await this.maybeNewBftIrreversibleNumber(header.bftSigns);
+        await this.maybeNewBftIRB(header.bftSigns);
 
         return ErrorCode.RESULT_OK;
     }
 
-    public async maybeNewBftIrreversibleNumber(minerSigns: DposBftBlockHeaderSignature[]): Promise<ErrorCode> {
-        let hr = await this._maybeNewBftIrreversibleNumber(minerSigns);
-        if (hr.err) {
-            return hr.err;
-        }
-
-        if (hr.blib! > this.m_bftIrreversibleBlocknum) {
-            this.m_bftIrreversibleBlocknum = hr.blib!;
-            this.m_bftLibSigns = hr.signs!;
-            this.m_bftIrreversibleBlockHash = hr.hash!;
-        }
-
-        return ErrorCode.RESULT_OK;
-    }
-
-    protected async _maybeNewBftIrreversibleNumber(signs: DposBftBlockHeaderSignature[]): Promise<{err: ErrorCode, blib?: number, hash?: string, signs?: DposBftBlockHeaderSignature[]}> {
+    public async maybeNewBftIRB(signs: DposBftBlockHeaderSignature[]): Promise<ErrorCode> {
         let hashCount: Map<string, number> = new Map();
         let maxCount = -1;
         let maxCountHeader: DposBftBlockHeader | undefined;
         for (let sign of signs) {
-            let hr = await this.m_chain.getHeader(sign.hash);
+            let hr = await this.m_headerStorage.getHeader(sign.hash);
             if (hr.err) {
                 this.logger.info(`dpos_bft _maybeNewBftIrreversibleNumber get header failed errcode=${stringifyErrorCode(hr.err)}`);
-                return { err: hr.err };
+                return hr.err;
             }
-            // if (hr.header!.preBlockHash !== this.irreversibleHash) {
-            //     continue;
-            // }
             let count = hashCount.get(sign.hash);
             if (!count) {
                 count = 0;
@@ -89,15 +63,15 @@ export class DposBftChainTipState extends DposChainTipState {
         }
 
         if (!maxCountHeader) {
-            return {err: ErrorCode.RESULT_NOT_FOUND};
+            return ErrorCode.RESULT_NOT_FOUND;
         }
 
         let miners: string[] | null = this.m_hashMinerCache.get(maxCountHeader!.hash);
         if (!miners) {
-            let hr1 = await this.m_chain.getMiners(maxCountHeader!);
+            let hr1 = await this.m_getMiners(maxCountHeader!);
             if (hr1.err) {
                 this.logger.info(`dpos_bft _maybeNewBftIrreversibleNumber get miners failed errcode=${stringifyErrorCode(hr1.err)}`);
-                return {err: hr1.err};
+                return hr1.err;
             }
             miners = hr1.creators!;
         }
@@ -113,15 +87,20 @@ export class DposBftChainTipState extends DposChainTipState {
 
         let needConfireCount: number = Math.ceil(miners.length * 2 / 3);
         if (validSigns.length < needConfireCount) {
-            return {err: ErrorCode.RESULT_NOT_ENOUGH};
+            return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
-        return {err: ErrorCode.RESULT_OK, blib: maxCountHeader.number, hash: maxCountHeader.hash, signs: validSigns};
+        if (maxCountHeader.number > this.m_bftIRB.number) {
+            this.m_bftIRB = maxCountHeader;
+            this.m_bftLibSigns = validSigns;
+        }
+
+        return ErrorCode.RESULT_OK;
     }
 
-    protected toJsonData(): any {
+    toJsonData(): any {
         let d = super.toJsonData();
-        d.bft_irreversible_blocknum = this.m_bftIrreversibleBlocknum;
+        d.bft_irreversible_blocknum = this.m_bftIRB.number;
         return d;
     }
 }

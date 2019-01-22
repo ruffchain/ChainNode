@@ -1,7 +1,8 @@
 import { ErrorCode } from '../error_code';
-import { DposTransactionContext, DposEventContext, DposViewContext, DposChain, DposChainTipStateOptions, DposChainTipStateCreator} from '../dpos_chain';
-import {DposBftChainTipState} from './chain_state';
+import { DposTransactionContext, DposEventContext, DposViewContext, DposChain} from '../dpos_chain';
+import {DposBftChainTipStateManager} from './chain_state_manager';
 import {DposBftBlockHeader} from './block';
+import {BlockHeader} from '../block/block';
 import {ChainTypeOptions} from '../value_chain';
 import {Block, Chain, Storage} from '../value_chain';
 
@@ -9,15 +10,15 @@ export type DposBftTransactionContext = {} & DposTransactionContext;
 export type DposBftEventContext = {} & DposEventContext;
 export type DposBftViewContext = {} & DposViewContext;
 
-export class DposBftChainTipStateCreator extends DposChainTipStateCreator {
-    public createChainTipState(options: DposChainTipStateOptions): DposBftChainTipState {
-        return new DposBftChainTipState(options);
-    }
-}
-
 export class DposBftChain extends DposChain {
-    protected createChainTipStateCreator(): DposBftChainTipStateCreator {
-        return  new DposBftChainTipStateCreator();
+    protected _createTipStateManager() {
+        return new DposBftChainTipStateManager({
+            logger: this.m_logger,
+            headerStorage: this.m_headerStorage!,
+            getMiners: (h) => this.getMiners(h),
+            globalOptions: this.m_globalOptions,
+            stateStorage: this
+        });
     }
 
     protected _getBlockHeaderType() {

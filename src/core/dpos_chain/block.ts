@@ -66,7 +66,7 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
         let index = (thisIndex - electionIndex) % gcr.creators!.length;
         if (index < 0) {
             chain.logger.error(`calcute index failed, thisIndex ${thisIndex}, electionIndex ${electionIndex}, creators length ${gcr.creators!.length}`);
-            return {err: ErrorCode.RESULT_OK};
+            return {err: ErrorCode.RESULT_FAILED};
         }
         let creators = gcr.creators!;
         return {err: ErrorCode.RESULT_OK, miner: creators[index]};

@@ -1,4 +1,4 @@
-import { ErrorCode, EventLog } from '../../core';
+import { ErrorCode} from '../depends';
 import { isObject, isArray } from 'util';
 
 export class ChainEventFilterStub {
@@ -11,13 +11,13 @@ export class ChainEventFilterStub {
         return q;
     }
 
-    get filterFunc(): (log: EventLog) => boolean {
+    get filterFunc(): (log: any) => boolean {
         return this.m_filterFunc!;
     }
 
     init(): ErrorCode {
         if (!this.m_filters 
-            || isObject(this.m_filters) 
+            || !isObject(this.m_filters) 
             || !Object.keys(this.m_filters).length) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
@@ -25,7 +25,7 @@ export class ChainEventFilterStub {
         let filterFuncs = new Map();
         for (let [event, filter] of Object.entries(this.m_filters)) {
             if (!filter || !Object.keys(filter).length) {
-                filterFuncs.set(name, (log: EventLog): boolean => {
+                filterFuncs.set(name, (log: any): boolean => {
                     return true;
                 });
                 querySql.set(event, null);
@@ -44,16 +44,16 @@ export class ChainEventFilterStub {
                     }
                     return sql;
                 } else if (op === 'eq') {
-                    return `e."${opr[0]}" = "${JSON.stringify(opr[1])}"`;
+                    return `e."index@${opr[0]}" = '${JSON.stringify(opr[1])}'`;
                 } else if (op === 'neq') {
-                    return `e."${opr[0]}" != "${JSON.stringify(opr[1])}"`;
+                    return `e."index@${opr[0]}" != '${JSON.stringify(opr[1])}'`;
                 } else if (op === 'in') {
-                    let sql = `e."${opr[0]}" IN [`;
+                    let sql = `e."index@${opr[0]}" IN [`;
                     if (opr[1].length) {
-                        sql += `"${JSON.stringify(opr[1][0])}"`;
+                        sql += `'${JSON.stringify(opr[1][0])}'`;
                     } 
                     for (let v of opr[1]) {
-                        sql += `,"${JSON.stringify(opr[1][0])}"`;
+                        sql += `,'${JSON.stringify(opr[1][0])}'`;
                     }
                     sql += ']';
                     return sql;
@@ -80,11 +80,11 @@ export class ChainEventFilterStub {
                     }
                     return sql;
                 } else if (op === 'eq') {
-                    return `JSON.strigify(l.param.${opr[0]}) === '${JSON.stringify(opr[1])}'`;
+                    return `JSON.stringify(l.param.${opr[0]}) === '${JSON.stringify(opr[1])}'`;
                 } else if (op === 'neq') {
-                    return `JSON.strigify(l.param.${opr[0]})" !== '${JSON.stringify(opr[1])}'`;
+                    return `JSON.stringify(l.param.${opr[0]})" !== '${JSON.stringify(opr[1])}'`;
                 } else if (op === 'in') {
-                    return `${opr[1].map((v: any) => JSON.stringify(v))}.indexOf(JSON.strigify(l.param.${opr[0]})) !== -1`;
+                    return `${opr[1].map((v: any) => JSON.stringify(v))}.indexOf(JSON.stringify(l.param.${opr[0]})) !== -1`;
                 } else {
                     throw new Error();
                 }
@@ -93,7 +93,7 @@ export class ChainEventFilterStub {
                 return pfr.err;
             } 
             let _func;
-            let funcDef = '_filterFunc = (l) => { return ' + pfr.value! + ';};';
+            let funcDef = '_func = (l) => { return ' + pfr.value! + ';};';
             try {
                 eval(funcDef);
             } catch (e) {
@@ -103,7 +103,7 @@ export class ChainEventFilterStub {
         }
         
         this.m_querySql = querySql;
-        this.m_filterFunc = (log: EventLog): boolean => {
+        this.m_filterFunc = (log: any): boolean => {
             if (!filterFuncs.has(log.name)) {
                 return false;
             }
@@ -168,7 +168,7 @@ export class ChainEventFilterStub {
             }
             return {err: ErrorCode.RESULT_OK, value};
         } else if (op === '$eq') {
-            let exp = filter['eq'];
+            let exp = filter['$eq'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
             } 
@@ -185,7 +185,7 @@ export class ChainEventFilterStub {
             }
             return {err: ErrorCode.RESULT_OK, value};
         } else if (op === '$neq') {
-            let exp = filter['neq'];
+            let exp = filter['$neq'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
             } 
@@ -202,7 +202,7 @@ export class ChainEventFilterStub {
             }
             return {err: ErrorCode.RESULT_OK, value};
         } else if (op === '$in') {
-            let exp = filter['in'];
+            let exp = filter['$in'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
             } 
@@ -235,5 +235,5 @@ export class ChainEventFilterStub {
 
     private m_filters: object;
     private m_querySql?: Map<string, string>;
-    private m_filterFunc?: (log: EventLog) => boolean;
+    private m_filterFunc?: (log: any) => boolean;
 }

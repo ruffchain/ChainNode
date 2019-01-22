@@ -8,7 +8,7 @@ import {DbftBlockHeader} from './block';
 import {DbftContext} from './context';
 
 const initHeadersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL, "totalView" INTEGER NOT NULL);';
-const addHeaderSql = 'INSERT INTO miners (hash, miners, totalView) values ($hash, $miners, $totalView)';
+const addHeaderSql = 'REPLACE INTO miners (hash, miners, totalView) values ($hash, $miners, $totalView)';
 const getHeaderSql = 'SELECT miners, totalView FROM miners WHERE hash=$hash';
 
 export class DbftHeaderStorage {
@@ -78,12 +78,14 @@ export class DbftHeaderStorage {
         if (DbftContext.isElectionBlockNumber(this.m_globalOptions, header.number)) {
             const gs = await storageManager.getSnapshotView(header.hash);
             if (gs.err) {
+                this.m_logger.error(`addHeader, getSnapshotView failed, code=${gs.err}`);
                 return gs.err;
             }
             const context = new DbftContext(gs.storage!, this.m_globalOptions, this.m_logger);
             const gmr = await context.getMiners();
             storageManager.releaseSnapshotView(header.hash);
             if (gmr.err) {
+                this.m_logger.error(`addHeader, releaseSnapshotView failed, code=${gmr.err}`);
                 return gmr.err;
             }
             miners =  gmr.miners!;
@@ -92,6 +94,7 @@ export class DbftHeaderStorage {
         if (header.number !== 0) {
             const ghr = await this._getHeader(header.preBlockHash);
             if (ghr.err) {
+                this.m_logger.error(`addHeader, _getHeader failed, code=${ghr.err}`);
                 return ghr.err;
             }
             totalView = ghr.totalView!;

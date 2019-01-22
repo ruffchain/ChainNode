@@ -113,14 +113,14 @@ export class ValueChainDebugSession {
         return {err};
     }
 
-    async transaction(hash: string): Promise<{err: ErrorCode}> {
-        const chain = this.debuger.chain;
-        const gtrr = await chain.getTransactionReceipt(hash);
-        if (gtrr.err) {
-            chain.logger.error(`transaction ${hash} get receipt failed `, stringifyErrorCode(gtrr.err));
-            return {err: gtrr.err};
-        }
-        return this.block(gtrr.block!.hash);
+    async transaction(hash: string, blockhash: string): Promise<{err: ErrorCode}> {
+        // const chain = this.debuger.chain;
+        // const gtrr = await chain.getTransactionReceipt(hash);
+        // if (gtrr.err) {
+        //     chain.logger.error(`transaction ${hash} get receipt failed `, stringifyErrorCode(gtrr.err));
+        //     return {err: gtrr.err};
+        // }
+        return this.block(blockhash);
     }
 
     async view(from: string, method: string, params: any): Promise<{err: ErrorCode, value?: any}> {

@@ -393,6 +393,9 @@ export class DbftConsensusNode extends EventEmitter {
                 } 
                 this._onPrepareResponse({hash, pubkey, sign}, conn);
             } else if (pkg.header.cmdType === DBFT_SYNC_CMD_TYPE.changeview) {
+                if (!this.m_tip) {
+                    return ;
+                }
                 const newView = pkg.body.newView;
                 let reader = new BufferReader(pkg.copyData());
                 let pubkey;

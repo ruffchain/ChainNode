@@ -28,7 +28,7 @@ interface INodeConnection {
 export type NodeConnection = INodeConnection & IConnection & {fullRemote: string};
 
 export class INode extends EventEmitter {
-    public async randomPeers(count: number, excludes: string[]): Promise<{err: ErrorCode, peers: string[]}> {
+    public async randomPeers(count: number, excludes: Set<string>): Promise<{err: ErrorCode, peers: string[]}> {
         return {err: ErrorCode.RESULT_NO_IMP, peers: []};
     }
 
@@ -157,12 +157,12 @@ export class INode extends EventEmitter {
                         conn.setTimeDelta(nTimeDelta);
                         resolve(ErrorCode.RESULT_OK);
                     } else {
-                        this.logger.warn(`close conn to ${peerid} by unSupport`);
+                        this.logger.warn(`close conn ${conn.id} to ${peerid} by unSupport`);
                         conn.destroy();
                         resolve(ErrorCode.RESULT_VER_NOT_SUPPORT);
                     }
                 } else {
-                    this.logger.warn(`close conn to ${peerid} by non versionAck pkg`);
+                    this.logger.warn(`close conn ${conn.id} to ${peerid} by non versionAck pkg`);
                     conn.destroy();
                     resolve(ErrorCode.RESULT_INVALID_STATE);
                 }
@@ -189,11 +189,11 @@ export class INode extends EventEmitter {
         let other = this.getConnection(peerid);
         if (other) {
             if (conn.version!.compare(other.version!) > 0) {
-                this.logger.warn(`close conn to ${peerid} by already exist conn`);
+                this.logger.warn(`close conn ${conn.id} to ${peerid} by already exist conn`);
                 conn.destroy();
                 return {err: ErrorCode.RESULT_ALREADY_EXIST, peerid};
             } else {
-                this.logger.warn(`close other conn to ${peerid} by already exist conn`);
+                this.logger.warn(`close other conn ${conn.id} to ${peerid} by already exist conn`);
                 this.closeConnection(other, true);
             }
         }
@@ -358,18 +358,18 @@ export class INode extends EventEmitter {
                 let ackWriter = PackageStreamWriter.fromPackage(CMD_TYPE.versionAck, { isSupport, timestamp: Date.now() }, 0);
                 inbound.addPendingWriter(ackWriter);
                 if (!isSupport) {
-                    this.m_logger.warn(`close inbound conn to ${inbound.fullRemote} by unSupport`);
+                    this.m_logger.warn(`close inbound conn ${inbound.id} to ${inbound.fullRemote} by unSupport`);
                     inbound.destroy();
                     return;
                 }
                 let other = this.getConnection(inbound.remote!);
                 if (other) {
                     if (inbound.version!.compare(other.version!) > 0) {
-                        this.m_logger.warn(`close inbound conn to ${inbound.fullRemote} by already exist`);
+                        this.m_logger.warn(`close inbound conn ${inbound.id} to ${inbound.fullRemote} by already exist`);
                         inbound.destroy();
                         return ;
                     } else {
-                        this.m_logger.warn(`close other conn to ${inbound.fullRemote} by already exist`);
+                        this.m_logger.warn(`close other conn ${inbound.id} to ${inbound.fullRemote} by already exist`);
                         this.closeConnection(other, true);
                     }
                 }
@@ -381,7 +381,7 @@ export class INode extends EventEmitter {
                 });
                 this.emit('inbound', inbound);
             } else {
-                this.m_logger.warn(`close inbound conn to ${inbound.fullRemote} by non version pkg`);
+                this.m_logger.warn(`close inbound conn ${inbound.id} to ${inbound.fullRemote} by non version pkg`);
                 inbound.destroy();
             }
         });

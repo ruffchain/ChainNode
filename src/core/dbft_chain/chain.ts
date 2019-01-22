@@ -146,8 +146,12 @@ export class DbftChain extends ValueChain {
         return DbftBlockHeader;
     }
 
-    protected async _onVerifiedBlock(block: Block): Promise<ErrorCode> {
-        return await this.m_dbftHeaderStorage!.addHeader(block.header as DbftBlockHeader, this.m_storageManager!);
+    protected async _onBestBlock(header: BlockHeader): Promise<ErrorCode> {
+        return await this.m_dbftHeaderStorage!.addHeader(header as DbftBlockHeader, this.m_storageManager!);
+    }
+
+    protected async _onForkBlock(header: BlockHeader): Promise<ErrorCode> {
+        return await this.m_dbftHeaderStorage!.addHeader(header as DbftBlockHeader, this.m_storageManager!);
     }
 
     protected _onCheckGlobalOptions(globalOptions: any): boolean {
@@ -236,7 +240,7 @@ export class DbftChain extends ValueChain {
         return ErrorCode.RESULT_OK;
     }
 
-    public getLastIrreversibleBlockNumber() {
-        return this.m_tip!.number;
+    getLIB(): {number: number, hash: string} {
+        return {number: this.m_tip!.number, hash: this.m_tip!.hash};
     }
 }

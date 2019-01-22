@@ -1,88 +1,103 @@
-import { ErrorCode, stringifyErrorCode} from '../error_code';
-import {DposBlockHeader} from './block';
-import {DposChain} from './chain';
 const assert = require('assert');
-import { LoggerInstance } from '../lib/logger_util';
 
-type ConfireEntry = {number: number, hash: string, miner: string, count: number};
-export type DposChainTipStateOptions = {libHeader: DposBlockHeader, libMiners: string[], chain: DposChain, globalOptions: any};
+import { ErrorCode, stringifyErrorCode} from '../error_code';
+import { LoggerInstance } from '../lib/logger_util';
+import {DposBlockHeader} from './block';
+import { IHeaderStorage } from '../chain';
+
+type ConfireEntry = {
+    header: DposBlockHeader,
+    count: number
+};
+
+export type DposChainTipStateOptions = {
+    globalOptions: any,
+    logger: LoggerInstance,
+    getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>, 
+    // lib short for last irreversiable block
+    libHeader: DposBlockHeader,
+    headerStorage: IHeaderStorage 
+};
+
 export class DposChainTipState {
+    private m_logger: LoggerInstance;
+    protected m_globalOptions: any;
+    protected m_getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
+    protected m_tip: DposBlockHeader;
     // 当前节点计算出的候选不可逆区块number
-    protected m_proposedIrreversibleBlocknum: number = 0;
+    protected m_proposedIRBNum: number = 0;
     // 不可逆区块number
-    protected m_irreversibleBlocknum: number = 0;
-    protected m_irreversibleBlockHash: string;
-    // 各生产者确认的候选不可逆区块number
-    protected m_producerToLastImpliedIrb: Map<string, {number: number, hash: string}> = new Map();
-    // 各生产者上次出块的块number
-    protected m_producerToLastProduced: Map<string, number> = new Map();
+    protected m_irb: DposBlockHeader;
+    protected m_headerStorage: IHeaderStorage;
+
+    protected m_producerInfo: {
+        // 各生产者确认的候选不可逆区块number
+        lastImpliedIRB: Map<string, DposBlockHeader>,
+         // 各生产者上次出块的块number
+        lastProduced: Map<string, number>
+    } = {
+        lastImpliedIRB: new Map(),
+        lastProduced: new Map()
+    };
     // 待确认区块信息
     protected m_confirmInfo: ConfireEntry[] = [];
 
-    protected m_chain: DposChain;
-    protected m_globalOptions: any;
-    protected m_tip: DposBlockHeader;
-
-    protected m_libHeader: DposBlockHeader;
-    protected m_libMiners: string[];
-
     constructor(options: DposChainTipStateOptions) {
-        this.m_libHeader = options.libHeader;
-        this.m_libMiners = [];
-        this.m_libMiners = [...options.libMiners];
-        this.m_chain = options.chain;
+        this.m_logger = options.logger;
+        this.m_headerStorage = options.headerStorage;
         this.m_globalOptions = options.globalOptions;
-        this.m_irreversibleBlocknum = 0;
-        this.m_irreversibleBlockHash = this.m_libHeader.hash;
+        this.m_getMiners = options.getMiners;
         this.m_tip = options.libHeader;
+        this.m_irb = options.libHeader;
     }
 
-    get irreversible(): number {
-        return this.m_irreversibleBlocknum;
-    }
-
-    get irreversibleHash(): string {
-        return this.m_irreversibleBlockHash;
+    get IRB(): DposBlockHeader {
+        const irb = this.m_irb;
+        return irb;
     }
 
     get logger(): LoggerInstance {
-        return this.m_chain.logger;
+        return this.m_logger;
     }
 
     get tip(): DposBlockHeader {
         return this.m_tip;
     }
 
-    public async updateTip(header: DposBlockHeader): Promise<ErrorCode> {
+    protected _getMiner(header: DposBlockHeader): Promise<{err: ErrorCode, creators?: string[]}> {
+        return this.m_getMiners(header);
+    }
+
+    async updateTip(header: DposBlockHeader): Promise<ErrorCode> {
         if (header.preBlockHash !== this.m_tip.hash || header.number !== this.m_tip.number + 1) {
-            this.logger.info(`updateTip failed for header error, header.number ${header.number} should equal tip.number+1 ${this.m_tip.number + 1}, header.preBlockHash '${header.preBlockHash}' should equal tip.hash ${this.m_tip.hash} headerhash=${header.hash}`);
+            this.logger.error(`updateTip failed for header error, header.number ${header.number} should equal tip.number+1 ${this.m_tip.number + 1}, header.preBlockHash '${header.preBlockHash}' should equal tip.hash ${this.m_tip.hash} headerhash=${header.hash}`);
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
-        let gm = await this.m_chain.getMiners(header);
+        let gm = await this.m_getMiners(header);
         if (gm.err) {
-            this.logger.info(`get miners failed errcode=${stringifyErrorCode(gm.err)}, state=${this.dump()}`);
+            this.logger.error(`get miners failed errcode=${stringifyErrorCode(gm.err)}, state=${this.dump()}`);
             return gm.err;
         }
 
-        let numPreBlocks = this.getNumberPrevBlocks(header);
-        this.m_producerToLastProduced.set(header.miner, header.number);
+        let numPreBlocks = this._getNumberPrevBlocks(header);
+        this.m_producerInfo.lastProduced.set(header.miner, header.number);
 
         let needConfireCount: number = Math.ceil(gm.creators!.length * 2 / 3);
 
-        this.m_confirmInfo.push({ number: header.number, hash: header.hash, miner: header.miner, count: needConfireCount});
+        this.m_confirmInfo.push({ header, count: needConfireCount});
 
         let index = this.m_confirmInfo.length - 1;
         while (index >= 0 && numPreBlocks !== 0 ) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
             entry.count--;
             if (entry.count === 0) {
-                this.m_proposedIrreversibleBlocknum = entry.number;
-                this.m_producerToLastImpliedIrb.set(entry.miner, {number: entry.number, hash: entry.hash});
+                this.m_proposedIRBNum = entry.header.number;
+                this.m_producerInfo.lastImpliedIRB.set(entry.header.miner, entry.header);
                 // 当前block为候选不可逆块,需要做：1.清理之前的entry
                 this.m_confirmInfo = this.m_confirmInfo.slice(index + 1);
                 // 2.计算是否会产生不可逆块
-                this.calcIrreversibleNumber();
+                this._calcIrreversibleNumber();
                 break;
             } else if (numPreBlocks > 0) {
                 numPreBlocks--;
@@ -110,41 +125,44 @@ export class DposChainTipState {
         this.m_tip = header;
 
         if (header.number === 0 || header.number % this.m_globalOptions.reSelectionBlocks === 0) {
-            this.promote(gm.creators!);
+            this._promote(gm.creators!);
         }
 
         return ErrorCode.RESULT_OK;
     }
 
-    public dump(): string {
+    dump(): string {
         let data = this.toJsonData();
         return JSON.stringify(data, null, '\t');
     }
 
-    protected toJsonData(): any {
+    toJsonData(): any {
         let data: any = {};
         data.producer_to_last_implied_irb = [];
-        for (let [miner, number] of this.m_producerToLastImpliedIrb) {
-            data.producer_to_last_implied_irb.push({miner, number});
+        for (let [_, header] of this.m_producerInfo.lastImpliedIRB) {
+            data.producer_to_last_implied_irb.push({miner: header.miner, number: header.number});
         }
         data.producer_to_last_produced = [];
-        for (let [miner, number] of this.m_producerToLastProduced) {
+        for (let [miner, number] of this.m_producerInfo.lastProduced) {
             data.producer_to_last_produced.push({miner, number});
         }
-        data.confire_info = this.m_confirmInfo;
+        data.confire_info = [];
+        for (let entry of this.m_confirmInfo) {
+            data.confire_info.push({number: entry.header.number, hash: entry.header.hash, miner: entry.header.miner, count: entry.count});
+        }
         data.tip = {};
         if (this.m_tip) {
             data.tip.tipnumber = this.m_tip.number;
             data.tip.tipminer = this.m_tip.miner;
             data.tip.tiphash = this.m_tip.hash;
         }
-        data.proposed_irreversible_blocknum = this.m_proposedIrreversibleBlocknum;
-        data.irreversible_blocknum = this.m_irreversibleBlocknum;
+        data.proposed_irreversible_blocknum = this.m_proposedIRBNum;
+        data.irreversible_blocknum = this.m_irb.number;
         return data;
     }
 
-    protected getNumberPrevBlocks(header: DposBlockHeader): number {
-        let number = this.m_producerToLastProduced.get(header.miner);
+    protected _getNumberPrevBlocks(header: DposBlockHeader): number {
+        let number = this.m_producerInfo.lastProduced.get(header.miner);
         if (!number) {
             return -1;
         }
@@ -152,37 +170,37 @@ export class DposChainTipState {
         return header.number > number ? header.number - number : 0;
     }
 
-    protected calcIrreversibleNumber() {
+    protected _calcIrreversibleNumber() {
         let numbers: Array<number> = new Array();
-        for (let [_, info] of this.m_producerToLastImpliedIrb) {
+        for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
             numbers.push(info.number);
         }
         if (numbers.length > 0) {
             numbers.sort();
             // 2/3的人推荐某个block成为候选不可逆block，那么这个块才能成为不可逆，那么上一个不可逆块号就是1/3中最大的
             let n = Math.floor((numbers.length - 1) / 3); 
-            this.m_irreversibleBlocknum = numbers[n];
+            let irbNumber = numbers[n];
 
-            for (let [_, info] of this.m_producerToLastImpliedIrb) {
-                if (this.m_irreversibleBlocknum === info.number) {
-                    this.m_irreversibleBlockHash = info.hash;
+            for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
+                if (irbNumber === info.number) {
+                    this.m_irb = info;
                 }
             }
         }
     }
 
-    protected promote(miners: string[]) {
-        let newImpliedIrb: Map<string, {number: number, hash: string}> = new Map();
+    protected _promote(miners: string[]) {
+        let newImpliedIrb: Map<string, DposBlockHeader> = new Map();
         let newProduced: Map<string, number> = new Map();
         for (let m of miners) {
-            let irb = this.m_producerToLastImpliedIrb.get(m);
-            newImpliedIrb.set(m, irb ? irb : {number: this.m_irreversibleBlocknum, hash: this.m_irreversibleBlockHash!});
+            let irb = this.m_producerInfo.lastImpliedIRB.get(m);
+            newImpliedIrb.set(m, irb ? irb : this.m_irb);
             
-            let pr = this.m_producerToLastProduced.get(m);
-            newProduced.set(m, pr ? pr : this.m_irreversibleBlocknum);
+            let pr = this.m_producerInfo.lastProduced.get(m);
+            newProduced.set(m, pr ? pr : this.m_irb.number);
         }
 
-        this.m_producerToLastImpliedIrb = newImpliedIrb;
-        this.m_producerToLastProduced = newProduced;
+        this.m_producerInfo.lastImpliedIRB = newImpliedIrb;
+        this.m_producerInfo.lastProduced = newProduced;
     }
 }

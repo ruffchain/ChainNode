@@ -1,74 +1,123 @@
-import {ErrorCode} from '../error_code';
+import {ErrorCode, stringifyErrorCode} from '../error_code';
 import {LRUCache} from '../lib/LRUCache';
+import { LoggerInstance } from '../lib/logger_util';
+
+import { IHeaderStorage, BlockHeader } from '../chain';
+
 import {DposChainTipState, DposChainTipStateOptions} from './chain_state';
 import {DposBlockHeader} from './block';
+const assert = require('assert');
+import * as sqlite from 'sqlite';
 
-export class DposChainTipStateCreator {
-    public createChainTipState(options: DposChainTipStateOptions): DposChainTipState {
-        return new DposChainTipState(options);
-    }
+export interface IChainStateStorage {
+    saveIRB(header: DposBlockHeader, irbHash: string): Promise<ErrorCode>;
+    getIRB(blockHash: string): Promise<{err: ErrorCode, irbHash?: string}>;
 }
 
-export type DposChainTipStateManagerOptions = DposChainTipStateOptions & {
-    creator: DposChainTipStateCreator
+export type DposChainTipStateManagerOptions = {
+    logger: LoggerInstance,
+    headerStorage: IHeaderStorage, 
+    getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
+    globalOptions: any;
+    stateStorage: IChainStateStorage;
 };
 
 export class DposChainTipStateManager {
     public static cacheSize: number = 500;
-    protected m_options: DposChainTipStateManagerOptions;
+    protected m_headerStorage: IHeaderStorage;
+    protected m_logger: LoggerInstance;
+    protected m_globalOptions: any;
+    protected m_getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
     protected m_tipStateCache: LRUCache<string, DposChainTipState> = new LRUCache(DposChainTipStateManager.cacheSize);
-    protected m_bestChainTipState: DposChainTipState ;
+    protected m_bestTipState?: DposChainTipState ;
+    protected m_prevBestIRB?: BlockHeader;
+    protected m_storage: IChainStateStorage;
 
     constructor(options: DposChainTipStateManagerOptions) {
-        this.m_options = options;
-        this.m_bestChainTipState = this.m_options.creator.createChainTipState(this.m_options);
-        this.m_tipStateCache.set(this.m_options.libHeader.hash, this.m_bestChainTipState);
+        this.m_headerStorage = options.headerStorage;
+        this.m_logger = options.logger;
+        this.m_globalOptions = options.globalOptions;
+        this.m_getMiners = options.getMiners;
+        this.m_storage = options.stateStorage;
     }
 
-    public getBestChainState(): DposChainTipState {
-        return this.m_bestChainTipState;
+    getBestChainState(): DposChainTipState {
+        return this.m_bestTipState!;
     }
 
-    public async init(): Promise<ErrorCode> {
-        let tipNumber = this.m_options.chain.tipBlockHeader ? this.m_options.chain.tipBlockHeader!.number : 0;
-        if (tipNumber === 0) {
-            return ErrorCode.RESULT_OK;
+    protected _newChainTipState(libHeader: DposBlockHeader): DposChainTipState {
+        return new DposChainTipState({
+            logger: this.m_logger,
+            globalOptions: this.m_globalOptions,
+            getMiners: this.m_getMiners,
+            headerStorage: this.m_headerStorage, 
+            libHeader
+        });
+    }
+
+    async init(): Promise<ErrorCode> {
+        let hr = await this.m_headerStorage.getHeader(0);
+        if (hr.err) {
+            this.m_logger.error(`chain tip state manager init failed for get genesis header failed ${stringifyErrorCode(hr.err)}`);
+            return hr.err;
         }
-        return await this.buildChainStateOnBest(tipNumber);
+        const genesisHeader = hr.header! as DposBlockHeader;
+        this.m_bestTipState = this._newChainTipState(genesisHeader);
+        this.m_tipStateCache.set(genesisHeader.hash, this.m_bestTipState);
+        this.m_prevBestIRB = genesisHeader;
+        return ErrorCode.RESULT_OK;
     }
 
-    public async updateBestChainTip(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+    async onUpdateTip(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+        if (this.m_bestTipState!.IRB.number === 0 && header.number > 1) {
+            // 可能是第一次初始化
+            let gi = await this.m_storage.getIRB(header.hash);
+            if (!gi.err) {
+                let gh = await this.m_headerStorage.getHeader(gi.irbHash!);
+                if (gh.err) {
+                    this.m_logger.error(`_getState failed, for get irb header failed, e=${stringifyErrorCode(gh.err)}`);
+                    return { err: ErrorCode.RESULT_EXCEPTION };
+                }
+
+                this.m_bestTipState = this._newChainTipState(gh.header! as DposBlockHeader);
+                this.m_tipStateCache.set(header.hash, this.m_bestTipState);
+                this.m_prevBestIRB = gh.header!;
+            } 
+        }
         // 可能分叉了 已经切换分支了，所以需要从fork上去bulid
-        let hr = await this.buildChainStateOnFork(header);
+        let hr = await this._getState(header);
         if (hr.err) {
             return hr;
         }
 
-        this.m_bestChainTipState = hr.state!;
-        
+        this.m_bestTipState = hr.state!;
+        let err = await this._onUpdateBestIRB();
+        if (err) {
+            return {err};
+        }
+
         return hr;
     }
 
-    public async compareIrreversibleBlockNumer(compareHeader: DposBlockHeader, specilHeader: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
-        if (compareHeader.preBlockHash === specilHeader.hash) {
+    async compareIRB(compareHeader: DposBlockHeader, tipHeader: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
+        if (compareHeader.preBlockHash === tipHeader.hash) {
             return {err: ErrorCode.RESULT_OK, result: 0};
         }
-        
-        let hrSpecil = await this.buildChainStateOnFork(specilHeader);
-        if (hrSpecil.err) {
-            return {err: hrSpecil.err};
+        assert(this.m_bestTipState!.tip === tipHeader, `best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
+        if (this.m_bestTipState!.tip !== tipHeader) {
+            return {err: ErrorCode.RESULT_NOT_FOUND};
         }
-
+        const bestTipState = this.m_bestTipState!;
         // compareHeader没有和specilHeader在specil的lib处相交，那么compareHeader的lib一定小于specilHeader的
         let prev: string = compareHeader.hash;
         let n = compareHeader.number;
-        while (n >= hrSpecil.state!.irreversible) {
-            let hr = await this.m_options.chain.getHeader(prev);
+        while (n >= bestTipState.IRB.number) {
+            let hr = await this.m_headerStorage!.getHeader(prev);
             if (hr.err) {
                 return { err: hr.err };
             }
 
-            if (prev === hrSpecil.state!.irreversibleHash) {
+            if (prev === bestTipState!.IRB.hash) {
                 break;
             }
 
@@ -76,99 +125,74 @@ export class DposChainTipStateManager {
             n--;
         }
 
-        if (n > hrSpecil.state!.irreversible) {
+        if (n > bestTipState.IRB.number) {
             return { err: ErrorCode.RESULT_OK, result: -1 };
         }
 
-        let hrCompare = await this.buildChainStateOnFork(compareHeader);
+        let hrCompare = await this._getState(compareHeader);
         if (hrCompare.err) {
             return { err: hrCompare.err };
         }
-        if (hrSpecil.state!.irreversible === hrCompare.state!.irreversible) {
+        if (bestTipState.IRB.number === hrCompare.state!.IRB.number) {
             return { err: ErrorCode.RESULT_OK, result: 0 };
         }
 
-        return { err: ErrorCode.RESULT_OK, result: hrCompare.state!.irreversible - hrSpecil.state!.irreversible };
+        return { err: ErrorCode.RESULT_OK, result: hrCompare.state!.IRB.number - bestTipState.IRB.number };
     }
 
-    protected async buildChainStateOnBest(toIndex: number): Promise<ErrorCode> {
-        let state = this.m_bestChainTipState;
-        let beginIndex: number = state.tip.number + 1;
-        if (toIndex < beginIndex) {
-            this.m_options.chain.logger.error(`buildChainStateOnBest param error according to number, toIndex ${toIndex} beginIndex ${beginIndex}`);
-            return ErrorCode.RESULT_INVALID_PARAM;
+    protected async _onUpdateBestIRB(): Promise<ErrorCode> {
+        if (!this.m_prevBestIRB || this.m_prevBestIRB.hash !== this.getBestChainState().IRB.hash) {
+            this.m_prevBestIRB = this.getBestChainState().IRB;
+            return await this.m_storage.saveIRB(this.getBestChainState().tip, this.getBestChainState().IRB.hash);
         }
-        
-        // header必须要通过number去getHeader一次，确保在bestchain上面
-        for (let i = beginIndex; i <= toIndex; i++) {
-            let hr = await this.m_options.chain.getHeader(i);
-            if (hr.err) {
-                this.m_options.chain.logger.error(`buildChainStateOnBest get header error according to number, err = ${hr.err}`);
-                return hr.err;
-            }
-
-            let err = await state.updateTip(hr.header! as DposBlockHeader);
-            if (err) {
-                this.m_options.chain.logger.error(`buildChainStateOnBest updateTip error according to number, err = ${err}`);
-                return err;
-            }
-        }
-        this.m_bestChainTipState = state; 
 
         return ErrorCode.RESULT_OK;
     }
 
-    protected async buildChainStateOnFork(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
-        this.m_tipStateCache.set(this.m_bestChainTipState.tip.hash, this.m_bestChainTipState);
+    protected async _getState(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
         let s = this.m_tipStateCache.get(header.hash);
         if (s) {
-            return {err: ErrorCode.RESULT_OK, state: s}; // --------------------------------------------
+            return {err: ErrorCode.RESULT_OK, state: s};
         }
-        // 可能冲best上面，也可能是重其他fork上面,只能按照hash查找
-        let headers: DposBlockHeader[] = [];
         // 分支一定是从当前链的最后一个不可逆点或者它之后的点开始复制的，否则不需要创建
-        let newState = this.m_options.creator.createChainTipState(this.m_options);
-        while (true) {
-            if (header.number < this.m_bestChainTipState.irreversible) {
-                this.m_options.chain.logger.error(`buildChainStateOnFork failed, for the fork and best's crossed block number is less than the best's irreversible`);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
-            }
-            let cacheState: DposChainTipState | null = this.m_tipStateCache.get(header.hash);
-            if (cacheState ) { // 需要确认相交点
-                this.m_tipStateCache.remove(header.hash);
+        const bestTipState = this.m_bestTipState!;
+        if (header.number < bestTipState!.IRB.number) {
+            this.m_logger.error(`_getState failed, for the fork and best's crossed block number is less than the best's irreversible`);
+            return {err: ErrorCode.RESULT_OUT_OF_LIMIT};
+        } 
+        const hr = await this.m_headerStorage.getHeader(header, bestTipState.IRB.number - header.number);
+        if (hr.err) {
+            this.m_logger.error(`_getState getHeader of ${header.number} ${header.hash} on irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash} failed for ${stringifyErrorCode(hr.err)}`);
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+        if (hr.header!.hash !== bestTipState.IRB.hash) {
+            this.m_logger.error(`_getState failed, for header ${header.number} ${header.hash} not fork from irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash}`);
+            return {err: ErrorCode.RESULT_OUT_OF_LIMIT};
+        }
+        let newState: DposChainTipState|undefined;
+        let fromIndex = hr.headers!.length - 1;
+        for (; fromIndex >= 0; --fromIndex) {
+            const thisHeader = hr.headers![fromIndex];
+            let cacheState: DposChainTipState | null = this.m_tipStateCache.get(thisHeader.hash);
+            if (cacheState ) {
                 newState = cacheState;
+                this.m_tipStateCache.remove(thisHeader.hash);
+                // 另一种方案是clone当前的
+                // newState = cacheState.clone();
                 break;
             }
-
-            if (header.number === this.m_bestChainTipState.irreversible && header.hash === this.m_bestChainTipState.irreversibleHash) {
-                let hr1 = await this.m_options.chain.getHeader(this.m_bestChainTipState.irreversibleHash);
-                if (hr1.err) {
-                    this.m_options.chain.logger.error(`buildChainStateOnFork failed, get header failed,errcode=${hr1.err},hash=${this.m_bestChainTipState.irreversibleHash}`);
-                    return { err: hr1.err };
-                }
-                let hr2 = await this.m_options.chain.getMiners(hr1.header! as DposBlockHeader);
-                if (hr2.err) {
-                    this.m_options.chain.logger.error(`buildChainStateOnFork failed, get miners failed,errcode=${hr2.err}, hash=${this.m_bestChainTipState.irreversibleHash}`);
-                    return {err: hr2.err};
-                }
-                newState = this.m_options.creator.createChainTipState({libHeader: hr1.header! as DposBlockHeader, libMiners: hr2.creators!, chain: this.m_options.chain, globalOptions: this.m_options.globalOptions});
-                break;
-            }
-
-            headers.unshift(header);
-
-            let hr = await this.m_options.chain.getHeader(header.preBlockHash);
-            if (hr.err) {
-                this.m_options.chain.logger.error(`buildChainState get header error according to hash, err = ${hr.err}`);
-                return { err: hr.err };
-            }
-            header = hr.header! as DposBlockHeader;
         }
 
-        for (let h of headers) {
-            let err = await newState.updateTip(h);
+        if (!newState) {
+            newState = this._newChainTipState(bestTipState.IRB);
+        } else {
+            fromIndex += 1;
+        }
+        const passedHeaders = hr.headers!.slice(fromIndex);
+        for (let h of passedHeaders) {
+            let err = await newState.updateTip(h as DposBlockHeader);
             if (err) {
-                this.m_options.chain.logger.error(`buildChainState updateTip error according to number, err = ${err}`);
+                this.m_logger.error(`_getState updateTip error according to number, err = ${err}`);
                 return { err };
             }
         }

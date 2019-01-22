@@ -113,7 +113,7 @@ export class BdtNode extends INode {
         this.m_dht.rootDHT.activeLocalPeer();
     }
 
-    async randomPeers(count: number, excludes: string[]): Promise<{ err: ErrorCode, peers: string[], ignore0: boolean }> {
+    async randomPeers(count: number, excludes: Set<string>): Promise<{ err: ErrorCode, peers: string[], ignore0: boolean }> {
         // 过滤掉自己和种子peer
         const filter = (peer: any) => {
             if (!peer.peerid) {
@@ -124,7 +124,7 @@ export class BdtNode extends INode {
                 // this.m_logger.debug(`exclude ${peer.peerid} from skipList`);
                 return false;
             }
-            if (excludes.includes(peer.peerid)) {
+            if (excludes.has(peer.peerid)) {
                 // this.m_logger.debug(`exclude ${peer.peerid} from excludesList`);
                 return false;
             }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as process from 'process';
 import * as path from 'path';
-import {initUnhandledRejection, parseCommand, initLogger} from '../client';
+import {initUnhandledRejection, parseCommand, initLogger} from '../common';
 import {initChainCreator, createValueDebuger, ErrorCode} from '../core';
 
 const logger = initLogger({loggerOptions: {console: true}});
