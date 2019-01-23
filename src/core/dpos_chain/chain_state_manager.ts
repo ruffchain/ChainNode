@@ -9,9 +9,14 @@ import {DposBlockHeader} from './block';
 const assert = require('assert');
 import * as sqlite from 'sqlite';
 
+export type StorageIrbEntry = {
+    tipHash: string,
+    irbHash: string,
+    irbHeight: number
+};
 export interface IChainStateStorage {
-    saveIRB(header: DposBlockHeader, irbHash: string): Promise<ErrorCode>;
-    getIRB(blockHash: string): Promise<{err: ErrorCode, irbHash?: string}>;
+    saveIRB(header: DposBlockHeader, irbHeader: DposBlockHeader): Promise<ErrorCode>;
+    getIRB(blockHash: string): Promise<{err: ErrorCode, irb?: StorageIrbEntry}>;
 }
 
 export type DposChainTipStateManagerOptions = {
@@ -71,12 +76,12 @@ export class DposChainTipStateManager {
     async onUpdateTip(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
         if (this.m_bestTipState!.IRB.number === 0 && header.number > 1) {
             // 可能是第一次初始化
-            let gi = await this.m_storage.getIRB(header.hash);
+            let gi = await this.m_storage.getIRB('latest');
             if (!gi.err) {
-                let gh = await this.m_headerStorage.getHeader(gi.irbHash!);
+                let gh = await this.m_headerStorage.getHeader(gi.irb!.irbHash);
                 if (gh.err) {
-                    this.m_logger.error(`_getState failed, for get irb header failed, e=${stringifyErrorCode(gh.err)}`);
-                    return { err: ErrorCode.RESULT_EXCEPTION };
+                    this.m_logger.error(`onUpdateTip failed, for get irb header failed, e=${stringifyErrorCode(gh.err)}`);
+                    return { err: gh.err };
                 }
 
                 this.m_bestTipState = this._newChainTipState(gh.header! as DposBlockHeader);
@@ -143,7 +148,7 @@ export class DposChainTipStateManager {
     protected async _onUpdateBestIRB(): Promise<ErrorCode> {
         if (!this.m_prevBestIRB || this.m_prevBestIRB.hash !== this.getBestChainState().IRB.hash) {
             this.m_prevBestIRB = this.getBestChainState().IRB;
-            return await this.m_storage.saveIRB(this.getBestChainState().tip, this.getBestChainState().IRB.hash);
+            return await this.m_storage.saveIRB(this.getBestChainState().tip, this.getBestChainState().IRB);
         }
 
         return ErrorCode.RESULT_OK;

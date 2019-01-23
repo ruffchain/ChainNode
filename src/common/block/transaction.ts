@@ -47,6 +47,18 @@ export class Transaction extends SerializableWithHash {
     set input(i: any) {
         this.m_input = i;
     }
+
+    public verify(): boolean {
+        if (typeof this.m_method !== 'string' || !this.m_method.length) {
+            return false;
+        }
+
+        if (typeof this.m_nonce !== 'number' || isNaN(this.m_nonce) || this.m_nonce < 0 || this.m_nonce % 1 !== 0) {
+            return false;
+        }
+
+        return true;
+    }
     
     /**
      *  virtual验证交易的签名段

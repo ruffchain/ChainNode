@@ -648,8 +648,9 @@ export class ChainNode extends EventEmitter {
             return ErrorCode.RESULT_NOT_FOUND;
         }
         let stub = this.m_requestingBlock.hashMap.get(params.block.hash);
-        assert(stub, `recv block ${params.block.hash} from ${params.from!} that never request`);
+        // assert(stub, `recv block ${params.block.hash} from ${params.from!} that never request`);
         if (!stub) {
+            this.logger.error(`recv block ${params.block.hash} from ${params.from!} that never request`);
             this._banConnection(params.from!, BAN_LEVEL.day);
             return ErrorCode.RESULT_INVALID_BLOCK;
         }

@@ -28,6 +28,23 @@ export class ValueTransaction extends Transaction {
         this.m_fee = value;
     }
 
+    public verify(): boolean {
+        let err = super.verify();
+        if (!err) {
+            return false;
+        }
+
+        if (this.m_value.isNaN() || this.m_value.isLessThan(0)) {
+            return false;
+        }
+
+        if (this.m_fee.isNaN() || this.m_fee.isLessThan(0)) {
+            return false;
+        }
+
+        return true;
+    }
+
     protected _encodeHashContent(writer: BufferWriter): ErrorCode {
         let err = super._encodeHashContent(writer);
         if (err) {

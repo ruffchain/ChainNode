@@ -104,10 +104,23 @@ export class BlockHeader extends SerializableWithHash {
      * verify hash here
      */
     public async verify(chain: any): Promise<{err: ErrorCode, valid?: boolean}> {
+        if (typeof this.m_number !== 'number' || isNaN(this.m_number) || this.m_number < 0 || this.m_number % 1 !== 0) {
+            return {err: ErrorCode.RESULT_OK, valid: false};
+        }
+
+        if (typeof this.timestamp !== 'number' || isNaN(this.timestamp)) {
+            return {err: ErrorCode.RESULT_OK, valid: true};
+        }
+
         return {err: ErrorCode.RESULT_OK, valid: true};
     }
 
     public verifyContent(content: BlockContent): boolean {
+        for ( let tx of content.transactions) {
+            if (!tx.verify()) {
+                return false;
+            }
+        }
         if (this.m_merkleRoot !== this._genMerkleRoot(content.transactions)) {
             return false;
         }

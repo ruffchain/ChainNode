@@ -66,6 +66,10 @@ export class PendingTransactions extends EventEmitter {
     }
 
     public async addTransaction(tx: Transaction): Promise<ErrorCode> {
+        if (!tx.verify()) {
+            this.m_logger.error(`addTransaction failed, tx param error, txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
         this.m_logger.debug(`addTransaction, txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
         const checker = this.m_handler.getTxPendingChecker(tx.method);
         if (!checker) {

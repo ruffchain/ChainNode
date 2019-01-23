@@ -7,7 +7,7 @@ import * as consensus from './consensus';
 import * as ValueContext from '../value_chain/context';
 import { DposBlockExecutor, DposBlockExecutorOptions } from './executor';
 import {DposChainTipState} from './chain_state';
-import {DposChainTipStateManager, IChainStateStorage} from './chain_state_manager';
+import {DposChainTipStateManager, IChainStateStorage, StorageIrbEntry} from './chain_state_manager';
 import {LRUCache} from '../lib/LRUCache';
 
 export type DposTransactionContext = {
@@ -39,17 +39,18 @@ export type DposViewContext = {
     getMiners(): Promise<string[]>;
 } & ValueViewContext;
 
-const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irb" CHAR(64) default \'\')';
-const updateMinersSql = 'REPLACE INTO miners (hash, miners, irb) values ($hash, $miners, $irb)';
+const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';
+const updateMinersSql = 'REPLACE INTO miners (hash, miners) values ($hash, $miners)';
 const getMinersSql = 'SELECT miners FROM miners WHERE hash=$hash';
-const saveIrbSqlUpdate = 'update "miners" set irb=$irb where hash=$hash';
-const saveIrbSqlReplace = 'REPLACE INTO miners (hash, irb) values ($hash, $irb)';
-const getIrbSql = 'select irb from "miners" where hash=$hash';
+const saveIrbSqlUpdate = 'update "miners" set irbhash=$irbhash, irbheight=$irbheight where hash=$hash';
+const saveIrbSqlReplace = 'REPLACE INTO miners (hash, irbhash, irbheight) values ($hash, $irbhash, $irbheight)';
+const getIrbSql = 'select * from "miners" where hash=$hash';
+const getLatestIrbSql = 'select * from "miners" where irbhash !=\'\' and irbheight != -1 order by irbheight desc';
 
 export class DposChain extends ValueChain implements IChainStateStorage {
     protected m_epochTime: number = 0;
     protected m_stateManager: DposChainTipStateManager | undefined;
-    protected m_cacheIRB: LRUCache<string, string> = new LRUCache(500);
+    protected m_cacheIRB: LRUCache<string, StorageIrbEntry> = new LRUCache(500);
 
     constructor(options: ChainContructOptions) {
         super(options);
@@ -391,34 +392,41 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         return ErrorCode.RESULT_OK;
     }
 
-    public async saveIRB(header: DposBlockHeader, irbHash: string): Promise<ErrorCode> {
+    public async saveIRB(header: DposBlockHeader, irbHeader: DposBlockHeader): Promise<ErrorCode> {
         try {
             if (header.number === 0 || header.number % this.globalOptions.reSelectionBlocks === 0) {
-                await this.m_db!.run(saveIrbSqlUpdate, {$hash: header.hash, $irb: irbHash});
+                await this.m_db!.run(saveIrbSqlUpdate, {$hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number});
             } else {
-                await this.m_db!.run(saveIrbSqlReplace, {$hash: header.hash, $irb: irbHash});
+                await this.m_db!.run(saveIrbSqlReplace, {$hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number});
             }
         } catch (e) {
             this.logger.error(`dpos chain save irb failed, e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        this.m_cacheIRB.set(header.hash, irbHash);
+        let entry: StorageIrbEntry = {tipHash: header.hash, irbHash: irbHeader.hash, irbHeight: irbHeader.number};
+        this.m_cacheIRB.set(header.hash, entry);
         return ErrorCode.RESULT_OK;
     }
 
-    public async getIRB(blockHash: string): Promise<{err: ErrorCode, irbHash?: string}> {
-        let irbHash = this.m_cacheIRB.get(blockHash);
-        if (irbHash) {
-            return {err: ErrorCode.RESULT_OK, irbHash};
+    public async getIRB(blockHash: string): Promise<{err: ErrorCode, irb?: StorageIrbEntry}> {
+        let irb = this.m_cacheIRB.get(blockHash);
+        if (irb) {
+            return {err: ErrorCode.RESULT_OK, irb};
         }
         try {
-            let gh = await this.m_db!.get(getIrbSql, {$hash: blockHash});
-            if (!gh || !gh.irb || !gh.irb.length) {
+            let gh: any;
+            if (blockHash === 'latest') {
+                gh = await this.m_db!.get(getLatestIrbSql);
+            } else {
+                gh = await this.m_db!.get(getIrbSql, {$hash: blockHash});
+            }
+            if (!gh || !gh.irb || !gh.irbhash.length || gh.irb.irbheight === -1) {
                 return {err: ErrorCode.RESULT_NOT_FOUND};
             }
 
-            this.m_cacheIRB.set(blockHash, gh.irb);
-            return {err: ErrorCode.RESULT_OK, irbHash: gh.irb};
+            let entry: StorageIrbEntry = {tipHash: gh.hash, irbHash: gh.irbhash, irbHeight: gh.irbheight};
+            this.m_cacheIRB.set(blockHash, entry);
+            return {err: ErrorCode.RESULT_OK, irb: entry};
         } catch (e) {
             this.m_logger.error(`dpos chain get irb exception, e=${e}`);
             return {err: ErrorCode.RESULT_EXCEPTION};
@@ -453,7 +461,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return minersInfo.err;
         }
         try {
-            await this.m_db!.run(updateMinersSql, {$hash: header.hash, $miners: JSON.stringify(minersInfo.creators!), $irb: ''});
+            await this.m_db!.run(updateMinersSql, {$hash: header.hash, $miners: JSON.stringify(minersInfo.creators!)});
             return ErrorCode.RESULT_OK;
         } catch (e) {
             this.logger.error(e);

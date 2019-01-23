@@ -12,6 +12,10 @@ import { DposChain } from './chain';
 
 export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
     public async verify(chain: Chain): Promise<{ err: ErrorCode, valid?: boolean }> {
+        let hr = await super.verify(chain);
+        if (hr.err) {
+            return hr;
+        }
         // 先验证签名是否正确
         if (!this._verifySign()) {
             chain.logger.error(`verify block ${this.number} sign error!`);

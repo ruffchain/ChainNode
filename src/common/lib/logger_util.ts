@@ -24,16 +24,15 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
         }
         if (options.loggerOptions.file) {
             fs.ensureDirSync(options.loggerOptions.file.root);
-            loggerTransports.push(new transports.DailyRotateFile({
+            loggerTransports.push(new transports.File({
                 json: false,
                 level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
                 timestamp: true,
-                filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || '%DATE%intchain.log'),
-                datePattern: 'YYYY-MM-DD-HH.',
+                filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
+                datePattern: 'yyyy-MM-dd.',
                 prepend: true,
                 handleExceptions: true,
-                humanReadableUnhandledException: true,
-                maxFiles: '7d'
+                humanReadableUnhandledException: true
             }));
         }
         const logger = new Logger({

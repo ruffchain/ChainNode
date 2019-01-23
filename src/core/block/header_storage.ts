@@ -315,7 +315,9 @@ export class HeaderStorage implements IHeaderStorage {
         this.m_relayOpt = undefined;
     }
     public async commitConsistency(): Promise<void> {
-        this.m_relayOpt();
+        if (this.m_relayOpt) {
+            this.m_relayOpt();
+        }
     }
 
     public async rollbackConsistency(): Promise<void> {

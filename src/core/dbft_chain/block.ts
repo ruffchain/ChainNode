@@ -94,7 +94,14 @@ export class DbftBlockHeader extends BlockWithSign(ValueBlockHeader) {
     }
 
     public async verify(chain: DbftChain): Promise<{ err: ErrorCode, valid?: boolean }> {
-        // 从某个设施验证pubkey是否在列表中,是否轮到这个节点出块
+        if (typeof this.m_view !== 'number' || isNaN(this.m_view) || this.m_view < 0 || this.m_view % 1 !== 0) {
+            return {err: ErrorCode.RESULT_OK, valid: false};
+        }
+        let hr = await super.verify(chain);
+        if (hr.err) {
+            return hr;
+        }
+        // 从某个设施验证pubkey是否在列表中,是否轮到这个节点出块 
         return await this._verifySigns(chain);
     }
 
