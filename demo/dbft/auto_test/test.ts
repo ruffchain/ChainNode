@@ -1,6 +1,7 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import {initLogger, ChainClient, BigNumber, ErrorCode, md5, sign, verify, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection} from '../../../src/client';
+import {initLogger, addressFromSecretKey} from '../../../src/host';
+import {parseCommand, initUnhandledRejection} from '../../../src/common';
 import {AutoEntry} from './auto_entry';
 
 initUnhandledRejection(initLogger({loggerOptions: {console: true}}));

@@ -1,6 +1,8 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import {initLogger, ChainClient, BigNumber, ErrorCode, md5, sign, verify, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection} from '../../../src/client';
+import {initLogger, BigNumber, ErrorCode, md5, sign, verify, addressFromSecretKey} from '../../../src/host';
+import {parseCommand, initUnhandledRejection} from '../../../src/common';
+import {ChainClient, ValueTransaction} from '../../../src/client';
 
 initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 

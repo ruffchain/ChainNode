@@ -5,7 +5,6 @@ const assert = require('assert');
 import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
 import {Transaction, BlockStorage, BlockHeader, initLogger, HeaderStorage, Receipt } from '../../src/core';
-import {FakeTxStorage} from '../fake/tx_storage';
 
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
@@ -15,7 +14,6 @@ process.on('unhandledRejection', (reason, p) => {
 class TestHeaderStorage extends HeaderStorage {
     constructor(options: any) {
         super(options);
-        this.m_txView = new FakeTxStorage();
     }
 } 
 

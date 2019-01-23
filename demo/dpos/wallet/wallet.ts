@@ -1,6 +1,6 @@
 import * as readline from 'readline';
 import * as process from 'process';
-import {ChainClient, BigNumber, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection, initLogger, MapFromObject} from '../../../src/client';
+import {ChainClient, BigNumber, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection, initLogger, MapFromObject, ChainEventFilter, BlockEventLogs, ErrorCode} from '../../../src/client';
 
 initUnhandledRejection(initLogger({loggerOptions: {console: true}}));
 
@@ -50,7 +50,34 @@ function main() {
                         watchingTx.splice(watchingTx.indexOf(tx), 1);
                     }
                 }
+            } else {
+                console.error(`getTransactionReceipt failed error=${err}`);
             }
+        }
+    });
+
+    let filters: any = {
+        transfer: {
+            $and: [
+                { $eq: { to: '12LKjfgQW26dQZMxcJdkj2iVP2rtJSzT88' } }
+            ]
+        }
+    };
+    let eventFilter: ChainEventFilter = new ChainEventFilter({ chainClient, filters });
+    let err1 = eventFilter.init();
+    if (err1) {
+        console.log(`chain event filter  init failed,err ${err1}`);
+        return;
+    }
+    eventFilter.watch((param: {err: ErrorCode, event: BlockEventLogs}) => {
+        console.log(`new event watch`);
+        if (param.err) {
+            console.log(`watch error err ${param.err}`);
+            return;
+        }
+
+        for (let log of param.event!.logs) {
+            console.log(`watch new log from blockhash=${param.event!.blockHash}, name=${log.name}, param=${JSON.stringify(log.param)}, filter=${JSON.stringify(filters)}`);
         }
     });
 

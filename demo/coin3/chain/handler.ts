@@ -1,4 +1,4 @@
-import {ErrorCode, BigNumber, DbftViewContext, DbftTransactionContext, ValueHandler} from '../../../src/client';
+import {ErrorCode, BigNumber, DbftViewContext, DbftTransactionContext, ValueHandler} from '../../../src/host';
 
 export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getBalance', async (context: DbftViewContext, params: any): Promise<BigNumber> => {

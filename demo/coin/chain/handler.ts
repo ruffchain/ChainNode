@@ -1,4 +1,4 @@
-import { ErrorCode, BigNumber, ValueViewContext, ValueTransactionContext, ValueHandler } from '../../../src/client';
+import { ErrorCode, BigNumber, ValueViewContext, ValueTransactionContext, ValueHandler } from '../../../src/host';
 
 export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getBalance', async (context: ValueViewContext, params: any): Promise<any> => {

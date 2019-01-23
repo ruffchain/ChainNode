@@ -1,4 +1,4 @@
-import { DbftBlockHeader, ErrorCode} from '../../../src/client';
+import { DbftBlockHeader, ErrorCode} from '../../../src/host';
 import { IOperation } from './baseinterface';
 
 export class BaseCheckPoint {

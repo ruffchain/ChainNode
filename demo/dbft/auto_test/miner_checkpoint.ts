@@ -1,4 +1,5 @@
-import { DbftBlockHeader, ErrorCode, md5, sign, verify, addressFromSecretKey, ValueTransaction, parseCommand, initUnhandledRejection } from '../../../src/client';
+import { DbftBlockHeader, ErrorCode, md5, sign, verify, addressFromSecretKey, ValueTransaction } from '../../../src/host';
+import {parseCommand, initUnhandledRejection} from '../../../src/common';
 import { IOperation } from './baseinterface';
 import {BaseCheckPoint} from './checkpoint';
 

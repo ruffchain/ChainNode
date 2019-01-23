@@ -1,4 +1,5 @@
-import { initLogger, ChainClient, BigNumber, ErrorCode, md5, sign, addressFromSecretKey, ValueTransaction} from '../../../src/client';
+import { initLogger, BigNumber, ErrorCode, md5, sign, addressFromSecretKey, } from '../../../src/host';
+import {ChainClient, ValueTransaction} from '../../../src/client';
 import { IOperation } from './baseinterface';
 import { BaseCheckPoint } from './checkpoint';
 import { GetBalanceCheckPoint, TransferToCheckPoint, RegisterCheckPoint, UnRegisterCheckPoint } from './tx_checkpoint';

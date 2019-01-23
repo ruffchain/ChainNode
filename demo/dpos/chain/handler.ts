@@ -1,4 +1,4 @@
-import {ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject} from '../../../src/client';
+import {ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject} from '../../../src/host';
 import {isNullOrUndefined} from 'util';
 
 export function registerHandler(handler: ValueHandler) {
@@ -80,9 +80,13 @@ export function registerHandler(handler: ValueHandler) {
         return await context.getMiners();
     });
     
+    handler.defineEvent('transfer', {indices: ['from', 'to']});
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        return await context.transferTo(params.to, context.value);
+        const err = await context.transferTo(params.to, context.value);
+        if (!err) {
+            context.emit('transfer', {from: context.caller, to: params.to, value: context.value});
+        }
+        return err;
     });
     
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {

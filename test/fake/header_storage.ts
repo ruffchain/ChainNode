@@ -1,11 +1,6 @@
 import {IHeaderStorage, VERIFY_STATE, BlockHeader, ErrorCode } from '../../src/core';
-import {FakeTxStorage} from './tx_storage';
 
 export class FakeHeaderStorage implements IHeaderStorage {
-    get txView()  {
-        return new FakeTxStorage();
-    }
-
     public async init(): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
     }
@@ -44,5 +39,15 @@ export class FakeHeaderStorage implements IHeaderStorage {
 
     public async changeBest(header: BlockHeader): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
+    }
+
+    public async beginConsistency(): Promise<void> {
+
+    }
+    public async commitConsistency(): Promise<void> {
+
+    }
+    public async rollbackConsistency(): Promise<void> {
+
     }
 }
