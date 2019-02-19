@@ -17,6 +17,7 @@ export type StorageLogger = IStorageLogger & Serializable;
 
 export class LoggedStorage {
     
+    protected m_bWarpTrans: boolean = false;
     constructor(storage: Storage, logger: StorageLogger) {
         this.m_storage = storage;
         this.m_logger = logger;
@@ -38,7 +39,12 @@ export class LoggedStorage {
                 let ltr = await this.m_logger.beginTransaction();
                 await ltr.value!.beginTransaction();
                 let btr = await proto.bind(storage)();
-                this._wrapTransaction(btr.value, ltr.value!);
+                if (!this.m_bWarpTrans) {
+                    // 之前对于同一数据库每次beginTransaction的时候就新创建一个transcationDB，但是这样会导致递归调用，
+                    // 所以改成只创建一次，那么对应的commit和rollback也只能warp一次
+                    this._wrapTransaction(btr.value, ltr.value!);
+                    this.m_bWarpTrans = true;
+                }
                 return btr;
             };
         }

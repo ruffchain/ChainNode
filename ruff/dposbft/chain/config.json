@@ -1,13 +1,13 @@
 {
-    "handler":"./handler.js",
+    "handler": "./handler.js",
     "type": {
-        "consensus":"dpos",
-        "features":[]
+        "consensus": "dposbft",
+        "features": []
     },
     "global": {
-        "minCreateor": 1,
+        "minCreateor": 2,
         "maxCreateor": 21,
-        "reSelectionBlocks": 2,
+        "reSelectionBlocks": 10,
         "blockInterval": 10,
         "timeOffsetToLastBlock": 122400,
         "timeBan": 2592000,

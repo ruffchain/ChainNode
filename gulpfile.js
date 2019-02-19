@@ -4,7 +4,7 @@ const sourcemaps = require("gulp-sourcemaps");
 const tsProject = ts.createProject("tsconfig.json");
 const fs = require("fs-extra");
 
-gulp.task("compile", function() {
+gulp.task("compile", function () {
     return tsProject.src()
         .pipe(sourcemaps.init())
         .pipe(tsProject())
@@ -18,11 +18,11 @@ gulp.task("compile", function() {
 gulp.task("res", () => {
     [
         gulp.src(["./src/**/*.sql", "./src/**/*.js", "./src/**/*.d.ts", "./src/**/*.json"])
-            .pipe(gulp.dest("./dist/blockchain-sdk/src")),
+        .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./test/**/*.sql", "./test/**/*.js", "./test/**/*.d.ts", "./test/**/*.json"])
-            .pipe(gulp.dest("./dist/blockchain-sdk/src")),
-        gulp.src(["./demo/**/*.json"])
-            .pipe(gulp.dest("./dist/blockchain-sdk/demo")),
+        .pipe(gulp.dest("./dist/blockchain-sdk/src")),
+        gulp.src(["./ruff/**/*.json"])
+        .pipe(gulp.dest("./dist/blockchain-sdk/ruff")),
     ];
 });
 
@@ -35,7 +35,10 @@ gulp.task("_publish", () => {
     pkg.types = "./src/client/index.d.ts";
     delete pkg.scripts;
     fs.ensureDirSync("./dist/blockchain-sdk/src/");
-    fs.writeJSONSync("./dist/blockchain-sdk/package.json", pkg, {spaces: 4, flag: "w"});
+    fs.writeJSONSync("./dist/blockchain-sdk/package.json", pkg, {
+        spaces: 4,
+        flag: "w"
+    });
 });
 
 gulp.task("prepareCli", () => {
@@ -49,7 +52,10 @@ gulp.task("prepareCli", () => {
         "chain_debuger": "./src/tool/debuger.js",
     };
     fs.ensureDirSync("./dist/blockchain-sdk-cli");
-    fs.writeJSONSync("./dist/blockchain-sdk-cli/package.json", pkg, {spaces: 4, flag: "w"});
+    fs.writeJSONSync("./dist/blockchain-sdk-cli/package.json", pkg, {
+        spaces: 4,
+        flag: "w"
+    });
 });
 
 gulp.task("publish", ["build", "_publish", "prepareCli"]);
