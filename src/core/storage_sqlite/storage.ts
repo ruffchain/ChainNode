@@ -14,17 +14,17 @@ declare module 'sqlite' {
 }
 
 import { ErrorCode } from '../error_code';
-import {toStringifiable, fromStringifiable} from '../serializable';
-import {Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger} from '../storage';
+import { toStringifiable, fromStringifiable } from '../serializable';
+import { Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger } from '../storage';
 import { LoggerInstance } from '../lib/logger_util';
 import { JsonStorage } from '../storage_json/storage';
 import { isUndefined, isArray, isNullOrUndefined } from 'util';
 const digest = require('../lib/digest');
-const {LogShim} = require('../lib/log_shim');
+const { LogShim } = require('../lib/log_shim');
 
 class SqliteStorageKeyValue implements IReadWritableKeyValue {
     protected readonly logger: LoggerInstance;
-    constructor(readonly db: sqlite.Database, readonly fullName: string, logger: LoggerInstance) { 
+    constructor(readonly db: sqlite.Database, readonly fullName: string, logger: LoggerInstance) {
         this.logger = new LogShim(logger).bind(`[transaction: ${this.fullName}]`, true).log;
     }
 
@@ -37,7 +37,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`set ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -53,7 +53,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK, value: fromStringifiable(JSON.parse(result.value)) };
         } catch (e) {
             this.logger.error(`get ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -67,12 +67,12 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hset ${key} ${field} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
     public async hget(key: string, field: string): Promise<{ err: ErrorCode; value?: any; }> {
-        try {   
+        try {
             assert(key);
             assert(field);
             const result = await this.db.get(`SELECT value FROM '${this.fullName}' WHERE name=? AND field=?`, key, field);
@@ -83,17 +83,17 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK, value: fromStringifiable(JSON.parse(result.value)) };
         } catch (e) {
             this.logger.error(`hget ${key} ${field} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
-    public async hdel(key: string, field: string): Promise<{err: ErrorCode}> {
+    public async hdel(key: string, field: string): Promise<{ err: ErrorCode }> {
         try {
             await this.db.exec(`DELETE FROM '${this.fullName}' WHERE name='${key}' and field='${field}'`);
-            return {err: ErrorCode.RESULT_OK};   
+            return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hdel ${key} ${field} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -102,22 +102,22 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const result = await this.db.get(`SELECT count(*) as value FROM '${this.fullName}' WHERE name=?`, key);
 
-            return { err: ErrorCode.RESULT_OK, value: result.value };   
+            return { err: ErrorCode.RESULT_OK, value: result.value };
         } catch (e) {
             this.logger.error(`hlen ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
-    public async hexists(key: string, field: string): Promise<{ err: ErrorCode, value?: boolean}> {
+    public async hexists(key: string, field: string): Promise<{ err: ErrorCode, value?: boolean }> {
         let { err } = await this.hget(key, field);
         if (!err) {
-            return {err: ErrorCode.RESULT_OK, value: true};
+            return { err: ErrorCode.RESULT_OK, value: true };
         } else if (err === ErrorCode.RESULT_NOT_FOUND) {
-            return {err: ErrorCode.RESULT_OK, value: false};
+            return { err: ErrorCode.RESULT_OK, value: false };
         } else {
             this.logger.error(`hexists ${key} ${field} `, err);
-            return {err};
+            return { err };
         }
     }
 
@@ -131,10 +131,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 await statement.run([key, fields[i], JSON.stringify(toStringifiable(values[i], true))]);
             }
             await statement.finalize();
-            return { err: ErrorCode.RESULT_OK };   
+            return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hmset ${key} ${fields} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -148,10 +148,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             result.forEach((x) => resultMap[x.field] = fromStringifiable(JSON.parse(x.value)));
             const values = fields.map((x) => resultMap[x]);
 
-            return { err: ErrorCode.RESULT_OK, value: values };  
+            return { err: ErrorCode.RESULT_OK, value: values };
         } catch (e) {
             this.logger.error(`hmget ${key} ${fields} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -163,7 +163,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK, value: result.map((x) => x.field) };
         } catch (e) {
             this.logger.error(`hkeys ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -175,12 +175,12 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK, value: result.map((x) => fromStringifiable(JSON.parse(x.value))) };
         } catch (e) {
             this.logger.error(`hvalues ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
-        
+
     }
 
-    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: {key: string, value: any}[]; }> {
+    public async hgetall(key: string): Promise<{ err: ErrorCode; value?: { key: string, value: any }[]; }> {
         try {
             const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, key);
 
@@ -191,17 +191,17 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             };
         } catch (e) {
             this.logger.error(`hgetall ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
-    public async hclean(key: string): Promise<{err: ErrorCode}> {
+    public async hclean(key: string): Promise<{ err: ErrorCode }> {
         try {
             const result = await this.db.exec(`DELETE FROM ${this.fullName} WHERE name='${key}'`);
-            return {err: ErrorCode.RESULT_OK}; 
+            return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hclean ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -219,9 +219,9 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`lset ${key} ${index} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
-        
+
     }
 
     public async llen(key: string): Promise<{ err: ErrorCode; value?: number; }> {
@@ -233,10 +233,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             if (!len) {
-                return {err: ErrorCode.RESULT_OK, value: []};
+                return { err: ErrorCode.RESULT_OK, value: [] };
             }
             if (start < 0) {
                 start = len! + start;
@@ -259,7 +259,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK, value: ret };
         } catch (e) {
             this.logger.error(`lrange ${key} ${start} ${stop}`, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -277,7 +277,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`lpush ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -293,7 +293,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`lpushx ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -303,7 +303,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             if (len === 0) {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
@@ -320,7 +320,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             }
         } catch (e) {
             this.logger.error(`lpop ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -329,14 +329,14 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             const json = JSON.stringify(toStringifiable(value, true));
             await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${len}', '${json}')`);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`rpush ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -345,7 +345,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             for (let i = 0; i < value.length; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
@@ -353,10 +353,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                     VALUES ('${key}', '${len! + i}', '${json}')`);
             }
 
-            return { err: ErrorCode.RESULT_OK };    
+            return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`rpushx ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -365,7 +365,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             if (len === 0) {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
@@ -376,7 +376,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             }
         } catch (e) {
             this.logger.error(`rpop ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -385,7 +385,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             if (len === 0 || index >= len!) {
                 return await this.lset(key, len!, value);
@@ -398,7 +398,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             }
         } catch (e) {
             this.logger.error(`linsert ${key} ${index} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -407,7 +407,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             const { err, value: len } = await this.llen(key);
             if (err) {
-                return {err};
+                return { err };
             }
             if (len === 0) {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
@@ -426,7 +426,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             }
         } catch (e) {
             this.logger.error(`lremove ${key} `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 }
@@ -488,13 +488,20 @@ class SqliteReadableDatabase implements IReadableDatabase {
         let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
     }
+
+    // Added by Yang Jun 2019-2-20
+    public async getReadableKeyValueWithDbname(dbname: string, name: string) {
+        const fullName = Storage.getKeyValueFullName(dbname, name);
+        let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
 }
 
 class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IReadWritableDatabase {
     public async createKeyValue(name: string) {
         let err = Storage.checkTableName(name);
         if (err) {
-            return {err};
+            return { err };
         }
         const fullName = Storage.getKeyValueFullName(this.name, name);
         // 先判断表是否存在
@@ -504,7 +511,7 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
             count = ret['COUNT(*)'];
         } catch (e) {
             this.logger.error(`select table name failed `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
         if (count > 0) {
             err = ErrorCode.RESULT_ALREADY_EXIST;
@@ -544,7 +551,7 @@ export class SqliteStorage extends Storage {
         fs.ensureDirSync(path.dirname(this.m_filePath));
         let options: any = {};
         if (!readonly) {
-            options.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE; 
+            options.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE;
         } else {
             options.mode = sqlite3.OPEN_READONLY;
         }
@@ -569,14 +576,14 @@ export class SqliteStorage extends Storage {
             this.m_logger.error(`pragma some options on sqlite database file ${this.m_filePath} failed `, e);
             err = ErrorCode.RESULT_EXCEPTION;
         }
-        
+
         if (!err) {
             this.m_isInit = true;
         }
-        
+
         setImmediate(() => {
             this.m_eventEmitter.emit('init', err);
-        }); 
+        });
 
         return err;
     }
@@ -592,9 +599,9 @@ export class SqliteStorage extends Storage {
 
     public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
         let buf = await fs.readFile(this.m_filePath);
-        const sqliteHeaderSize: number = 100; 
+        const sqliteHeaderSize: number = 100;
         if (buf.length < sqliteHeaderSize) {
-            return {err: ErrorCode.RESULT_INVALID_FORMAT};
+            return { err: ErrorCode.RESULT_INVALID_FORMAT };
         }
         const content = Buffer.from(buf.buffer as ArrayBuffer, sqliteHeaderSize, buf.length - sqliteHeaderSize);
         let hash = digest.hash256(content).toString('hex');
@@ -604,25 +611,25 @@ export class SqliteStorage extends Storage {
     public async getReadableDataBase(name: string) {
         let err = Storage.checkDataBaseName(name);
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, value: new SqliteReadableDatabase(name, this.m_db!, this.m_logger)};
+        return { err: ErrorCode.RESULT_OK, value: new SqliteReadableDatabase(name, this.m_db!, this.m_logger) };
     }
 
-    public async createDatabase(name: string): Promise<{err: ErrorCode, value?: IReadWritableDatabase}> {
+    public async createDatabase(name: string): Promise<{ err: ErrorCode, value?: IReadWritableDatabase }> {
         let err = Storage.checkDataBaseName(name);
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, value: new SqliteReadWritableDatabase(name, this.m_db!, this.m_logger)};
+        return { err: ErrorCode.RESULT_OK, value: new SqliteReadWritableDatabase(name, this.m_db!, this.m_logger) };
     }
 
     public async getReadWritableDatabase(name: string) {
         let err = Storage.checkDataBaseName(name);
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, value: new SqliteReadWritableDatabase(name, this.m_db!, this.m_logger)};
+        return { err: ErrorCode.RESULT_OK, value: new SqliteReadWritableDatabase(name, this.m_db!, this.m_logger) };
     }
 
     public async beginTransaction(): Promise<{ err: ErrorCode, value: StorageTransaction }> {
@@ -637,12 +644,12 @@ export class SqliteStorage extends Storage {
         return { err: ErrorCode.RESULT_OK, value: this.m_transcation! };
     }
 
-    public async toJsonStorage(storage: JsonStorage): Promise<{err: ErrorCode}> {
+    public async toJsonStorage(storage: JsonStorage): Promise<{ err: ErrorCode }> {
         let tableNames: Map<string, string[]> = new Map();
         try {
             const results = await this.m_db!.all(`select name fromsqlite_master where type='table' order by name;`);
-            for (const {name} of results) {
-                const {dbName, kvName} = SqliteStorage.splitFullName(name);
+            for (const { name } of results) {
+                const { dbName, kvName } = SqliteStorage.splitFullName(name);
                 if (!tableNames.has(dbName!)) {
                     tableNames.set(dbName!, []);
                 }
@@ -650,7 +657,7 @@ export class SqliteStorage extends Storage {
             }
         } catch (e) {
             this.m_logger.error(`get all tables failed `, e);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
         let root = Object.create(null);
         for (let [dbName, kvNames] of tableNames.entries()) {
@@ -675,7 +682,7 @@ export class SqliteStorage extends Storage {
                             } else {
                                 if (!isArray(kvRoot[elem.name])) {
                                     kvRoot[elem.name] = [];
-                                } 
+                                }
                                 let arr = kvRoot[elem.name] as any[];
                                 if (arr.length > index) {
                                     arr[index] = fromStringifiable(JSON.parse(elem.value));
@@ -691,11 +698,11 @@ export class SqliteStorage extends Storage {
                     }
                 } catch (e) {
                     this.m_logger.error(`database: ${dbName} kv: ${kvName} transfer error `, e);
-                    return {err: ErrorCode.RESULT_EXCEPTION};
+                    return { err: ErrorCode.RESULT_EXCEPTION };
                 }
             }
         }
         await storage.flush(root);
-        return {err: ErrorCode.RESULT_OK};
+        return { err: ErrorCode.RESULT_OK };
     }
 }
