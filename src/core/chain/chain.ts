@@ -9,7 +9,7 @@ import { isNumber, isBoolean, isString, isNullOrUndefined, isArray, isObject } f
 import { ErrorCode, stringifyErrorCode } from '../error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from '../lib/logger_util';
 import { TmpManager } from '../lib/tmp_manager';
-import { MapFromObject} from '../serializable';
+import { MapFromObject } from '../serializable';
 
 import { INode, NodeConnection } from '../net/node';
 import { IHeaderStorage, HeaderStorage, VERIFY_STATE, BlockStorage, Transaction, Receipt, BlockHeader, Block, Network, BAN_LEVEL, NetworkInstanceOptions, NetworkCreator } from '../block';
@@ -18,9 +18,9 @@ import { SqliteStorage } from '../storage_sqlite/storage';
 import { BlockExecutor, ViewExecutor, BaseHandler, BlockExecutorExternParam, BlockExecutorExternParamCreator } from '../executor';
 
 import { PendingTransactions } from './pending';
-import { ChainNode, HeadersEventParams, BlocksEventParams} from './chain_node';
+import { ChainNode, HeadersEventParams, BlocksEventParams } from './chain_node';
 import { IBlockExecutorRoutineManager, BlockExecutorRoutine } from './executor_routine';
-import {IConsistency} from '../block/consistency';
+import { IConsistency } from '../block/consistency';
 
 export type ExecutorContext = {
     now: number;
@@ -66,7 +66,7 @@ export type ChainInstanceOptions = {
     headerReqLimit?: number;
     confirmDepth?: number;
     // 不用excutor校验block, 而是通过redo log; 默认为0,即使用excutor
-    ignoreVerify?: boolean; 
+    ignoreVerify?: boolean;
     ignoreBan?: boolean;
     saveMismatch?: boolean;
 
@@ -84,11 +84,11 @@ type SyncConnection = {
     moreHeaders?: boolean
 };
 
-export type ChainContructOptions =  LoggerOptions & {
-    dataDir: string, 
-    handler: BaseHandler, 
-    globalOptions: any, 
-    networkCreator: NetworkCreator, 
+export type ChainContructOptions = LoggerOptions & {
+    dataDir: string,
+    handler: BaseHandler,
+    globalOptions: any,
+    networkCreator: NetworkCreator,
 };
 
 export class Chain extends EventEmitter implements IConsistency {
@@ -114,9 +114,9 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_handler = options.handler;
         this.m_globalOptions = Object.create(null);
         Object.assign(this.m_globalOptions, options.globalOptions);
-        this.m_tmpManager = new TmpManager({root: this.m_dataDir, logger: this.logger});
+        this.m_tmpManager = new TmpManager({ root: this.m_dataDir, logger: this.logger });
         this.m_networkCreator = options.networkCreator;
-        this.m_executorParamCreator = new BlockExecutorExternParamCreator({logger: this.m_logger});
+        this.m_executorParamCreator = new BlockExecutorExternParamCreator({ logger: this.m_logger });
     }
 
     // 存储address入链的tx的最大nonce
@@ -126,13 +126,23 @@ export class Chain extends EventEmitter implements IConsistency {
 
     public static dbUser: string = '__user';
 
+    // Added by Yang Jun 2019-2-20
+    public static dbToken: string = '__token';
+    public static dbBancor: string = '__bancor';
+    public static kvFactor: string = 'factor';
+    public static kvReserve: string = 'reserve';
+    public static kvSupply: string = 'supply';
+    public static kvNonliquidity: string = 'nonliquidity';
+
+    ///////////////////////////////////////////////
+
     public static s_dbFile: string = 'database';
 
     on(event: 'tipBlock', listener: (chain: Chain, block: BlockHeader) => void): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
-    
+
     prependListener(event: 'tipBlock', listener: (chain: Chain, block: BlockHeader) => void): this;
     prependListener(event: string, listener: any): this {
         return super.prependListener(event, listener);
@@ -151,7 +161,7 @@ export class Chain extends EventEmitter implements IConsistency {
     protected m_readonly?: boolean;
     protected m_dataDir: string;
     protected m_tmpManager: TmpManager;
-    protected m_handler: BaseHandler; 
+    protected m_handler: BaseHandler;
     protected m_instanceOptions?: ChainInstanceOptions;
     protected m_globalOptions: ChainGlobalOptions;
     private m_state: ChainState = ChainState.none;
@@ -254,7 +264,7 @@ export class Chain extends EventEmitter implements IConsistency {
     get executorParamCreator(): BlockExecutorExternParamCreator {
         return this.m_executorParamCreator;
     }
-    
+
     protected async _loadGenesis(): Promise<ErrorCode> {
         let genesis = await this.m_headerStorage!.getHeader(0);
         if (genesis.err) {
@@ -306,7 +316,7 @@ export class Chain extends EventEmitter implements IConsistency {
         // 将hgetall返回的数组转换成对象
         if (Array.isArray(kvgr.value)) {
             kvgr.value = kvgr.value.reduce((obj, item) => {
-                const {key, value} = item;
+                const { key, value } = item;
                 obj[key] = value;
                 return obj;
             }, {});
@@ -316,12 +326,12 @@ export class Chain extends EventEmitter implements IConsistency {
         return ErrorCode.RESULT_OK;
     }
 
-    public newNetwork(options: {node: INode, netType?: string} & any): {err: ErrorCode, network?: Network} {
+    public newNetwork(options: { node: INode, netType?: string } & any): { err: ErrorCode, network?: Network } {
         let parsed = Object.create(this._defaultNetworkOptions());
         parsed.dataDir = this.m_dataDir;
         parsed.headerStorage = this.headerStorage;
         parsed.blockHeaderType = this._getBlockHeaderType();
-        parsed.transactionType = this._getTransactionType();    
+        parsed.transactionType = this._getTransactionType();
         parsed.receiptType = this._getReceiptType();
         parsed.node = options.node;
         parsed.logger = this.m_logger;
@@ -329,15 +339,15 @@ export class Chain extends EventEmitter implements IConsistency {
         if (options.netType) {
             parsed.nettype = options.netType;
         }
-        const cr = this.m_networkCreator.create({parsed, origin: new Map()});
+        const cr = this.m_networkCreator.create({ parsed, origin: new Map() });
         if (cr.err) {
-            return {err: cr.err};
+            return { err: cr.err };
         }
         cr.network!.setInstanceOptions(options);
         return cr;
     }
 
-    public async initComponents(options?: {readonly?: boolean}): Promise<ErrorCode> {
+    public async initComponents(options?: { readonly?: boolean }): Promise<ErrorCode> {
         // 上层保证await调用别重入了, 不加入中间状态了
         if (this.m_state >= ChainState.init) {
             return ErrorCode.RESULT_OK;
@@ -349,7 +359,7 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_readonly = readonly;
 
         let err;
-        err = this.m_tmpManager.init({clean: !this.m_readonly});
+        err = this.m_tmpManager.init({ clean: !this.m_readonly });
         if (err) {
             this.m_logger.error(`chain init faield for tmp manager init failed `, err);
             return err;
@@ -360,14 +370,14 @@ export class Chain extends EventEmitter implements IConsistency {
             path: this.m_dataDir,
             blockHeaderType: this._getBlockHeaderType(),
             transactionType: this._getTransactionType(),
-            receiptType: this._getReceiptType(), 
+            receiptType: this._getReceiptType(),
             readonly
         });
         await this.m_blockStorage.init();
 
         let sqliteOptions: any = {};
         if (!readonly) {
-            sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE; 
+            sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE;
         } else {
             sqliteOptions.mode = sqlite3.OPEN_READONLY;
         }
@@ -377,7 +387,7 @@ export class Chain extends EventEmitter implements IConsistency {
             this.m_logger.error(`open database failed`, e);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        
+
         this.m_headerStorage = new HeaderStorage({
             logger: this.m_logger!,
             blockHeaderType: this._getBlockHeaderType(),
@@ -394,7 +404,7 @@ export class Chain extends EventEmitter implements IConsistency {
 
         this.m_storageManager = new StorageManager({
             path: path.join(this.m_dataDir, 'storage'),
-            tmpManager: this.m_tmpManager, 
+            tmpManager: this.m_tmpManager,
             storageType: SqliteStorage,
             logger: this.m_logger!,
             headerStorage: this.m_headerStorage!,
@@ -441,9 +451,9 @@ export class Chain extends EventEmitter implements IConsistency {
     }
 
     public parseInstanceOptions(options: {
-        parsed: any, 
+        parsed: any,
         origin: Map<string, any>
-    }): {err: ErrorCode, value?: ChainInstanceOptions} {
+    }): { err: ErrorCode, value?: ChainInstanceOptions } {
         let value = Object.create(null);
         value.routineManagerType = options.parsed.routineManagerType;
         value.saveMismatch = options.origin.get('saveMismatch');
@@ -463,11 +473,11 @@ export class Chain extends EventEmitter implements IConsistency {
                 netConfig = fs.readJsonSync(_path);
             } catch (e) {
                 this.m_logger.error(`read net config ${_path} failed `, e);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
+                return { err: ErrorCode.RESULT_INVALID_PARAM };
             }
             if (!isArray(netConfig) || !netConfig[0] || !isObject(netConfig[0])) {
                 this.m_logger.error(`read net config ${_path} must contain array of config `);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
+                return { err: ErrorCode.RESULT_INVALID_PARAM };
             }
             ops.push({
                 parsed: this._defaultNetworkOptions(),
@@ -481,13 +491,13 @@ export class Chain extends EventEmitter implements IConsistency {
             }
         } else {
             this.m_logger.error(`config should has net or netConfig`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
         value.networks = [];
         for (let o of ops) {
             const pnr = this._parseNetwork(o);
             if (pnr.err) {
-                return {err: pnr.err};
+                return { err: pnr.err };
             }
             value.networks.push(pnr.network!);
         }
@@ -496,7 +506,7 @@ export class Chain extends EventEmitter implements IConsistency {
         value.maxPendingCount = options.origin.get('maxPendingCount');
         value.warnPendingCount = options.origin.get('warnPendingCount');
 
-        return {err: ErrorCode.RESULT_OK, value};
+        return { err: ErrorCode.RESULT_OK, value };
     }
 
     public async initialize(instanceOptions: ChainInstanceOptions): Promise<ErrorCode> {
@@ -517,12 +527,12 @@ export class Chain extends EventEmitter implements IConsistency {
         Object.assign(_instanceOptions, instanceOptions);
 
         // 初始化时，要同步的peer数目，与这个数目的peer完成同步之后，才开始接收tx，挖矿等等
-        _instanceOptions.initializePeerCount = !isNullOrUndefined(instanceOptions.initializePeerCount) ? instanceOptions.initializePeerCount : 1; 
+        _instanceOptions.initializePeerCount = !isNullOrUndefined(instanceOptions.initializePeerCount) ? instanceOptions.initializePeerCount : 1;
         // 初始化时，一次请求的最大header数目
-        _instanceOptions.headerReqLimit = !isNullOrUndefined(instanceOptions.headerReqLimit) ? instanceOptions.headerReqLimit : 2000; 
+        _instanceOptions.headerReqLimit = !isNullOrUndefined(instanceOptions.headerReqLimit) ? instanceOptions.headerReqLimit : 2000;
         // confirm数目，当块的depth超过这个值时，认为时绝对安全的；分叉超过这个depth的两个fork，无法自动合并回去
-        _instanceOptions.confirmDepth = !isNullOrUndefined(instanceOptions.confirmDepth) ? instanceOptions.confirmDepth : 6; 
-        
+        _instanceOptions.confirmDepth = !isNullOrUndefined(instanceOptions.confirmDepth) ? instanceOptions.confirmDepth : 6;
+
         _instanceOptions.ignoreVerify = !isNullOrUndefined(instanceOptions.ignoreVerify) ? instanceOptions.ignoreVerify : false;
 
         _instanceOptions.pendingOvertime = !isNullOrUndefined(instanceOptions.pendingOvertime) ? instanceOptions.pendingOvertime : 60 * 60;
@@ -539,10 +549,10 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_pending.init();
 
         this.m_routineManager = new instanceOptions.routineManagerType(this);
-        
+
         let node = new ChainNode({
             networks: _instanceOptions.networks,
-            logger: this.m_logger, 
+            logger: this.m_logger,
             blockStorage: this.m_blockStorage!,
             storageManager: this.m_storageManager!,
             blockWithLog: !!this._ignoreVerify
@@ -606,7 +616,7 @@ export class Chain extends EventEmitter implements IConsistency {
     async uninitialize(): Promise<any> {
         // 上层保证await调用别重入了, 不加入中间状态了
         if (this.m_state <= ChainState.init) {
-            return ;
+            return;
         }
         await this.m_node!.uninit();
         delete this.m_node;
@@ -617,14 +627,14 @@ export class Chain extends EventEmitter implements IConsistency {
             this.m_storageManager!.releaseSnapshotView(s);
         }
         this.m_state = ChainState.init;
-        
+
     }
 
     protected _createPending(): PendingTransactions {
         return new PendingTransactions({
-            storageManager: this.m_storageManager!, 
+            storageManager: this.m_storageManager!,
             logger: this.logger,
-            overtime: this.m_instanceOptions!.pendingOvertime!, 
+            overtime: this.m_instanceOptions!.pendingOvertime!,
             handler: this.m_handler!,
             maxCount: this.m_instanceOptions!.maxPendingCount!,
             warnCount: this.m_instanceOptions!.warnPendingCount!
@@ -632,34 +642,35 @@ export class Chain extends EventEmitter implements IConsistency {
     }
 
     protected _defaultNetworkOptions(): any {
-        return {netType: 'random'};
+        return { netType: 'random' };
     }
 
     protected _parseNetwork(options: {
-        parsed: any, 
-        origin: Map<string, any>}): {err: ErrorCode, network?: Network} {
+        parsed: any,
+        origin: Map<string, any>
+    }): { err: ErrorCode, network?: Network } {
         let parsed = Object.create(options.parsed);
         parsed.dataDir = this.m_dataDir;
         parsed.headerStorage = this.headerStorage;
         parsed.blockHeaderType = this._getBlockHeaderType();
-        parsed.transactionType = this._getTransactionType();    
+        parsed.transactionType = this._getTransactionType();
         parsed.receiptType = this._getReceiptType();
         parsed.logger = this.m_logger;
-        
-        const ncr = this.m_networkCreator.create({parsed, origin: options.origin});
+
+        const ncr = this.m_networkCreator.create({ parsed, origin: options.origin });
         if (ncr.err) {
-            return {err: ncr.err};
+            return { err: ncr.err };
         }
 
         const por = ncr.network!.parseInstanceOptions(options);
         if (por.err) {
-            return {err: por.err};
+            return { err: por.err };
         }
 
         ncr.network!.setInstanceOptions(por.value!);
-        
-        return {err: ErrorCode.RESULT_OK, network: ncr.network};
-    }   
+
+        return { err: ErrorCode.RESULT_OK, network: ncr.network };
+    }
 
     protected async _loadChain(): Promise<ErrorCode> {
         assert(this.m_headerStorage);
@@ -680,12 +691,12 @@ export class Chain extends EventEmitter implements IConsistency {
     protected async _morkSnapshot(hashes: Set<string>) {
         this.m_logger.debug(`request to mork storage `, hashes);
         if (this.m_storageMorkRequests.morking) {
-            if ( this.m_storageMorkRequests.pending) {
-                this.m_logger.debug(`ignore pending mork storage request`,  this.m_storageMorkRequests.pending);
+            if (this.m_storageMorkRequests.pending) {
+                this.m_logger.debug(`ignore pending mork storage request`, this.m_storageMorkRequests.pending);
             }
             this.m_storageMorkRequests.pending = new Set(hashes.values());
-            return ;
-        } 
+            return;
+        }
         this.m_storageMorkRequests.morking = new Set(hashes.values());
 
         const doMork = async () => {
@@ -718,7 +729,7 @@ export class Chain extends EventEmitter implements IConsistency {
             for (const hash of toRelease) {
                 this.m_storageManager!.releaseSnapshotView(hash);
                 this.m_refSnapshots.delete(hash);
-            }   
+            }
             this.m_logger.debug(`morking add ref snapshots `, morked);
             for (const hash of morked) {
                 this.m_refSnapshots.add(hash);
@@ -727,7 +738,7 @@ export class Chain extends EventEmitter implements IConsistency {
             this.m_logger.debug(`recyclde snapshots`);
             this.m_storageManager!.recycleSnapshot();
         };
-                
+
         while (this.m_storageMorkRequests.morking) {
             await doMork();
             delete this.m_storageMorkRequests.morking;
@@ -738,7 +749,7 @@ export class Chain extends EventEmitter implements IConsistency {
     protected async _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
         this.m_tip = tip;
         let toMork = new Set([tip.hash]);
-        const msr = await this._onMorkSnapshot({tip, toMork});
+        const msr = await this._onMorkSnapshot({ tip, toMork });
         if (msr.err) {
             this.m_logger.error(`on mork snapshot failed for ${stringifyErrorCode(msr.err)}`);
         }
@@ -750,8 +761,8 @@ export class Chain extends EventEmitter implements IConsistency {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
-        return {err: ErrorCode.RESULT_OK};
+    protected async _onMorkSnapshot(options: { tip: BlockHeader, toMork: Set<string> }): Promise<{ err: ErrorCode }> {
+        return { err: ErrorCode.RESULT_OK };
     }
 
     get tipBlockHeader(): BlockHeader | undefined {
@@ -859,7 +870,7 @@ export class Chain extends EventEmitter implements IConsistency {
             connSync.lastRequestHeader = connSync.lastRecvHeader!.hash;
             let limit = await this._calcuteReqLimit(connSync.lastRequestHeader, this._headerReqLimit);
             connSync.reqLimit = limit;
-            this.m_node!.requestHeaders(connSync.conn, { from: connSync.lastRecvHeader!.hash, limit});
+            this.m_node!.requestHeaders(connSync.conn, { from: connSync.lastRecvHeader!.hash, limit });
         } else {
             connSync.state = ChainState.synced;
             delete connSync.moreHeaders;
@@ -893,7 +904,7 @@ export class Chain extends EventEmitter implements IConsistency {
         return { err: ErrorCode.RESULT_OK, connSync };
     }
 
-    protected async _beginSyncWithConnection(from: {conn?: NodeConnection, connSync?: SyncConnection}, fromHeader: string): Promise<ErrorCode> {
+    protected async _beginSyncWithConnection(from: { conn?: NodeConnection, connSync?: SyncConnection }, fromHeader: string): Promise<ErrorCode> {
         let connSync: SyncConnection | undefined;
         if (from.connSync) {
             connSync = from.connSync;
@@ -909,7 +920,7 @@ export class Chain extends EventEmitter implements IConsistency {
         connSync.lastRequestHeader = fromHeader;
         let limit = await this._calcuteReqLimit(fromHeader, this._headerReqLimit);
         connSync.reqLimit = limit;
-        this.m_node!.requestHeaders(connSync.conn, { from: fromHeader, limit});
+        this.m_node!.requestHeaders(connSync.conn, { from: fromHeader, limit });
         return ErrorCode.RESULT_OK;
     }
 
@@ -940,16 +951,16 @@ export class Chain extends EventEmitter implements IConsistency {
                 toRequest.push(header);
             } else if (result.verified === VERIFY_STATE.invalid) {
                 // 如果这个header已经判定为invalid，那么后续的header也不用被加入了
-                return {err: ErrorCode.RESULT_INVALID_BLOCK};
+                return { err: ErrorCode.RESULT_INVALID_BLOCK };
             }
         }
         toRequest.push(...toSave);
 
         assert(this.m_tip);
         for (let header of toSave) {
-            let {err, valid} = await header.verify(this);
+            let { err, valid } = await header.verify(this);
             if (err) {
-                return {err};
+                return { err };
             }
             if (!valid) {
                 return { err: ErrorCode.RESULT_INVALID_BLOCK };
@@ -1007,7 +1018,7 @@ export class Chain extends EventEmitter implements IConsistency {
                     if (vsh.toRequest!.length) {
                         // 向conn 发出block请求
                         // 如果options.redoLog=1 同时也请求redo log内容, redo log 会随着block package 一起返回
-                        this.m_node!.requestBlocks(from, { 
+                        this.m_node!.requestBlocks(from, {
                             headers: vsh.toRequest!,
                             redoLog: this._ignoreVerify ? 1 : 0,
                         });
@@ -1130,7 +1141,7 @@ export class Chain extends EventEmitter implements IConsistency {
                 return err;
             }
             const name = `${block.hash}${Date.now()}`;
-            let rr = await this.verifyBlock(name, block, {redoLog: options.redoLog});
+            let rr = await this.verifyBlock(name, block, { redoLog: options.redoLog });
             if (rr.err) {
                 this.m_logger.error(`add block failed for verify failed for ${rr.err}`);
                 return rr.err;
@@ -1194,10 +1205,12 @@ export class Chain extends EventEmitter implements IConsistency {
                 if (hr.headers![0].number === 0) {
                     hr.headers = hr.headers!.slice(1);
                 }
-                this.m_node!.broadcast(hr.headers!, { filter: (conn: NodeConnection) => { 
-                    this.m_logger.debug(`broadcast to ${conn.fullRemote}: ${!broadcastExcept.has(conn.fullRemote)}`);
-                    return !broadcastExcept.has(conn.fullRemote); 
-                } });
+                this.m_node!.broadcast(hr.headers!, {
+                    filter: (conn: NodeConnection) => {
+                        this.m_logger.debug(`broadcast to ${conn.fullRemote}: ${!broadcastExcept.has(conn.fullRemote)}`);
+                        return !broadcastExcept.has(conn.fullRemote);
+                    }
+                });
                 this.m_logger.info(`broadcast tip headers from number: ${hr.headers![0].number} hash: ${hr.headers![0].hash} to number: ${this.m_tip!.number} hash: ${this.m_tip!.hash}`);
             }
         }
@@ -1257,7 +1270,7 @@ export class Chain extends EventEmitter implements IConsistency {
         } catch (e) {
             this.logger.error(`chain commit transaction exception, e=${e}`);
             // 让它崩溃
-            assert(false, 'commit failed'); 
+            assert(false, 'commit failed');
             return ErrorCode.RESULT_EXCEPTION;
         }
     }
@@ -1270,7 +1283,7 @@ export class Chain extends EventEmitter implements IConsistency {
         } catch (e) {
             this.logger.error(`chain rollback transaction exception, e=${e}`);
             // 让它崩溃
-            assert(false, 'rollback failed'); 
+            assert(false, 'rollback failed');
             return ErrorCode.RESULT_EXCEPTION;
         }
     }
@@ -1317,7 +1330,7 @@ export class Chain extends EventEmitter implements IConsistency {
             if (err) {
                 this.m_logger.error(`add verified block to chain failed for update verify state to header storage failed for ${err}`);
                 return err;
-            } 
+            }
         }
         return ErrorCode.RESULT_OK;
     }
@@ -1338,35 +1351,36 @@ export class Chain extends EventEmitter implements IConsistency {
     public newBlock(header?: BlockHeader): Block {
         let block = new Block({
             header,
-            headerType: this._getBlockHeaderType(), 
+            headerType: this._getBlockHeaderType(),
             transactionType: this._getTransactionType(),
-            receiptType: this._getReceiptType()});
+            receiptType: this._getReceiptType()
+        });
         return block;
     }
 
-    async newBlockExecutor(options: {block: Block, storage: Storage, externParams?: BlockExecutorExternParam[]}): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
-        let {block, storage, externParams} = options;
+    async newBlockExecutor(options: { block: Block, storage: Storage, externParams?: BlockExecutorExternParam[] }): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
+        let { block, storage, externParams } = options;
         if (!externParams) {
             const ppr = await this.prepareExternParams(block, storage);
             if (ppr.err) {
-                return {err: ppr.err};
+                return { err: ppr.err };
             }
             externParams = ppr.params!;
-        } 
+        }
         return this._newBlockExecutor(block, storage, externParams);
     }
 
-    async prepareExternParams(block: Block, storage: Storage): Promise<{err: ErrorCode, params?: BlockExecutorExternParam[]}> {
-        return {err: ErrorCode.RESULT_OK, params: []};
+    async prepareExternParams(block: Block, storage: Storage): Promise<{ err: ErrorCode, params?: BlockExecutorExternParam[] }> {
+        return { err: ErrorCode.RESULT_OK, params: [] };
     }
 
-    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
         let executor = new BlockExecutor({
-            logger: this.m_logger, 
-            block, 
-            storage, 
-            handler: this.m_handler, 
-            externContext: {}, 
+            logger: this.m_logger,
+            block,
+            storage,
+            handler: this.m_handler,
+            externContext: {},
             globalOptions: this.m_globalOptions,
             externParams: []
         });
@@ -1374,7 +1388,7 @@ export class Chain extends EventEmitter implements IConsistency {
     }
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: any): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
-        let executor = new ViewExecutor({logger: this.m_logger, header, storage, method, param, handler: this.m_handler, externContext: {} });
+        let executor = new ViewExecutor({ logger: this.m_logger, header, storage, method, param, handler: this.m_handler, externContext: {} });
         return { err: ErrorCode.RESULT_OK, executor };
     }
 
@@ -1390,8 +1404,8 @@ export class Chain extends EventEmitter implements IConsistency {
                 this.m_state = ChainState.synced;
                 this.logger.debug(`emit tipBlock with ${this.m_tip!.hash} ${this.m_tip!.number}`);
                 const tip = this.m_tip!;
-                setImmediate(() => { 
-                    this.emit('tipBlock', this, tip); 
+                setImmediate(() => {
+                    this.emit('tipBlock', this, tip);
                 });
                 return ErrorCode.RESULT_OK;
             }
@@ -1400,49 +1414,51 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_node!.on('outbound', async (conn: NodeConnection) => {
             let syncPeer = conn;
             assert(syncPeer);
-            return await this._beginSyncWithConnection({conn}, this.getLIB().hash);
+            return await this._beginSyncWithConnection({ conn }, this.getLIB().hash);
         });
 
         return ErrorCode.RESULT_OK;
     }
 
-    public async verifyBlock(name: string, block: Block, options?: {redoLog?: StorageLogger}): Promise<{
-        err: ErrorCode, 
-        routine?: BlockExecutorRoutine,  
-        next?: () => Promise<{err: ErrorCode, valid?: ErrorCode}>;
+    public async verifyBlock(name: string, block: Block, options?: { redoLog?: StorageLogger }): Promise<{
+        err: ErrorCode,
+        routine?: BlockExecutorRoutine,
+        next?: () => Promise<{ err: ErrorCode, valid?: ErrorCode }>;
     }> {
         this.m_logger.info(`begin verify block number: ${block.number} hash: ${block.hash} `);
         let sr = await this.m_storageManager!.createStorage(name, block.header.preBlockHash);
         if (sr.err) {
             this.m_logger.warn(`verify block failed for recover storage to previous block's failed for ${sr.err}`);
-            return {err: sr.err};
+            return { err: sr.err };
         }
         const storage = sr.storage!;
         storage.createLogger();
-        let crr: {err: ErrorCode, routine?: BlockExecutorRoutine};
+        let crr: { err: ErrorCode, routine?: BlockExecutorRoutine };
         // 通过redo log 来添加block的内容
         if (this._ignoreVerify && options && options.redoLog) {
-            crr = {err: ErrorCode.RESULT_OK, routine: new VerifyBlockWithRedoLogRoutine({
-                name, 
-                block,
-                storage,
-                redoLog: options.redoLog,
-                logger: this.logger
-            })};
+            crr = {
+                err: ErrorCode.RESULT_OK, routine: new VerifyBlockWithRedoLogRoutine({
+                    name,
+                    block,
+                    storage,
+                    redoLog: options.redoLog,
+                    logger: this.logger
+                })
+            };
         } else {
-            crr = this.m_routineManager!.create({name, block, storage});
+            crr = this.m_routineManager!.create({ name, block, storage });
         }
         if (crr.err) {
             await storage.remove();
-            return {err: crr.err};
+            return { err: crr.err };
         }
 
         const routine = crr.routine!;
-        const next = async (): Promise<{err: ErrorCode, valid?: ErrorCode}> => {
+        const next = async (): Promise<{ err: ErrorCode, valid?: ErrorCode }> => {
             const rr = await routine.verify();
             if (rr.err || rr.result!.err) {
                 await storage.remove();
-                return {err: rr.err};
+                return { err: rr.err };
             }
             if (rr.result!.valid !== ErrorCode.RESULT_OK) {
                 if (!(this._saveMismatch && rr.result!.valid === ErrorCode.RESULT_VERIFY_NOT_MATCH)) {
@@ -1451,7 +1467,7 @@ export class Chain extends EventEmitter implements IConsistency {
             }
             return rr.result!;
         };
-        return {err: ErrorCode.RESULT_OK, routine, next};
+        return { err: ErrorCode.RESULT_OK, routine, next };
     }
 
     public async addMinedBlock(block: Block, storage: StorageDumpSnapshot) {
@@ -1475,10 +1491,54 @@ export class Chain extends EventEmitter implements IConsistency {
 
             return dbr.err;
         }
+
+
+        // Added by Yang Jun 2019-2-20
+        dbr = await storage.createDatabase(Chain.dbToken);
+        if (dbr.err) {
+            this.m_logger.error(`miner create genensis block failed for create token table to storage failed ${dbr.err}`);
+
+            return dbr.err;
+        }
+
+
+        dbr = await storage.createDatabase(Chain.dbBancor);
+        if (dbr.err) {
+            this.m_logger.error(`miner create genensis block failed for create bancor table to storage failed ${dbr.err}`);
+
+            return dbr.err;
+        }
+
+        let kvHandle = await dbr.value!.createKeyValue(Chain.kvFactor);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create factor table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        kvHandle = await dbr.value!.createKeyValue(Chain.kvReserve);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create reserve table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        kvHandle = await dbr.value!.createKeyValue(Chain.kvSupply);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create supply table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        kvHandle = await dbr.value!.createKeyValue(Chain.kvNonliquidity);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create nonliquidity table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+        ///////////////////////////////
+
+
         dbr = await storage.createDatabase(Chain.dbSystem);
         if (dbr.err) {
             return dbr.err;
-        } 
+        }
         let kvr = await dbr.value!.createKeyValue(Chain.kvNonce);
         if (kvr.err) {
             this.m_logger.error(`miner create genensis block failed for create nonce table to storage failed ${kvr.err}`);
@@ -1496,7 +1556,7 @@ export class Chain extends EventEmitter implements IConsistency {
                 this.m_logger.error(`miner create genensis block failed for write global config to storage failed for invalid globalOptions ${key}`);
                 return ErrorCode.RESULT_INVALID_FORMAT;
             }
-            let {err} = await kvr.kv!.hset('global', key, value as string|number|boolean);
+            let { err } = await kvr.kv!.hset('global', key, value as string | number | boolean);
             if (err) {
                 this.m_logger.error(`miner create genensis block failed for write global config to storage failed ${err}`);
                 return err;
@@ -1506,7 +1566,7 @@ export class Chain extends EventEmitter implements IConsistency {
         return ErrorCode.RESULT_OK;
     }
 
-    public async onPostCreateGenesis( genesis: Block, storage: StorageDumpSnapshot): Promise<ErrorCode> {
+    public async onPostCreateGenesis(genesis: Block, storage: StorageDumpSnapshot): Promise<ErrorCode> {
         // assert(genesis.header.storageHash === (await storage.messageDigest()).value);
         assert(genesis.number === 0);
         if (genesis.number !== 0) {
@@ -1561,7 +1621,7 @@ export class Chain extends EventEmitter implements IConsistency {
             let ret1 = await nver.executor!.execute();
             this.m_storageManager!.releaseSnapshotView(header.hash);
             if (ret1.err === ErrorCode.RESULT_OK) {
-                retInfo = { err: ErrorCode.RESULT_OK, value: ret1.value};
+                retInfo = { err: ErrorCode.RESULT_OK, value: ret1.value };
                 break;
             }
             this.m_logger!.error(`view ${methodname} failed for view executor execute failed for ${ret1.err}`);
@@ -1591,20 +1651,21 @@ export class Chain extends EventEmitter implements IConsistency {
         return Receipt;
     }
 
-    getLIB(): {number: number, hash: string} {
-        return {number: this.m_tip!.number, hash: this.m_tip!.hash};
+    getLIB(): { number: number, hash: string } {
+        return { number: this.m_tip!.number, hash: this.m_tip!.hash };
     }
 }
 
 class VerifyBlockWithRedoLogRoutine extends BlockExecutorRoutine {
-    constructor(options: {name: string, 
-        block: Block, 
+    constructor(options: {
+        name: string,
+        block: Block,
         storage: Storage,
         redoLog: StorageLogger
         logger: LoggerInstance
     }) {
         super({
-            name: options.name, 
+            name: options.name,
             block: options.block,
             storage: options.storage,
             logger: options.logger
@@ -1613,29 +1674,29 @@ class VerifyBlockWithRedoLogRoutine extends BlockExecutorRoutine {
     }
     private m_redoLog: StorageLogger;
 
-    async execute(): Promise<{err: ErrorCode, result?: {err: ErrorCode}}> {
-        return {err: ErrorCode.RESULT_NO_IMP};
+    async execute(): Promise<{ err: ErrorCode, result?: { err: ErrorCode } }> {
+        return { err: ErrorCode.RESULT_NO_IMP };
     }
 
-    async verify(): Promise<{err: ErrorCode, result?: {err: ErrorCode, valid?: ErrorCode}}> {
+    async verify(): Promise<{ err: ErrorCode, result?: { err: ErrorCode, valid?: ErrorCode } }> {
         this.m_logger.info(`redo log, block[${this.block.number}, ${this.block.hash}]`);
         // 执行redolog
         let redoError = await this.m_redoLog.redoOnStorage(this.storage);
         if (redoError) {
             this.m_logger.error(`redo error ${redoError}`);
-            return { err: ErrorCode.RESULT_OK, result: {err: redoError} };
+            return { err: ErrorCode.RESULT_OK, result: { err: redoError } };
         }
-        
+
         // 获得storage的hash值
         let digestResult = await this.storage!.messageDigest();
-        if ( digestResult.err ) {
+        if (digestResult.err) {
             this.m_logger.error(`redo log get storage messageDigest error`);
-            return { err: ErrorCode.RESULT_OK, result: {err: digestResult.err} };
+            return { err: ErrorCode.RESULT_OK, result: { err: digestResult.err } };
         }
         const valid = digestResult.value === this.block.header.storageHash ? ErrorCode.RESULT_OK : ErrorCode.RESULT_VERIFY_NOT_MATCH;
         // 当前的storage hash和header上的storageHash 比较 
         // 设置verify 结果, 后续流程需要使用 res.valid
-        return {err: ErrorCode.RESULT_OK, result: {err: ErrorCode.RESULT_OK, valid}};
+        return { err: ErrorCode.RESULT_OK, result: { err: ErrorCode.RESULT_OK, valid } };
     }
 
     cancel(): void {
