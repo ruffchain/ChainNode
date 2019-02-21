@@ -308,9 +308,16 @@ export function registerHandler(handler: ValueHandler) {
 
         let R = new BigNumber(retReserve.value);
 
+
+
         // do computation
         let e = new BigNumber(params.amount);
         let out: BigNumber;
+
+        // Dont know if it will happen ever
+        if (S.lt(e)) {
+            ErrorCode.RESULT_NOT_ENOUGH;
+        }
 
         out = e.dividedBy(S);
         out = new BigNumber(1).minus(out);
@@ -359,7 +366,40 @@ export function registerHandler(handler: ValueHandler) {
         return await getTokenBalance(balancekv.kv!, params.address);
     });
 
+    handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
+        if (!params.tokenid) {
+            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        return await getTokenBalance(balancekv.kv!, params.tokenid);
+    });
+
+    handler.addViewMethod('getBancorTokenReserve', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        if (!params.tokenid) {
+            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        return await getTokenBalance(balancekv.kv!, params.tokenid);
+    });
+
+    handler.addViewMethod('getBancorTokenSupply', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        if (!params.tokenid) {
+            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        return await getTokenBalance(balancekv.kv!, params.tokenid);
+    });
+
+    handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        return await context.getBalance("0");
+    });
 
     //////////////////////////////////////////////////////////////
 
