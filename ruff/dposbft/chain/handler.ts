@@ -1,4 +1,4 @@
-import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject } from '../../../src/host';
+import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain } from '../../../src/host';
 import { isNullOrUndefined } from 'util';
 
 export function registerHandler(handler: ValueHandler) {
@@ -89,6 +89,281 @@ export function registerHandler(handler: ValueHandler) {
         }
         return err;
     });
+
+    // Added by Yang Jun 2019-2-21
+    // Added by Yang Jun 2019-2-20
+    /**
+     * context's storage is storage_sqlite/storage.ts SqliteReadWritableDatabase
+     */
+    handler.addTX('createBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
+        // 参数检查
+        if (!params.tokenid) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+        if (!params.preBalances) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // supply has been incorporated into preBalances
+        if (!params.factor) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        kvRet = await kvRet.kv!.set('creator', context.caller);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        let amountAll = new BigNumber(0);
+        if (params.preBalances) {
+            for (let index = 0; index < params.preBalances.length; index++) {
+                // 按照address和amount预先初始化钱数
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
+                amountAll = amountAll.plus(new BigNumber(params.preBalances[index].amount));
+            }
+        }
+
+        // Setting bancor parameters
+        // set Factor
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.factor)); // number type
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Reserve
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(params.tokenid, context.value);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Supply
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(params.tokenid, amountAll);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Nonliquidity
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // Consider to use nonliquidity or not
+        if (!params.nonliquidity) {
+            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(0));
+        } else {
+            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.nonliquidity));
+        }
+
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        return ErrorCode.RESULT_OK;
+
+    });
+
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
+
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        if (tokenkv.err) {
+            return tokenkv.err;
+        }
+
+        let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
+        let amount = new BigNumber(params.amount);
+        if (fromTotal.lt(amount)) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
+        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
+        return ErrorCode.RESULT_OK;
+    });
+
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
+        // context.value has the money
+        // 参数检查
+        if (!params.tokenid) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // get F
+        let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        if (kvFactor.err) {
+            return kvFactor.err;
+        }
+        let retFactor = await kvFactor.kv!.get(params.tokenid);
+        if (retFactor.err) {
+            return retFactor.err;
+        }
+        let F = new BigNumber(retFactor.value);
+
+        // get S
+        let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        if (kvSupply.err) { return kvSupply.err; }
+
+        let retSupply = await kvSupply.kv!.get(params.tokenid);
+        if (retSupply.err) { return retSupply.err; }
+
+        let S = new BigNumber(retSupply.value);
+
+        // get R
+        let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        if (kvReserve.err) { return kvReserve.err; }
+
+        let retReserve = await kvReserve.kv!.get(params.tokenid);
+        if (retReserve.err) { return retReserve.err; }
+
+        let R = new BigNumber(retReserve.value);
+
+        // do computation
+        let e = new BigNumber(context.value);
+        let out: BigNumber;
+
+        out = e.dividedBy(R);
+        out = out.plus(new BigNumber(1.0));
+        let temp1 = out.toNumber();
+        out = new BigNumber(Math.pow(temp1, F.toNumber()));
+        out = out.minus(new BigNumber(1));
+        out = out.multipliedBy(S);
+
+        // Update system R,S; Update User account
+        R = R.plus(e);
+        S = S.plus(out);
+
+        let kvRet = await kvReserve.kv!.set(params.tokenid, R);
+        if (kvRet.err) { return kvRet.err; }
+
+        kvRet = await kvSupply.kv!.set(params.tokenid, S);
+        if (kvRet.err) { return kvRet.err; }
+
+        // Update User account
+        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        if (kvToken.err) { return kvToken.err; }
+
+        let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
+        let retToken = await kvToken.kv!.set(context.caller, fromTotal.plus(out));
+        if (retToken.err) { return retToken.err; }
+
+        return ErrorCode.RESULT_OK;
+    });
+
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('sellBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
+
+        // 参数检查
+        if (!params.tokenid) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // get F
+        let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        if (kvFactor.err) {
+            return kvFactor.err;
+        }
+        let retFactor = await kvFactor.kv!.get(params.tokenid);
+        if (retFactor.err) {
+            return retFactor.err;
+        }
+        let F = new BigNumber(retFactor.value);
+
+        // get S
+        let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        if (kvSupply.err) { return kvSupply.err; }
+
+        let retSupply = await kvSupply.kv!.get(params.tokenid);
+        if (retSupply.err) { return retSupply.err; }
+
+        let S = new BigNumber(retSupply.value);
+
+        // get R
+        let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        if (kvReserve.err) { return kvReserve.err; }
+
+        let retReserve = await kvReserve.kv!.get(params.tokenid);
+        if (retReserve.err) { return retReserve.err; }
+
+        let R = new BigNumber(retReserve.value);
+
+        // do computation
+        let e = new BigNumber(params.amount);
+        let out: BigNumber;
+
+        out = e.dividedBy(S);
+        out = new BigNumber(1).minus(out);
+        let temp1 = out.toNumber();
+        out = new BigNumber(Math.pow(temp1, 1 / F.toNumber()));
+        out = new BigNumber(1).minus(out);
+        out = out.multipliedBy(R);
+
+        // Update system R,S;
+        R = R.minus(out);
+        S = S.minus(e);
+
+        let kvRet = await kvReserve.kv!.set(params.tokenid, R);
+        if (kvRet.err) { return kvRet.err; }
+
+        kvRet = await kvSupply.kv!.set(params.tokenid, S);
+        if (kvRet.err) { return kvRet.err; }
+
+        // Update User account
+        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        if (kvToken.err) { return kvToken.err; }
+
+        let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
+        if (fromTotal.lt(new BigNumber(params.amount))) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+
+        let retToken = await kvToken.kv!.set(context.caller, fromTotal.minus(new BigNumber(params.amount)));
+        if (retToken.err) { return retToken.err; }
+
+        // Update User's SYS account, directly change account?
+        const err = await context.transferTo(context.caller, out);
+        if (!err) {
+            context.emit('transfer', { from: "0", to: context.caller, value: out });
+        }
+        return err;
+
+
+        return ErrorCode.RESULT_OK;
+    });
+
+    // Added by Yang Jun 2019-2-21
+    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.address);
+    });
+
+
+
+    //////////////////////////////////////////////////////////////
+
+
 
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
