@@ -1,4 +1,6 @@
-import {ITxStorage, ErrorCode} from '../../src/core';
+// Commented by Yang Jun 2019-2-21
+
+/* import {ITxStorage, ErrorCode} from '../../src/core';
 
 export class FakeTxStorage implements ITxStorage {
     async init(): Promise<ErrorCode> {
@@ -6,7 +8,7 @@ export class FakeTxStorage implements ITxStorage {
     }
 
     uninit() {
-        
+
     }
 
     async add(blockhash: string): Promise<ErrorCode> {
@@ -24,4 +26,4 @@ export class FakeTxStorage implements ITxStorage {
     async getCountByAddress(address: string): Promise<{err: ErrorCode, count?: number}> {
         return {err: ErrorCode.RESULT_OK};
     }
-}
+} */

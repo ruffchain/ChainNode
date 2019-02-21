@@ -9,6 +9,9 @@ import { LoggerInstance } from '../lib/logger_util';
 import * as digest from '../lib/digest';
 import { isNullOrUndefined, isUndefined } from 'util';
 
+// Added by Yang Jun 2019-2-21
+type ByteString = string;
+
 class JsonStorageKeyValue implements IReadWritableKeyValue {
     private m_root: any;
     constructor(dbRoot: any, readonly name: string, private readonly logger: LoggerInstance) {
@@ -432,6 +435,36 @@ class JsonReadWritableDatabase extends JsonReadableDatabase implements IReadWrit
 
         let tbl = new JsonStorageKeyValue(this.m_root, name, this.logger);
         return { err, kv: tbl };
+    }
+
+    // Added by Yang Jun 2019-2-21
+    public async createKeyValueWithDbname(dbname: string, name1: string) {
+        const name = Storage.getKeyValueFullName(dbname, name1);
+
+        let err = Storage.checkTableName(name);
+        if (err) {
+            return { err };
+        }
+        if (!isNullOrUndefined(this.m_root[name])) {
+            err = ErrorCode.RESULT_ALREADY_EXIST;
+        } else {
+            this.m_root[name] = Object.create(null);
+            err = ErrorCode.RESULT_OK;
+        }
+
+        let tbl = new JsonStorageKeyValue(this.m_root, name, this.logger);
+        return { err, kv: tbl };
+    }
+    public async getReadWritableKeyValueWithDbname(dbname: string, name1: string) {
+        const name = Storage.getKeyValueFullName(dbname, name1);
+
+        let err = Storage.checkTableName(name);
+        if (err) {
+            return { err };
+        }
+        let tbl = new JsonStorageKeyValue(this.m_root!, name, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+
     }
 }
 

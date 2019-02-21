@@ -6,6 +6,9 @@ import { LoggerInstance } from '../lib/logger_util';
 import { StorageLogger, LoggedStorage } from './logger';
 import { BufferReader } from '../lib/reader';
 
+// Added by Yang Jun 2019-2-21
+type ByteString = string;
+
 export interface IReadableKeyValue {
     // 单值操作
     get(key: string): Promise<{ err: ErrorCode, value?: any }>;
@@ -65,9 +68,9 @@ export interface IWritableDatabase {
     createKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
     getReadWritableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
 
-    // Added by Yang Jun 2019-2-20
-    // createKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
-    // getReadWritableKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
+    // Added by Yang Jun 2019-2-21
+    createKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
+    getReadWritableKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }>;
 
 }
 

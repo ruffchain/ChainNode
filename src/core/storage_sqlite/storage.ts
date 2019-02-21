@@ -13,6 +13,9 @@ declare module 'sqlite' {
     }
 }
 
+// Added by Yang Jun 2019-2-21
+type ByteString = string;
+
 import { ErrorCode } from '../error_code';
 import { toStringifiable, fromStringifiable } from '../serializable';
 import { Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger } from '../storage';
@@ -526,6 +529,36 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
 
     public async getReadWritableKeyValue(name: string) {
         let tbl = new SqliteStorageKeyValue(this.m_db!, Storage.getKeyValueFullName(this.name, name), this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+
+    // Added by Yang Jun 2019-2-21
+    public async createKeyValueWithDbname(dbname: string, name: string) {
+        // get full tablename
+        const fullName = Storage.getKeyValueFullName(dbname, name);
+        let count, err;
+
+        try {
+            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
+            count = ret['COUNT(*)'];
+        } catch (e) {
+            this.logger.error(`select table name failed `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+        if (count > 0) {
+            err = ErrorCode.RESULT_ALREADY_EXIST;
+            return { err: ErrorCode.RESULT_ALREADY_EXIST };
+        } else {
+            err = ErrorCode.RESULT_OK;
+            await this.m_db!.exec(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
+                (name TEXT, field TEXT, value TEXT, unique(name, field))`);
+        }
+        let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
+        return { err: ErrorCode.RESULT_OK, kv: tbl };
+    }
+
+    public async getReadWritableKeyValueWithDbname(dbname: string, name: string) {
+        let tbl = new SqliteStorageKeyValue(this.m_db!, Storage.getKeyValueFullName(dbname, name), this.logger);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
     }
 }

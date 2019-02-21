@@ -8,6 +8,9 @@ import {IHeaderStorage} from '../block';
 import { Storage, StorageOptions} from './storage';
 const digest = require('../lib/digest');
 
+// Added by Yang Jun 2019-2-21
+type ByteString = string;
+
 export class StorageDumpSnapshot {
     constructor(blockHash: string, filePath: string) {
         this.m_blockHash = blockHash;
