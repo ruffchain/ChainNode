@@ -288,10 +288,13 @@ export function registerHandler(handler: ValueHandler) {
         console.log('F:', F.toNumber());
         console.log('math.pow:', Math.pow(temp1, F.toNumber()));
 
-        out = new BigNumber(Math.pow(temp1, F.toNumber()).toFixed(15));
+        out = new BigNumber(Math.pow(temp1, F.toNumber()));
 
         out = out.minus(new BigNumber(1));
         out = out.multipliedBy(S);
+
+        console.log('Yang-- supply plus:', out.toString());
+        console.log('Yang-- reserve plus:', e.toString());
 
         // Update system R,S; Update User account
         R = R.plus(e);
@@ -385,6 +388,9 @@ export function registerHandler(handler: ValueHandler) {
         // Update system R,S;
         R = R.minus(out);
         S = S.minus(e);
+
+        console.log('Yang-- reserve minus:', out.toString());
+        console.log('Yang-- supply minus:', e.toString());
 
         let kvRet = await kvReserve.kv!.set(params.tokenid, R);
         if (kvRet.err) { return kvRet.err; }
