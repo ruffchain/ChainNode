@@ -1,11 +1,14 @@
-import {ErrorCode} from '../error_code';
-import {isNullOrUndefined} from 'util';
-import {Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableKeyValue, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor, ChainContructOptions, BlockExecutorExternParam} from '../value_chain';
-import {DbftBlockHeader} from './block';
-import {DbftContext} from './context';
-import {DbftBlockExecutor} from './executor';
+import { ErrorCode } from '../error_code';
+import { isNullOrUndefined } from 'util';
+import { Chain, ChainTypeOptions, ValueChain, BaseHandler, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, IReadableKeyValue, IReadableStorage, Storage, BlockExecutor, BlockHeader, ViewExecutor, ChainContructOptions, BlockExecutorExternParam } from '../value_chain';
+import { DbftBlockHeader } from './block';
+import { DbftContext } from './context';
+import { DbftBlockExecutor } from './executor';
 import * as ValueContext from '../value_chain/context';
-import {DbftHeaderStorage} from './header_storage'; 
+import { DbftHeaderStorage } from './header_storage';
+// Added by Yang Jun 2019-2-25
+
+import { BigNumber } from 'bignumber.js';
 
 export type DbftTransactionContext = {
     register: (caller: string, address: string) => Promise<ErrorCode>;
@@ -18,13 +21,13 @@ export type DbftEventContext = {
 } & ValueEventContext;
 
 export type DbftViewContext = {
-    getMiners: () => Promise<{address: string, pubkey: string}[]>;
+    getMiners: () => Promise<{ address: string, pubkey: string }[]>;
     isMiner: (address: string) => Promise<boolean>;
 } & ValueViewContext;
 
 export class DbftChain extends ValueChain {
     protected m_dbftHeaderStorage?: DbftHeaderStorage;
-    
+
     constructor(options: ChainContructOptions) {
         super(options);
     }
@@ -35,11 +38,11 @@ export class DbftChain extends ValueChain {
     }
 
     // 不会分叉
-    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
-        return {err: ErrorCode.RESULT_OK};
+    protected async _onMorkSnapshot(options: { tip: BlockHeader, toMork: Set<string> }): Promise<{ err: ErrorCode }> {
+        return { err: ErrorCode.RESULT_OK };
     }
 
-    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
@@ -50,10 +53,10 @@ export class DbftChain extends ValueChain {
         externalContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
             return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
-        
+
         let context = new DbftContext(storage, this.globalOptions, this.logger);
         externalContext.register = async (caller: string, address: string): Promise<ErrorCode> => {
-           return await context.registerToCandidate(caller, block.number, address);
+            return await context.registerToCandidate(caller, block.number, address);
         };
         externalContext.unregister = async (caller: string, address: string): Promise<ErrorCode> => {
             return await context.unRegisterFromCandidate(caller, address);
@@ -62,7 +65,7 @@ export class DbftChain extends ValueChain {
         externalContext.getMiners = async (): Promise<string[]> => {
             let gm = await context.getMiners();
             if (gm.err) {
-               throw Error('newBlockExecutor getMiners failed errcode ${gm.err}');
+                throw Error('newBlockExecutor getMiners failed errcode ${gm.err}');
             }
             return gm.miners!;
         };
@@ -77,18 +80,18 @@ export class DbftChain extends ValueChain {
         };
 
         let executor = new DbftBlockExecutor({
-            logger: this.logger, 
-            block, 
-            storage, 
-            handler: this.m_handler, 
-            externContext: externalContext, 
+            logger: this.logger,
+            block,
+            storage,
+            handler: this.m_handler,
+            externContext: externalContext,
             globalOptions: this.m_globalOptions,
             externParams
         });
-        return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
+        return { err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor };
     }
 
-    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
+    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer | string | number | undefined): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
         let nvex = await super.newViewExecutor(header, storage, method, param);
         let externalContext = nvex.executor!.externContext;
 
@@ -96,7 +99,7 @@ export class DbftChain extends ValueChain {
         externalContext.getMiners = async (): Promise<string[]> => {
             let gm = await dbftProxy.getMiners();
             if (gm.err) {
-               throw Error('newBlockExecutor getMiners failed errcode ${gm.err}');
+                throw Error('newBlockExecutor getMiners failed errcode ${gm.err}');
             }
 
             return gm.miners!;
@@ -114,7 +117,7 @@ export class DbftChain extends ValueChain {
         return nvex;
     }
 
-    public async initComponents(options?: {readonly?: boolean}) {
+    public async initComponents(options?: { readonly?: boolean }) {
         let err = await super.initComponents(options);
         if (err) {
             return err;
@@ -206,7 +209,7 @@ export class DbftChain extends ValueChain {
         let reSelectionBlocks = this.globalOptions!.reSelectionBlocks;
         return reSelectionBlocks - (hr.header!.number % reSelectionBlocks);
     }
-    
+
     async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions: any): Promise<ErrorCode> {
         let err = await super.onCreateGenesisBlock(block, storage, genesisOptions);
         if (err) {
@@ -240,7 +243,7 @@ export class DbftChain extends ValueChain {
         return ErrorCode.RESULT_OK;
     }
 
-    getLIB(): {number: number, hash: string} {
-        return {number: this.m_tip!.number, hash: this.m_tip!.hash};
+    getLIB(): { number: number, hash: string } {
+        return { number: this.m_tip!.number, hash: this.m_tip!.hash };
     }
 }

@@ -1,5 +1,6 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain } from '../../../src/host';
 import { isNullOrUndefined } from 'util';
+import { retarget } from '../../../src/core/pow_chain/consensus';
 
 export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
@@ -21,12 +22,14 @@ export function registerHandler(handler: ValueHandler) {
         if (!params.tokenid) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
-        let kvRet = await context.storage.createKeyValue(params.tokenid);
+        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid);
+
         if (kvRet.err) {
             return kvRet.err;
         }
 
         await kvRet.kv!.set('creator', context.caller);
+        await kvRet.kv!.set('type', 'default_token');
 
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
@@ -39,7 +42,8 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.addTX('transferTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
-        let tokenkv = await context.storage.getReadWritableKeyValue(params.tokenid);
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+
         if (tokenkv.err) {
             return tokenkv.err;
         }
@@ -55,7 +59,7 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValue(params.tokenid);
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
         return await getTokenBalance(balancekv.kv!, params.address);
     });
 
@@ -97,28 +101,41 @@ export function registerHandler(handler: ValueHandler) {
      */
     handler.addTX('createBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
+
+        console.log('Yang-- received createBancorToken');
+        console.log(params);
+
         // 参数检查
         if (!params.tokenid) {
+            console.log('Yang-- quit becasue tokenid')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
         if (!params.preBalances) {
+            console.log('Yang-- quit becasue preBalances')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
         // supply has been incorporated into preBalances
         if (!params.factor) {
+            console.log('Yang-- quit becasue factor')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
+        console.log('Yang-- Before context.storage.createKeyValueWithDbname');
+        console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
+
         let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid);
         if (kvRet.err) {
+            console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
             return kvRet.err;
         }
 
-        kvRet = await kvRet.kv!.set('creator', context.caller);
-        if (kvRet.err) {
-            return kvRet.err;
+        let kvCreator = await kvRet.kv!.set('creator', context.caller);
+
+        if (kvCreator.err) {
+            return kvCreator.err;
         }
+        await kvRet.kv!.set('type', 'bancor_token');
 
         let amountAll = new BigNumber(0);
         if (params.preBalances) {
@@ -185,6 +202,8 @@ export function registerHandler(handler: ValueHandler) {
     handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
 
+        console.log('Yang-- ', params)
+
         let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
         if (tokenkv.err) {
             return tokenkv.err;
@@ -193,6 +212,7 @@ export function registerHandler(handler: ValueHandler) {
         let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
         let amount = new BigNumber(params.amount);
         if (fromTotal.lt(amount)) {
+            console.log('Yang-- less than amount', amount);
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
         await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
@@ -203,10 +223,26 @@ export function registerHandler(handler: ValueHandler) {
     // Added by Yang Jun 2019-2-21
     handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
+
+        console.log('Yang-- buyBancorToken:', params);
+
         // context.value has the money
         // 参数检查
         if (!params.tokenid) {
             return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // If context.value lt sys value
+        let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
+        if (syskv.err) {
+            console.log('Yang-- not exist balance');
+            return syskv.err;
+        }
+        let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
+        let amount = new BigNumber(context.value);
+        if (fromTotalSys.lt(amount)) {
+            console.log('Yang-- not enough balance');
+            return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
         // get F
@@ -218,6 +254,7 @@ export function registerHandler(handler: ValueHandler) {
         if (retFactor.err) {
             return retFactor.err;
         }
+        console.log('Yang-- factor:', retFactor.value.toString());
         let F = new BigNumber(retFactor.value);
 
         // get S
@@ -227,6 +264,7 @@ export function registerHandler(handler: ValueHandler) {
         let retSupply = await kvSupply.kv!.get(params.tokenid);
         if (retSupply.err) { return retSupply.err; }
 
+        console.log('Yang-- supply:', retSupply.value.toString());
         let S = new BigNumber(retSupply.value);
 
         // get R
@@ -236,6 +274,7 @@ export function registerHandler(handler: ValueHandler) {
         let retReserve = await kvReserve.kv!.get(params.tokenid);
         if (retReserve.err) { return retReserve.err; }
 
+        console.log('Yang-- reserve:', retReserve.value.toString());
         let R = new BigNumber(retReserve.value);
 
         // do computation
@@ -245,7 +284,12 @@ export function registerHandler(handler: ValueHandler) {
         out = e.dividedBy(R);
         out = out.plus(new BigNumber(1.0));
         let temp1 = out.toNumber();
-        out = new BigNumber(Math.pow(temp1, F.toNumber()));
+        console.log('temp1:', temp1);
+        console.log('F:', F.toNumber());
+        console.log('math.pow:', Math.pow(temp1, F.toNumber()));
+
+        out = new BigNumber(Math.pow(temp1, F.toNumber()).toFixed(15));
+
         out = out.minus(new BigNumber(1));
         out = out.multipliedBy(S);
 
@@ -254,14 +298,23 @@ export function registerHandler(handler: ValueHandler) {
         S = S.plus(out);
 
         let kvRet = await kvReserve.kv!.set(params.tokenid, R);
-        if (kvRet.err) { return kvRet.err; }
+        if (kvRet.err) {
+            console.log('Yang-- update reserve failed')
+            return kvRet.err;
+        }
 
         kvRet = await kvSupply.kv!.set(params.tokenid, S);
-        if (kvRet.err) { return kvRet.err; }
+        if (kvRet.err) {
+            console.log('Yang-- update supply failed')
+            return kvRet.err;
+        }
 
         // Update User account
         let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
-        if (kvToken.err) { return kvToken.err; }
+        if (kvToken.err) {
+            console.log('Yang-- update user account failed')
+            return kvToken.err;
+        }
 
         let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
         let retToken = await kvToken.kv!.set(context.caller, fromTotal.plus(out));
@@ -273,6 +326,7 @@ export function registerHandler(handler: ValueHandler) {
     // Added by Yang Jun 2019-2-21
     handler.addTX('sellBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
+        console.log('Yang-- params:', params);
 
         // 参数检查
         if (!params.tokenid) {
@@ -289,6 +343,7 @@ export function registerHandler(handler: ValueHandler) {
             return retFactor.err;
         }
         let F = new BigNumber(retFactor.value);
+        console.log('F: ', F.toString());
 
         // get S
         let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
@@ -298,6 +353,7 @@ export function registerHandler(handler: ValueHandler) {
         if (retSupply.err) { return retSupply.err; }
 
         let S = new BigNumber(retSupply.value);
+        console.log('S:', S.toString());
 
         // get R
         let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
@@ -307,7 +363,7 @@ export function registerHandler(handler: ValueHandler) {
         if (retReserve.err) { return retReserve.err; }
 
         let R = new BigNumber(retReserve.value);
-
+        console.log('Yang-- R:', R.toString());
 
 
         // do computation
@@ -342,6 +398,7 @@ export function registerHandler(handler: ValueHandler) {
 
         let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
         if (fromTotal.lt(new BigNumber(params.amount))) {
+            console.log('Yang- less than token account');
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
@@ -352,9 +409,9 @@ export function registerHandler(handler: ValueHandler) {
         const err = await context.transferTo(context.caller, out);
         if (!err) {
             context.emit('transfer', { from: "0", to: context.caller, value: out });
+        } else {
+            return err;
         }
-        return err;
-
 
         return ErrorCode.RESULT_OK;
     });
@@ -464,7 +521,7 @@ export function registerHandler(handler: ValueHandler) {
             return ret.err;
         }
         // 如果本次出价不高于上次，则无效
-        if ((ret.value!.value as BigNumber).gte(context.value)) {
+        if ((ret.value!.value as BigNumber).gte(new BigNumber(context.value))) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
         // 把上一次的出价还给出价者

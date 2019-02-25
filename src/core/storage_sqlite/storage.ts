@@ -534,9 +534,14 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
 
     // Added by Yang Jun 2019-2-21
     public async createKeyValueWithDbname(dbname: string, name: string) {
+        this.logger.info('Yang-- into createKeyValueWithDbname');
+        this.logger.info('Yang--', dbname, ' ', name);
+
         // get full tablename
         const fullName = Storage.getKeyValueFullName(dbname, name);
         let count, err;
+
+        this.logger.info('Yang-- fullName is:', fullName);
 
         try {
             let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);

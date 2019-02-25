@@ -124,6 +124,9 @@ export class Chain extends EventEmitter implements IConsistency {
     public static kvNonce: string = 'nonce'; // address<--->nonce
     public static kvConfig: string = 'config';
 
+    // Added by Yang Jun 2019-2-25
+    public static kvBalance: string = 'balance';
+
     public static dbUser: string = '__user';
 
     // Added by Yang Jun 2019-2-20
