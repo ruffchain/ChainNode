@@ -1,21 +1,21 @@
 import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
-import {Chain, ChainTypeOptions, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, ValueChain, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor, ChainContructOptions, ChainInstanceOptions, BlockExecutorExternParam} from '../value_chain';
+import { Chain, ChainTypeOptions, Block, ValueTransactionContext, ValueEventContext, ValueViewContext, ValueChain, Storage, BlockExecutor, BlockHeader, IReadableStorage, ViewExecutor, ChainContructOptions, ChainInstanceOptions, BlockExecutorExternParam } from '../value_chain';
 
 import { DposBlockHeader } from './block';
 import * as consensus from './consensus';
 import * as ValueContext from '../value_chain/context';
 import { DposBlockExecutor, DposBlockExecutorOptions } from './executor';
-import {DposChainTipState} from './chain_state';
-import {DposChainTipStateManager, IChainStateStorage, StorageIrbEntry} from './chain_state_manager';
-import {LRUCache} from '../lib/LRUCache';
+import { DposChainTipState } from './chain_state';
+import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from './chain_state_manager';
+import { LRUCache } from '../lib/LRUCache';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     register: (from: string) => Promise<ErrorCode>;
-    getVote: () => Promise<Map<string, BigNumber> >;
+    getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
@@ -26,14 +26,14 @@ export type DposEventContext = {
     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     register: (from: string) => Promise<ErrorCode>;
-    getVote: () => Promise<Map<string, BigNumber> >;
+    getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
 } & ValueEventContext;
 
 export type DposViewContext = {
-    getVote: () => Promise<Map<string, BigNumber> >;
+    getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
@@ -63,7 +63,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     get stateManager(): DposChainTipStateManager {
         return this.m_stateManager!;
     }
-    
+
     get chainTipState(): DposChainTipState {
         return this.m_stateManager!.getBestChainState()!;
     }
@@ -73,7 +73,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     }
 
     protected get _ignoreVerify() {
-        return true;
+        // return true;
+        // Yang Jun change at 3-5-2019
+        return false;
     }
 
     public async initialize(instanceOptions: ChainInstanceOptions): Promise<ErrorCode> {
@@ -89,7 +91,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         return ErrorCode.RESULT_OK;
     }
 
-    public async initComponents(options?: {readonly?: boolean}): Promise<ErrorCode> {
+    public async initComponents(options?: { readonly?: boolean }): Promise<ErrorCode> {
         let err = await super.initComponents(options);
         if (err) {
             return err;
@@ -123,21 +125,22 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         });
     }
 
-    async prepareExternParams(block: Block, storage: Storage): Promise<{err: ErrorCode, params?: BlockExecutorExternParam[]}> {
+    async prepareExternParams(block: Block, storage: Storage): Promise<{ err: ErrorCode, params?: BlockExecutorExternParam[] }> {
         this.m_logger.debug(`begin prepare executor extern params for ${block.hash}`);
         if (block.number === 0 || block.number % this.globalOptions.reSelectionBlocks !== 0) {
-            return {err: ErrorCode.RESULT_OK, params: []};
+            return { err: ErrorCode.RESULT_OK, params: [] };
         }
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
-            blockHash: this.chainTipState.IRB.hash});
+            blockHash: this.chainTipState.IRB.hash
+        });
         if (csr.err) {
-            return {err: csr.err};
+            return { err: csr.err };
         }
-        return {err: ErrorCode.RESULT_OK, params: [csr.param!]};
+        return { err: ErrorCode.RESULT_OK, params: [csr.param!] };
     }
 
-    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
@@ -151,10 +154,10 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
         let dbr = await storage.getReadWritableDatabase(Chain.dbSystem);
         if (dbr.err) {
-            return {err: dbr.err};
+            return { err: dbr.err };
         }
 
-        let de = new consensus.Context({currDatabase: dbr.value!, globalOptions: this.globalOptions,  logger: this.m_logger!});
+        let de = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
             let vr = await de.vote(from, candiates);
             if (vr.err) {
@@ -186,7 +189,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
             return mr.returnCode!;
         };
-        externalContext.getVote = async (): Promise<Map<string, BigNumber> > => {
+        externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
             let gvr = await de.getVote();
             if (gvr.err) {
                 throw new Error();
@@ -219,29 +222,29 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         let options: DposBlockExecutorOptions = {
-            logger: this.logger, 
-            block, 
-            storage, 
-            handler: this.m_handler, 
-            externContext: externalContext, 
-            globalOptions: this.m_globalOptions, 
+            logger: this.logger,
+            block,
+            storage,
+            handler: this.m_handler,
+            externContext: externalContext,
+            globalOptions: this.m_globalOptions,
             externParams
         };
         let executor = new DposBlockExecutor(options);
-        return {err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor};
+        return { err: ErrorCode.RESULT_OK, executor: executor as BlockExecutor };
     }
 
-    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
+    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer | string | number | undefined): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
         let nvex = await super.newViewExecutor(header, storage, method, param);
 
         let externalContext = nvex.executor!.externContext;
         let dbr = await storage.getReadableDataBase(Chain.dbSystem);
         if (dbr.err) {
-            return {err: dbr.err};
+            return { err: dbr.err };
         }
-        let de = new consensus.ViewContext({currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger});
+        let de = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger });
 
-        externalContext.getVote = async (): Promise<Map<string, BigNumber> > => {
+        externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
             let gvr = await de.getVote();
             if (gvr.err) {
                 throw new Error();
@@ -285,7 +288,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         let now = Math.ceil(Date.now() / 1000);
         if (header.timestamp > now) {
             this.logger.error(`dpos chain _verifyAndSaveHeaders last block time ${header.timestamp} must small now ${now}`);
-            return {err: ErrorCode.RESULT_INVALID_BLOCK};
+            return { err: ErrorCode.RESULT_INVALID_BLOCK };
         }
         let hr = await this.getHeader(headers[0].preBlockHash);
         if (hr.err) {
@@ -294,23 +297,23 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
         if (headers[0].timestamp - hr.header!.timestamp < this.globalOptions.blockInterval) {
             this.logger.error(`1 dpos chain _verifyAndSaveHeaders curr block time ${headers[0].timestamp} - prevtime ${hr.header!.timestamp} small blockinterval ${this.globalOptions.blockInterval}`);
-            return {err: ErrorCode.RESULT_INVALID_BLOCK};
+            return { err: ErrorCode.RESULT_INVALID_BLOCK };
         }
 
         for (let i = 1; i < headers.length; i++) {
             if (headers[i].timestamp - headers[i - 1].timestamp < this.globalOptions.blockInterval) {
                 this.logger.error(`2 dpos chain _verifyAndSaveHeaders curr block time ${headers[i].timestamp} - prevtime ${headers[i - 1].timestamp} small blockinterval ${this.globalOptions.blockInterval}`);
-                return {err: ErrorCode.RESULT_INVALID_BLOCK};
+                return { err: ErrorCode.RESULT_INVALID_BLOCK };
             }
         }
 
         return await super._verifyAndSaveHeaders(headers);
     }
 
-    protected async _compareWork(comparedHeader: DposBlockHeader, bestChainTip: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
+    protected async _compareWork(comparedHeader: DposBlockHeader, bestChainTip: DposBlockHeader): Promise<{ err: ErrorCode, result?: number }> {
         let hr = await this.m_stateManager!.compareIRB(comparedHeader, bestChainTip);
         if (hr.err) {
-            return {err: hr.err};
+            return { err: hr.err };
         }
         if (hr.result !== 0) {
             return hr;
@@ -318,17 +321,17 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         // 不可逆点相同，更长的链优先
         let height = comparedHeader.number - bestChainTip.number;
         if (height !== 0) {
-            return {err: ErrorCode.RESULT_OK, result: height};
+            return { err: ErrorCode.RESULT_OK, result: height };
         }
         // 高度相同更晚的优先
         let leftIndex = comparedHeader.getTimeIndex(this);
         let rightIndex = bestChainTip.getTimeIndex(this);
         let time = leftIndex - rightIndex;
         if (time !== 0) {
-            return {err: ErrorCode.RESULT_OK, result: time};
+            return { err: ErrorCode.RESULT_OK, result: time };
         }
         // 时间戳都相同， 就算了， 很罕见吧， 随缘
-        return {err: ErrorCode.RESULT_OK, result: time}; 
+        return { err: ErrorCode.RESULT_OK, result: time };
     }
 
     protected async _calcuteReqLimit(fromHeader: string, limit: number) {
@@ -337,12 +340,12 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         return reSelectionBlocks - (hr.header!.number % reSelectionBlocks);
     }
 
-    protected async _onMorkSnapshot(options: {tip: BlockHeader, toMork: Set<string>}): Promise<{err: ErrorCode}> {
+    protected async _onMorkSnapshot(options: { tip: BlockHeader, toMork: Set<string> }): Promise<{ err: ErrorCode }> {
         options.toMork.add(this.chainTipState.IRB.hash);
-        return {err: ErrorCode.RESULT_OK};
+        return { err: ErrorCode.RESULT_OK };
     }
 
-    public async getMiners(header: DposBlockHeader): Promise<{err: ErrorCode, header?: DposBlockHeader, creators?: string[]}> {
+    public async getMiners(header: DposBlockHeader): Promise<{ err: ErrorCode, header?: DposBlockHeader, creators?: string[] }> {
         let en = consensus.ViewContext.getElectionBlockNumber(this.globalOptions, header.number);
         let electionHeader: DposBlockHeader;
         if (header.number === en) {
@@ -357,22 +360,22 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         try {
-            const gm = await this.m_db!.get(getMinersSql, {$hash: electionHeader.hash});
+            const gm = await this.m_db!.get(getMinersSql, { $hash: electionHeader.hash });
             if (!gm || !gm.miners) {
                 this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}`);
-                return {err: ErrorCode.RESULT_NOT_FOUND};
+                return { err: ErrorCode.RESULT_NOT_FOUND };
             }
 
             let creators = JSON.parse(gm.miners);
             if (!creators.length) {
                 this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}, length=0`);
-                return {err: ErrorCode.RESULT_NOT_FOUND};
+                return { err: ErrorCode.RESULT_NOT_FOUND };
             }
 
-            return {err: ErrorCode.RESULT_OK, header: electionHeader, creators};
+            return { err: ErrorCode.RESULT_OK, header: electionHeader, creators };
         } catch (e) {
             this.logger.error(`getMiners exception, e=${e}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -395,41 +398,41 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     public async saveIRB(header: DposBlockHeader, irbHeader: DposBlockHeader): Promise<ErrorCode> {
         try {
             if (header.number === 0 || header.number % this.globalOptions.reSelectionBlocks === 0) {
-                await this.m_db!.run(saveIrbSqlUpdate, {$hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number});
+                await this.m_db!.run(saveIrbSqlUpdate, { $hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number });
             } else {
-                await this.m_db!.run(saveIrbSqlReplace, {$hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number});
+                await this.m_db!.run(saveIrbSqlReplace, { $hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number });
             }
         } catch (e) {
             this.logger.error(`dpos chain save irb failed, e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        let entry: StorageIrbEntry = {tipHash: header.hash, irbHash: irbHeader.hash, irbHeight: irbHeader.number};
+        let entry: StorageIrbEntry = { tipHash: header.hash, irbHash: irbHeader.hash, irbHeight: irbHeader.number };
         this.m_cacheIRB.set(header.hash, entry);
         return ErrorCode.RESULT_OK;
     }
 
-    public async getIRB(blockHash: string): Promise<{err: ErrorCode, irb?: StorageIrbEntry}> {
+    public async getIRB(blockHash: string): Promise<{ err: ErrorCode, irb?: StorageIrbEntry }> {
         let irb = this.m_cacheIRB.get(blockHash);
         if (irb) {
-            return {err: ErrorCode.RESULT_OK, irb};
+            return { err: ErrorCode.RESULT_OK, irb };
         }
         try {
             let gh: any;
             if (blockHash === 'latest') {
                 gh = await this.m_db!.get(getLatestIrbSql);
             } else {
-                gh = await this.m_db!.get(getIrbSql, {$hash: blockHash});
+                gh = await this.m_db!.get(getIrbSql, { $hash: blockHash });
             }
             if (!gh || !gh.irb || !gh.irbhash.length || gh.irb.irbheight === -1) {
-                return {err: ErrorCode.RESULT_NOT_FOUND};
+                return { err: ErrorCode.RESULT_NOT_FOUND };
             }
 
-            let entry: StorageIrbEntry = {tipHash: gh.hash, irbHash: gh.irbhash, irbHeight: gh.irbheight};
+            let entry: StorageIrbEntry = { tipHash: gh.hash, irbHash: gh.irbhash, irbHeight: gh.irbheight };
             this.m_cacheIRB.set(blockHash, entry);
-            return {err: ErrorCode.RESULT_OK, irb: entry};
+            return { err: ErrorCode.RESULT_OK, irb: entry };
         } catch (e) {
             this.m_logger.error(`dpos chain get irb exception, e=${e}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
@@ -454,14 +457,14 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (dbr.err) {
             return dbr.err;
         }
-        let viewDenv = new consensus.ViewContext({currDatabase: dbr.value!, globalOptions: this.globalOptions,  logger: this.m_logger!});
+        let viewDenv = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
         let minersInfo = await viewDenv.getNextMiners();
         this.storageManager.releaseSnapshotView(header.hash);
         if (minersInfo.err) {
             return minersInfo.err;
         }
         try {
-            await this.m_db!.run(updateMinersSql, {$hash: header.hash, $miners: JSON.stringify(minersInfo.creators!)});
+            await this.m_db!.run(updateMinersSql, { $hash: header.hash, $miners: JSON.stringify(minersInfo.creators!) });
             return ErrorCode.RESULT_OK;
         } catch (e) {
             this.logger.error(e);
@@ -508,7 +511,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return kvr.err;
         }
 
-        let denv = new consensus.Context({currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger!});
+        let denv = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
 
         let ir = await denv.init(genesisOptions.candidates, genesisOptions.miners);
         if (ir.err) {
