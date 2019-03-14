@@ -6,4 +6,5 @@ test_data*
 data_*
 yarn.lock
 .projectile
+package-lock.json
 
