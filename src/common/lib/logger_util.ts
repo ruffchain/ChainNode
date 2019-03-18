@@ -1,12 +1,13 @@
-import {transports, LoggerInstance, Logger} from 'winston';
-export {LoggerInstance} from 'winston';
+import { transports, LoggerInstance, Logger, TransportInstance } from 'winston';
+export { LoggerInstance } from 'winston';
 import * as path from 'path';
 import * as fs from 'fs-extra';
-const {LogShim} = require('./log_shim');
+import * as DailyRotateFile from 'winston-daily-rotate-file';
+const { LogShim } = require('./log_shim');
 
 export type LoggerOptions = {
     logger?: LoggerInstance;
-    loggerOptions?: {console: boolean, file?: {root: string, filename?: string}, level?: string};
+    loggerOptions?: { console: boolean, file?: { root: string, filename?: string }, level?: string };
 };
 
 export function initLogger(options: LoggerOptions): LoggerInstance {
@@ -35,11 +36,34 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
                 humanReadableUnhandledException: true
             }));
         }
-        const logger = new Logger({
-            level: options.loggerOptions.level || 'info',
-            transports: loggerTransports
+        // Yang Jun 2019-3-15
+        let logger: any;
+        logger = new Logger({
+            transports: []
         });
-        
+
+        fs.ensureDirSync(options.loggerOptions.file!.root);
+
+        logger.configure({
+            level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
+            transports: [
+                new transports.Console({
+                    level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
+                    timestamp: true,
+                    handleExceptions: true,
+                    humanReadableUnhandledException: true
+                }),
+                new DailyRotateFile({
+                    dirname: options.loggerOptions.file!.root,
+                    filename: 'info-%DATE%.log',
+                    datePattern: 'YYYY-MM-DD-HH',
+                    zippedArchive: true,
+                    maxSize: '100m',
+                    maxFiles: '15'
+                })
+            ]
+        });
+
         return new LogShim(logger).log;
     } else {
         const loggerTransports = [];
@@ -56,4 +80,4 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
     }
 }
 
-export {LogShim};
+export { LogShim };

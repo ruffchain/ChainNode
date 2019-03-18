@@ -1,12 +1,12 @@
-import {RPCServer} from '../lib/rpc_server';
-import {Options as CommandOptions} from '../../common/';
+import { RPCServer } from '../lib/rpc_server';
+import { Options as CommandOptions } from '../../common/';
 
-import {ErrorCode, Chain, Miner, Transaction, ValueTransaction, toStringifiable, LoggerInstance, EventLog, BlockHeader, Receipt} from '../../core';
+import { ErrorCode, Chain, Miner, Transaction, ValueTransaction, toStringifiable, LoggerInstance, EventLog, BlockHeader, Receipt, DposChain } from '../../core';
 import { isUndefined } from 'util';
-import {HostChainContext} from '../context/context';
-import {ChainEventFilterStub} from '../event/stub';
-import {ChainEvent} from '../event/element';
-import {TxStorage} from '../tx/element';
+import { HostChainContext } from '../context/context';
+import { ChainEventFilterStub } from '../event/stub';
+import { ChainEvent } from '../event/element';
+import { TxStorage } from '../tx/element';
 
 function promisify(f: any) {
     return () => {
@@ -50,7 +50,7 @@ export class ChainServer {
     }
 
     _initMethods() {
-        this.m_server!.on('sendTransaction', async (params: {tx: any}, resp) => {
+        this.m_server!.on('sendTransaction', async (params: { tx: any }, resp) => {
             let tx = ValueTransaction.fromRaw(Buffer.from(params.tx, 'hex'), ValueTransaction);
             if (!tx) {
                 await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_FORMAT)));
@@ -67,7 +67,7 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getTransactionReceipt', async (params: {tx: string}, resp) => {
+        this.m_server!.on('getTransactionReceipt', async (params: { tx: string }, resp) => {
             let _getTransactionReceipt = async (s: string): Promise<{ err: ErrorCode, block?: BlockHeader, tx?: Transaction, receipt?: Receipt }> => {
                 let element: TxStorage = this.m_chainContext!.getElement(TxStorage.ElementName)! as TxStorage;
                 let ret = await element.get(params.tx);
@@ -75,7 +75,7 @@ export class ChainServer {
                     this.m_logger.error(`get transaction receipt ${s} failed for ${ret.err}`);
                     return { err: ret.err };
                 }
-        
+
                 let block = this.m_chain.getBlock(ret.blockhash!);
                 if (!block) {
                     this.m_logger.error(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
@@ -110,16 +110,16 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getNonce', async (params: {address: string}, resp) => {
+        this.m_server!.on('getNonce', async (params: { address: string }, resp) => {
             let nonce = await this.m_chain.getNonce(params.address);
             await promisify(resp.write.bind(resp)(JSON.stringify(nonce)));
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('view', async (params: {method: string, params: any, from?: number|string|'latest'}, resp) => {
-            let cr = await this.m_chain.view(isUndefined(params.from) ? 'latest' : params.from , params.method, params.params);
+        this.m_server!.on('view', async (params: { method: string, params: any, from?: number | string | 'latest' }, resp) => {
+            let cr = await this.m_chain.view(isUndefined(params.from) ? 'latest' : params.from, params.method, params.params);
             if (cr.err) {
-                await promisify(resp.write.bind(resp)(JSON.stringify({err: cr.err})));
+                await promisify(resp.write.bind(resp)(JSON.stringify({ err: cr.err })));
             } else {
                 let s;
                 try {
@@ -135,17 +135,17 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getBlock', async (params: {which: number|string|'latest', transactions?: boolean, eventLog?: boolean}, resp) => {
+        this.m_server!.on('getBlock', async (params: { which: number | string | 'latest', transactions?: boolean, eventLog?: boolean }, resp) => {
             let hr = await this.m_chain.getHeader(params.which);
             if (hr.err) {
-                await promisify(resp.write.bind(resp)(JSON.stringify({err: hr.err})));
+                await promisify(resp.write.bind(resp)(JSON.stringify({ err: hr.err })));
             } else {
                 // 是否返回 block的transactions内容
                 if (params.transactions || params.eventLog) {
                     let block = await this.m_chain.getBlock(hr.header!.hash);
-                    if ( block ) {
+                    if (block) {
                         // 处理block content 中的transaction, 然后再响应请求
-                        let res: any = {err: ErrorCode.RESULT_OK, block: hr.header!.stringify()};
+                        let res: any = { err: ErrorCode.RESULT_OK, block: hr.header!.stringify() };
                         if (params.transactions) {
                             res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
                         }
@@ -155,7 +155,7 @@ export class ChainServer {
                         await promisify(resp.write.bind(resp)(JSON.stringify(res)));
                     }
                 } else {
-                    await promisify(resp.write.bind(resp)(JSON.stringify({err: ErrorCode.RESULT_OK, block: hr.header!.stringify()})));
+                    await promisify(resp.write.bind(resp)(JSON.stringify({ err: ErrorCode.RESULT_OK, block: hr.header!.stringify() })));
                 }
             }
             await promisify(resp.end.bind(resp))();
@@ -168,7 +168,13 @@ export class ChainServer {
         });
 
         this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
-            let num = this.m_chain.getLIB().number;
+            console.log('Yang Jun --> m_chain');
+            // Yang Jun 2019-3-18
+            let dChain = this.m_chain as DposChain;
+            let num = dChain.getCustomLIB();
+
+            // let num = (this.m_chain as DposChain).chainTipState.IRB.number;
+            // let num = this.m_chain.getLIB().number;
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());
         });
@@ -198,6 +204,6 @@ export class ChainServer {
     }
 
     private m_chain: Chain;
-    private m_miner ?: Miner;
-    private m_server ?: RPCServer;
+    private m_miner?: Miner;
+    private m_server?: RPCServer;
 }

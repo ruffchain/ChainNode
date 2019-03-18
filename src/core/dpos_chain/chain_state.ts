@@ -1,8 +1,8 @@
 const assert = require('assert');
 
-import { ErrorCode, stringifyErrorCode} from '../error_code';
+import { ErrorCode, stringifyErrorCode } from '../error_code';
 import { LoggerInstance } from '../lib/logger_util';
-import {DposBlockHeader} from './block';
+import { DposBlockHeader } from './block';
 import { IHeaderStorage } from '../chain';
 
 type ConfireEntry = {
@@ -13,16 +13,16 @@ type ConfireEntry = {
 export type DposChainTipStateOptions = {
     globalOptions: any,
     logger: LoggerInstance,
-    getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>, 
+    getMiners: (header: DposBlockHeader) => Promise<{ err: ErrorCode, creators?: string[] }>,
     // lib short for last irreversiable block
     libHeader: DposBlockHeader,
-    headerStorage: IHeaderStorage 
+    headerStorage: IHeaderStorage
 };
 
 export class DposChainTipState {
     private m_logger: LoggerInstance;
     protected m_globalOptions: any;
-    protected m_getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
+    protected m_getMiners: (header: DposBlockHeader) => Promise<{ err: ErrorCode, creators?: string[] }>;
     protected m_tip: DposBlockHeader;
     // 当前节点计算出的候选不可逆区块number
     protected m_proposedIRBNum: number = 0;
@@ -33,12 +33,12 @@ export class DposChainTipState {
     protected m_producerInfo: {
         // 各生产者确认的候选不可逆区块number
         lastImpliedIRB: Map<string, DposBlockHeader>,
-         // 各生产者上次出块的块number
+        // 各生产者上次出块的块number
         lastProduced: Map<string, number>
     } = {
-        lastImpliedIRB: new Map(),
-        lastProduced: new Map()
-    };
+            lastImpliedIRB: new Map(),
+            lastProduced: new Map()
+        };
     // 待确认区块信息
     protected m_confirmInfo: ConfireEntry[] = [];
 
@@ -64,7 +64,7 @@ export class DposChainTipState {
         return this.m_tip;
     }
 
-    protected _getMiner(header: DposBlockHeader): Promise<{err: ErrorCode, creators?: string[]}> {
+    protected _getMiner(header: DposBlockHeader): Promise<{ err: ErrorCode, creators?: string[] }> {
         return this.m_getMiners(header);
     }
 
@@ -85,10 +85,10 @@ export class DposChainTipState {
 
         let needConfireCount: number = Math.ceil(gm.creators!.length * 2 / 3);
 
-        this.m_confirmInfo.push({ header, count: needConfireCount});
+        this.m_confirmInfo.push({ header, count: needConfireCount });
 
         let index = this.m_confirmInfo.length - 1;
-        while (index >= 0 && numPreBlocks !== 0 ) {
+        while (index >= 0 && numPreBlocks !== 0) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
             entry.count--;
             if (entry.count === 0) {
@@ -105,7 +105,7 @@ export class DposChainTipState {
 
             index--;
         }
-         
+
         if (numPreBlocks === 0 || index === 0) {
             // 清除重复
             let i = 0;
@@ -140,15 +140,15 @@ export class DposChainTipState {
         let data: any = {};
         data.producer_to_last_implied_irb = [];
         for (let [_, header] of this.m_producerInfo.lastImpliedIRB) {
-            data.producer_to_last_implied_irb.push({miner: header.miner, number: header.number});
+            data.producer_to_last_implied_irb.push({ miner: header.miner, number: header.number });
         }
         data.producer_to_last_produced = [];
         for (let [miner, number] of this.m_producerInfo.lastProduced) {
-            data.producer_to_last_produced.push({miner, number});
+            data.producer_to_last_produced.push({ miner, number });
         }
         data.confire_info = [];
         for (let entry of this.m_confirmInfo) {
-            data.confire_info.push({number: entry.header.number, hash: entry.header.hash, miner: entry.header.miner, count: entry.count});
+            data.confire_info.push({ number: entry.header.number, hash: entry.header.hash, miner: entry.header.miner, count: entry.count });
         }
         data.tip = {};
         if (this.m_tip) {
@@ -178,7 +178,7 @@ export class DposChainTipState {
         if (numbers.length > 0) {
             numbers.sort();
             // 2/3的人推荐某个block成为候选不可逆block，那么这个块才能成为不可逆，那么上一个不可逆块号就是1/3中最大的
-            let n = Math.floor((numbers.length - 1) / 3); 
+            let n = Math.floor((numbers.length - 1) / 3);
             let irbNumber = numbers[n];
 
             for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
@@ -195,12 +195,17 @@ export class DposChainTipState {
         for (let m of miners) {
             let irb = this.m_producerInfo.lastImpliedIRB.get(m);
             newImpliedIrb.set(m, irb ? irb : this.m_irb);
-            
+
             let pr = this.m_producerInfo.lastProduced.get(m);
             newProduced.set(m, pr ? pr : this.m_irb.number);
         }
 
         this.m_producerInfo.lastImpliedIRB = newImpliedIrb;
         this.m_producerInfo.lastProduced = newProduced;
+    }
+
+    // Yang Jun 2019-3-18
+    public getIRB() {
+        return this.m_irb.number;
     }
 }

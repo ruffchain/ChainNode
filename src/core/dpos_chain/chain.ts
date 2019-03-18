@@ -524,4 +524,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     getLIB(): DposBlockHeader {
         return this.chainTipState.IRB;
     }
+    // Yang Jun 2019-3-18
+    getCustomLIB(): number {
+        return this.chainTipState.getIRB();
+    }
 }

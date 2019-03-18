@@ -46,6 +46,8 @@ export enum ErrorCode {
     RESULT_FORK_DETECTED = 50,
 
     RESULT_USER_DEFINE = 10000,     // 用户定义的错误码从此开始
+
+    BANCOR_TOTAL_SUPPLY_LIMIT = 10001,
 }
 
 export function stringifyErrorCode(err: ErrorCode): string {

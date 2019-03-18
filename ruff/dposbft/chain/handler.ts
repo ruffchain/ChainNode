@@ -17,9 +17,9 @@ export function registerHandler(handler: ValueHandler) {
         return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
     }
 
-    async function getAddressCode(codeKv: IReadableKeyValue, address: string): Promise<Buffer|undefined> {
+    async function getAddressCode(codeKv: IReadableKeyValue, address: string): Promise<Buffer | undefined> {
         let retInfo = await codeKv.get(address);
-        return retInfo.err == ErrorCode.RESULT_OK ? retInfo.value.code : undefined;
+        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value.code : undefined;
     }
 
     handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
@@ -33,7 +33,7 @@ export function registerHandler(handler: ValueHandler) {
             return kvRet.err;
         }
 
-        kvRet = await kvRet.kv!.set(context.caller, {code: params.userCode});
+        kvRet = await kvRet.kv!.set(context.caller, { code: params.userCode });
         if (kvRet.err) {
             return kvRet.err;
         }
@@ -41,7 +41,7 @@ export function registerHandler(handler: ValueHandler) {
         return ErrorCode.RESULT_OK;
     });
 
-    handler.addViewMethod('getUserCode', async (context: DposViewContext, params: any): Promise<Buffer|undefined> => {
+    handler.addViewMethod('getUserCode', async (context: DposViewContext, params: any): Promise<Buffer | undefined> => {
         let kvRet = await context.storage.getReadableKeyValue('userCode');
 
         if (kvRet.err) {
@@ -221,10 +221,12 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         // Consider to use nonliquidity or not
+        // nonliquidity == 0; no limit for supply
+        // nonliquidity !== 0, supply < nonliquidity!!
         if (!params.nonliquidity) {
             kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(0));
         } else {
-            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.nonliquidity));
+            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.nonliquidity).plus(amountAll));
         }
 
         if (kvRet.err) {
@@ -236,26 +238,26 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+    // handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+    //     context.cost(context.fee);
 
-        console.log('Yang-- ', params)
+    //     console.log('Yang-- ', params)
 
-        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
-        if (tokenkv.err) {
-            return tokenkv.err;
-        }
+    //     let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+    //     if (tokenkv.err) {
+    //         return tokenkv.err;
+    //     }
 
-        let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
-        let amount = new BigNumber(params.amount);
-        if (fromTotal.lt(amount)) {
-            console.log('Yang-- less than amount', amount);
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
-        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
-        return ErrorCode.RESULT_OK;
-    });
+    //     let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
+    //     let amount = new BigNumber(params.amount);
+    //     if (fromTotal.lt(amount)) {
+    //         console.log('Yang-- less than amount', amount);
+    //         return ErrorCode.RESULT_NOT_ENOUGH;
+    //     }
+    //     await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
+    //     await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
+    //     return ErrorCode.RESULT_OK;
+    // });
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
@@ -314,6 +316,15 @@ export function registerHandler(handler: ValueHandler) {
         console.log('Yang-- reserve:', retReserve.value.toString());
         let R = new BigNumber(retReserve.value);
 
+        // get nonliquidity
+        let kvNonliquidity = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        if (kvNonliquidity.err) { return kvNonliquidity.err; }
+
+        let retNonliquidity = await kvNonliquidity.kv!.get(params.tokenid);
+        if (retNonliquidity.err) { return retNonliquidity.err; }
+
+        let N = new BigNumber(retNonliquidity.value);
+
         // do computation
         let e = new BigNumber(context.value);
         let out: BigNumber;
@@ -336,6 +347,11 @@ export function registerHandler(handler: ValueHandler) {
         // Update system R,S; Update User account
         R = R.plus(e);
         S = S.plus(out);
+
+        // Yang Jun 2019-3-15, Nonliquiidty is not zero, S > N
+        if ((!N.isZero()) && S.gt(N)) {
+            return ErrorCode.BANCOR_TOTAL_SUPPLY_LIMIT;
+        }
 
         let kvRet = await kvReserve.kv!.set(params.tokenid, R);
         if (kvRet.err) {
