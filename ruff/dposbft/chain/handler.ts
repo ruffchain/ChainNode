@@ -3,7 +3,6 @@ import { isNullOrUndefined } from 'util';
 import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 
-console.log('createScript is ', createScript);
 export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
         await context.storage.createKeyValue('bid');
@@ -23,7 +22,6 @@ export function registerHandler(handler: ValueHandler) {
     }
 
     handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        console.log('in set code');
         if (!params.userCode) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
@@ -49,6 +47,116 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         return await getAddressCode(kvRet.kv!, params.address);
+    });
+
+    handler.addTX('runUserMethod', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        let kvRet = await context.storage.getReadableKeyValue('userCode');
+
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        let rawCode = await getAddressCode(kvRet.kv!, params.to);
+        if (!rawCode) {
+            return ErrorCode.RESULT_NOT_FOUND;
+        }
+
+        let code = rawCode.toString();
+        const sandbox = {
+            bcTransfer: (resolve: any, to: string, amount: string): Promise<any> => {
+                console.log('in bcTransfer to:', to, ' amount:', amount);
+                return context
+                    .transferTo(to, new BigNumber(amount))
+                    .then(ret => {
+                        if (ret === ErrorCode.RESULT_OK) {
+                            resolve(true);
+                        } else {
+                            console.log('ret is', ret);
+                            resolve(false);
+                        }
+                    }).catch(err => {
+                        console.log('err when transfer', err);
+                        resolve(false);
+                    });
+            },
+            bcDBCreate: (resolve: any, name: string): Promise<any> => {
+                var dbName = `${context.caller}-${name}`;
+                return context
+                        .storage
+                        .createKeyValue(dbName)
+                        .then(kvRet => {
+                            if (kvRet.err) {
+                                resolve(false);
+                            } else {
+                                resolve(true);
+                            }
+                        }).catch(err => {
+                            console.log('error when DB create', err);
+                            resolve(false);
+                        });
+            },
+            bcDBSet: (resolve: any, name: string, key: string, value: string): Promise<any> => {
+                var dbName = `${context.caller}-${name}`;
+                return context
+                        .storage
+                        .getReadWritableKeyValue(dbName)
+                        .then(kvRet => {
+                            if (kvRet.err) {
+                                resolve(false);
+                            } else {
+                                kvRet.kv!.set(key, value).then(ret => {
+                                    if (ret.err) {
+                                        resolve(false);
+                                    } else {
+                                        resolve(true);
+                                    }
+                                });
+                            }
+                        }).catch(err => {
+                            console.log('error when DB Set', err);
+                            resolve(false);
+                        });
+            },
+        };
+
+        let actionCode = `
+            var contract = new Contract("${params.to}","${context.caller}");
+            contract.${params.action}("${params.params}");
+        `;
+        try {
+            await createScript(code)
+                                .setUserCode(actionCode)
+                                .setSandbox(sandbox)
+                                .setOption({ cpuCount:640, memSizeKB:200 })
+                                .runAsync();
+            return ErrorCode.RESULT_OK;
+        } catch (err) {
+            console.log('err is', err);
+            return ErrorCode.RESULT_FAILED;
+        }
+    });
+
+    handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
+        // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
+
+        // 必须要有tokenid，一条链上tokenid不能重复
+        if (!params.tokenid) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+        let kvRet = await context.storage.createKeyValue(params.tokenid);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        await kvRet.kv!.set('creator', context.caller);
+
+        if (params.preBalances) {
+            for (let index = 0; index < params.preBalances.length; index++) {
+                // 按照address和amount预先初始化钱数
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
+            }
+        }
+        return ErrorCode.RESULT_OK;
     });
 
     handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
