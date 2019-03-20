@@ -62,59 +62,66 @@ export function registerHandler(handler: ValueHandler) {
 
         let code = rawCode.toString();
         const sandbox = {
-            bcTransfer: (resolve: any, to: string, amount: string): Promise<any> => {
+            bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
                 console.log('in bcTransfer to:', to, ' amount:', amount);
-                return context
-                    .transferTo(to, new BigNumber(amount))
-                    .then(ret => {
-                        if (ret === ErrorCode.RESULT_OK) {
-                            resolve(true);
-                        } else {
-                            console.log('ret is', ret);
-                            resolve(false);
-                        }
-                    }).catch(err => {
-                        console.log('err when transfer', err);
+                try {
+                    const ret = await context
+                        .transferTo(to, new BigNumber(amount));
+                    if (ret === ErrorCode.RESULT_OK) {
+                        resolve(true);
+                    }
+                    else {
+                        console.log('ret is', ret);
                         resolve(false);
-                    });
+                    }
+                }
+                catch (err) {
+                    console.log('err when transfer', err);
+                    resolve(false);
+                }
             },
-            bcDBCreate: (resolve: any, name: string): Promise<any> => {
+            bcDBCreate: async (resolve: any, name: string): Promise<any> => {
                 var dbName = `${context.caller}-${name}`;
-                return context
+                try {
+                    const kvRet = await context
                         .storage
-                        .createKeyValue(dbName)
-                        .then(kvRet => {
-                            if (kvRet.err) {
+                        .createKeyValue(dbName);
+                    if (kvRet.err) {
+                        resolve(false);
+                    }
+                    else {
+                        resolve(true);
+                    }
+                }
+                catch (err) {
+                    console.log('error when DB create', err);
+                    resolve(false);
+                }
+            },
+            bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
+                var dbName = `${context.caller}-${name}`;
+                try {
+                    const kvRet = await context
+                        .storage
+                        .getReadWritableKeyValue(dbName);
+                    if (kvRet.err) {
+                        resolve(false);
+                    }
+                    else {
+                        kvRet.kv!.set(key, value).then(ret => {
+                            if (ret.err) {
                                 resolve(false);
-                            } else {
+                            }
+                            else {
                                 resolve(true);
                             }
-                        }).catch(err => {
-                            console.log('error when DB create', err);
-                            resolve(false);
                         });
-            },
-            bcDBSet: (resolve: any, name: string, key: string, value: string): Promise<any> => {
-                var dbName = `${context.caller}-${name}`;
-                return context
-                        .storage
-                        .getReadWritableKeyValue(dbName)
-                        .then(kvRet => {
-                            if (kvRet.err) {
-                                resolve(false);
-                            } else {
-                                kvRet.kv!.set(key, value).then(ret => {
-                                    if (ret.err) {
-                                        resolve(false);
-                                    } else {
-                                        resolve(true);
-                                    }
-                                });
-                            }
-                        }).catch(err => {
-                            console.log('error when DB Set', err);
-                            resolve(false);
-                        });
+                    }
+                }
+                catch (err) {
+                    console.log('error when DB Set', err);
+                    resolve(false);
+                }
             },
         };
 
