@@ -61,13 +61,24 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let code = rawCode.toString();
+        const totalValue = context.value;
+        let usedValue = new BigNumber(0);
+
         const sandbox = {
             bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
                 console.log('in bcTransfer to:', to, ' amount:', amount);
                 try {
+                    let toValue = new BigNumber(amount);
+
+                    if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
+                        console.log('exceed the amount');
+                        resolve(false);
+                    }
+
                     const ret = await context
-                        .transferTo(to, new BigNumber(amount));
+                        .transferTo(to, toValue);
                     if (ret === ErrorCode.RESULT_OK) {
+                        usedValue = usedValue.plus(toValue);
                         resolve(true);
                     }
                     else {
