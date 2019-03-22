@@ -91,49 +91,49 @@ export function registerHandler(handler: ValueHandler) {
                     resolve(false);
                 }
             },
-            bcDBCreate: async (resolve: any, name: string): Promise<any> => {
-                var dbName = `${context.caller}-${name}`;
-                try {
-                    const kvRet = await context
-                        .storage
-                        .createKeyValue(dbName);
-                    if (kvRet.err) {
-                        resolve(false);
-                    }
-                    else {
-                        resolve(true);
-                    }
-                }
-                catch (err) {
-                    console.log('error when DB create', err);
-                    resolve(false);
-                }
-            },
-            bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
-                var dbName = `${context.caller}-${name}`;
-                try {
-                    const kvRet = await context
-                        .storage
-                        .getReadWritableKeyValue(dbName);
-                    if (kvRet.err) {
-                        resolve(false);
-                    }
-                    else {
-                        kvRet.kv!.set(key, value).then(ret => {
-                            if (ret.err) {
-                                resolve(false);
-                            }
-                            else {
-                                resolve(true);
-                            }
-                        });
-                    }
-                }
-                catch (err) {
-                    console.log('error when DB Set', err);
-                    resolve(false);
-                }
-            },
+            //bcDBCreate: async (resolve: any, name: string): Promise<any> => {
+            //    var dbName = `${context.caller}-${name}`;
+            //    try {
+            //        const kvRet = await context
+            //            .storage
+            //            .createKeyValue(dbName);
+            //        if (kvRet.err) {
+            //            resolve(false);
+            //        }
+            //        else {
+            //            resolve(true);
+            //        }
+            //    }
+            //    catch (err) {
+            //        console.log('error when DB create', err);
+            //        resolve(false);
+            //    }
+            //},
+            //bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
+            //    var dbName = `${context.caller}-${name}`;
+            //    try {
+            //        const kvRet = await context
+            //            .storage
+            //            .getReadWritableKeyValue(dbName);
+            //        if (kvRet.err) {
+            //            resolve(false);
+            //        }
+            //        else {
+            //            kvRet.kv!.set(key, value).then(ret => {
+            //                if (ret.err) {
+            //                    resolve(false);
+            //                }
+            //                else {
+            //                    resolve(true);
+            //                }
+            //            });
+            //        }
+            //    }
+            //    catch (err) {
+            //        console.log('error when DB Set', err);
+            //        resolve(false);
+            //    }
+            //},
         };
 
         let actionCode = `
