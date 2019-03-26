@@ -5,7 +5,7 @@
         "features": []
     },
     "global": {
-        "minCreateor": 2,
+        "minCreateor": 1,
         "maxCreateor": 4,
 
         "reSelectionBlocks": 20,

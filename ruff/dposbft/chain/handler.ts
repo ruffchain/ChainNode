@@ -22,6 +22,7 @@ export function registerHandler(handler: ValueHandler) {
     }
 
     handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
         if (!params.userCode) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
@@ -50,6 +51,7 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('runUserMethod', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
         let kvRet = await context.storage.getReadableKeyValue('userCode');
 
         if (kvRet.err) {

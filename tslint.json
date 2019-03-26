@@ -1,5 +1,8 @@
 {
 	"tslint.enable": true,
+    "parserOptions": {
+        "ecmaVersion": 2017
+    },
     "defaultSeverity": "error",
     "extends": [
         "tslint:recommended"

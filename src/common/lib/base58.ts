@@ -78,7 +78,7 @@ export function encode(data: Buffer) {
     str += base58[b58[i]];
 
   return str;
-};
+}
 
 /**
  * Decode a base58 string.
@@ -138,4 +138,4 @@ export function decode(str: string) {
     out[j++] = b256[i++];
 
   return out;
-};
+}
