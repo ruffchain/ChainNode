@@ -5,10 +5,10 @@
         "features": []
     },
     "global": {
-        "minCreateor": 1,
-        "maxCreateor": 4,
+        "minCreateor": 2,
+        "maxCreateor": 11,
 
-        "reSelectionBlocks": 20,
+        "reSelectionBlocks": 30,
         "blockInterval": 10,
         "timeOffsetToLastBlock": 280,
         "timeBan": 1800,

@@ -1,13 +1,13 @@
-import {BigNumber} from 'bignumber.js';
-import {ErrorCode} from '../error_code';
-import {isValidAddress} from '../address';
+import { BigNumber } from 'bignumber.js';
+import { ErrorCode } from '../error_code';
+import { isValidAddress } from '../address';
 
-import {Transaction, BlockHeader, Receipt, BlockExecutor, TxListener, TransactionExecutor, Storage, IReadableKeyValue, IReadWritableKeyValue, Chain, TransactionExecuteflag, ReceiptSourceType} from '../chain';
-import {Context} from './context';
-import {ValueHandler} from './handler';
-import {ValueTransaction, ValueReceipt} from './transaction';
-import {ValueBlockHeader} from './block';
-import {ValueChain} from './chain';
+import { Transaction, BlockHeader, Receipt, BlockExecutor, TxListener, TransactionExecutor, Storage, IReadableKeyValue, IReadWritableKeyValue, Chain, TransactionExecuteflag, ReceiptSourceType } from '../chain';
+import { Context } from './context';
+import { ValueHandler } from './handler';
+import { ValueTransaction, ValueReceipt } from './transaction';
+import { ValueBlockHeader } from './block';
+import { ValueChain } from './chain';
 import { LoggerInstance } from '../lib/logger_util';
 import { isNumber } from 'util';
 
@@ -22,22 +22,24 @@ export class ValueBlockExecutor extends BlockExecutor {
         let l = (this.m_handler as ValueHandler).getMinerWageListener();
         let wage = await l(this.m_block.number);
         let kvBalance = (await this.m_storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
+
         let ve = new Context(kvBalance);
         let coinbase = (this.m_block.header as ValueBlockHeader).coinbase;
         assert(isValidAddress(coinbase), `block ${this.m_block.hash} has no coinbase set`);
+
         if (!isValidAddress(coinbase)) {
             coinbase = ValueChain.sysAddress;
         }
         return await ve.issue(coinbase, wage);
     }
 
-    public async executePreBlockEvent(): Promise<{err: ErrorCode, receipt?: Receipt}> {
+    public async executePreBlockEvent(): Promise<{ err: ErrorCode, receipt?: Receipt }> {
         const err = await this.executeMinerWageEvent();
         if (err) {
-            return {err};
+            return { err };
         }
         return await super.executePreBlockEvent();
-    }    
+    }
 }
 
 export class ValueTransactionExecutor extends TransactionExecutor {
@@ -50,13 +52,13 @@ export class ValueTransactionExecutor extends TransactionExecutor {
 
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
         let context = await super.prepareContext(blockHeader, storage, externContext);
-        
+
         Object.defineProperty(
             context, 'value', {
                 writable: false,
                 value: (this.m_tx as ValueTransaction).value
             }
-            
+
         );
 
         Object.defineProperty(
@@ -64,7 +66,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
                 writable: false,
                 value: (this.m_tx as ValueTransaction).fee
             }
-            
+
         );
 
         context.cost = (fee: BigNumber): ErrorCode => {
@@ -82,47 +84,48 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         return context;
     }
 
-    public async execute(blockHeader: BlockHeader, storage: Storage, externContext: any, flag?: TransactionExecuteflag): Promise<{err: ErrorCode, receipt?: Receipt}> {
+    public async execute(blockHeader: BlockHeader, storage: Storage, externContext: any, flag?: TransactionExecuteflag): Promise<{ err: ErrorCode, receipt?: Receipt }> {
         if (!(flag && flag.ignoreNoce)) {
             let nonceErr = await this._dealNonce(this.m_tx, storage);
             if (nonceErr !== ErrorCode.RESULT_OK) {
-                return {err:  nonceErr};
+                return { err: nonceErr };
             }
-        } 
+        }
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
         let fromAddress: string = this.m_tx.address!;
         let nFee: BigNumber = (this.m_tx as ValueTransaction).fee;
         let nToValue: BigNumber = (this.m_tx as ValueTransaction).value.plus(nFee);
 
-        let receipt: ValueReceipt = new ValueReceipt(); 
-        receipt.setSource({sourceType: ReceiptSourceType.transaction, txHash: this.m_tx.hash}); 
+        let receipt: ValueReceipt = new ValueReceipt();
+        receipt.setSource({ sourceType: ReceiptSourceType.transaction, txHash: this.m_tx.hash });
         let ve = new Context(kvBalance);
         if ((await ve.getBalance(fromAddress)).lt(nToValue)) {
             this.m_logger.error(`methodexecutor failed for value not enough need ${nToValue.toString()} but ${(await ve.getBalance(fromAddress)).toString()} address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
-            receipt.returnCode = ErrorCode.RESULT_NOT_ENOUGH;
             
-            return {err: ErrorCode.RESULT_OK, receipt};
+            receipt.returnCode = ErrorCode.RESULT_NOT_ENOUGH;
+
+            return { err: ErrorCode.RESULT_OK, receipt };
         }
-        
+
         let context: any = await this.prepareContext(blockHeader, storage, externContext);
 
         let work = await storage.beginTransaction();
         if (work.err) {
             this.m_logger.error(`methodexecutor failed for beginTransaction failed,address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
-            return {err: work.err};
+            return { err: work.err };
         }
         let err = await ve.transferTo(fromAddress, ValueChain.sysAddress, (this.m_tx as ValueTransaction).value);
         if (err) {
             this.m_logger.error(`methodexecutor failed for transferTo sysAddress failed,address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
             await work.value!.rollback();
-            return {err};
+            return { err };
         }
         receipt.returnCode = await this._execute(context, this.m_tx.input);
         receipt.cost = this.m_totalCost;
         assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
         if (!isNumber(receipt.returnCode)) {
             this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=${receipt.returnCode},address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
         if (receipt.returnCode) {
             await work.value!.rollback();
@@ -137,8 +140,8 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         }
         err = await ve.transferTo(fromAddress, coinbase, receipt.cost);
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, receipt};
+        return { err: ErrorCode.RESULT_OK, receipt };
     }
 }

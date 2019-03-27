@@ -1,7 +1,43 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain } from '../../../src/host';
 import { isNullOrUndefined } from 'util';
-import { retarget } from '../../../src/core/pow_chain/consensus';
+// import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
+import * as fs from 'fs';
+
+export interface IfConfigGlobal {
+    handler: string;
+    type: {
+        consensus: string;
+        features: any[]
+    };
+
+    global: {
+        minCreateor: number;
+        maxCreateor: number;
+
+        reSelectionBlocks: number;
+        blockInterval: number;
+        timeOffsetToLastBlock: number;
+        timeBan: number;
+        unbanBlocks: number;
+        dposVoteMaxProducers: number;
+        maxBlockIntervalOffset: number;
+    }
+
+}
+
+// Added by Yang Jun 2019-3-27
+let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
+let configObj: any;
+try {
+    configObj = JSON.parse(configBuffer.toString())
+} catch (e) {
+    throw new Error('handler.ts read ./config.json')
+}
+// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo 
+const SYSTEM_TX_FEE_BN = new BigNumber(0.001);
+
+////////////////
 
 export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
@@ -144,10 +180,10 @@ export function registerHandler(handler: ValueHandler) {
         `;
         try {
             await createScript(code)
-                                .setUserCode(actionCode)
-                                .setSandbox(sandbox)
-                                .setOption({ cpuCount:640, memSizeKB:200 })
-                                .runAsync();
+                .setUserCode(actionCode)
+                .setSandbox(sandbox)
+                .setOption({ cpuCount: 640, memSizeKB: 200 })
+                .runAsync();
             return ErrorCode.RESULT_OK;
         } catch (err) {
             console.log('err is', err);
@@ -155,32 +191,36 @@ export function registerHandler(handler: ValueHandler) {
         }
     });
 
+    // handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+    //     // context.cost(context.fee);
+    //     context.cost(SYSTEM_TX_FEE_BN);
+
+    //     // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
+
+    //     // 必须要有tokenid，一条链上tokenid不能重复
+    //     if (!params.tokenid) {
+    //         return ErrorCode.RESULT_INVALID_PARAM;
+    //     }
+    //     let kvRet = await context.storage.createKeyValue(params.tokenid);
+    //     if (kvRet.err) {
+    //         return kvRet.err;
+    //     }
+
+    //     await kvRet.kv!.set('creator', context.caller);
+
+    //     if (params.preBalances) {
+    //         for (let index = 0; index < params.preBalances.length; index++) {
+    //             // 按照address和amount预先初始化钱数
+    //             await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
+    //         }
+    //     }
+    //     return ErrorCode.RESULT_OK;
+    // });
+
     handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
 
-        // 必须要有tokenid，一条链上tokenid不能重复
-        if (!params.tokenid) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-        let kvRet = await context.storage.createKeyValue(params.tokenid);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        await kvRet.kv!.set('creator', context.caller);
-
-        if (params.preBalances) {
-            for (let index = 0; index < params.preBalances.length; index++) {
-                // 按照address和amount预先初始化钱数
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
-            }
-        }
-        return ErrorCode.RESULT_OK;
-    });
-
-    handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
         // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
 
         // 必须要有tokenid，一条链上tokenid不能重复
@@ -206,7 +246,10 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('transferTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        // Added by Yang Jun 2019-3-27
+        context.cost(SYSTEM_TX_FEE_BN);
+
         let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
 
         if (tokenkv.err) {
@@ -251,7 +294,10 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        // Added by Yang Jun 2019-3-27
+        context.cost(SYSTEM_TX_FEE_BN);
+
         const err = await context.transferTo(params.to, context.value);
         if (!err) {
             context.emit('transfer', { from: context.caller, to: params.to, value: context.value });
@@ -265,7 +311,8 @@ export function registerHandler(handler: ValueHandler) {
      * context's storage is storage_sqlite/storage.ts SqliteReadWritableDatabase
      */
     handler.addTX('createBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
 
         console.log('Yang-- received createBancorToken');
         console.log(params);
@@ -389,7 +436,8 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
 
         console.log('Yang-- buyBancorToken:', params);
 
@@ -509,7 +557,9 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('sellBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
+
         console.log('Yang-- params:', params);
 
         // 参数检查
@@ -556,7 +606,7 @@ export function registerHandler(handler: ValueHandler) {
 
         // Dont know if it will happen ever
         if (S.lt(e)) {
-            ErrorCode.RESULT_NOT_ENOUGH;
+            return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
         out = e.dividedBy(S);
@@ -595,7 +645,7 @@ export function registerHandler(handler: ValueHandler) {
         // Update User's SYS account, directly change account?
         const err = await context.transferTo(context.caller, out);
         if (!err) {
-            context.emit('transfer', { from: "0", to: context.caller, value: out });
+            context.emit('transfer', { from: '0', to: context.caller, value: out });
         } else {
             return err;
         }
@@ -604,16 +654,15 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     // Added by Yang Jun 2019-2-21
-    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
-        return await getTokenBalance(balancekv.kv!, params.address);
-    });
+    // handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+    //     return await getTokenBalance(balancekv.kv!, params.address);
+    // });
 
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
         if (!params.tokenid) {
-            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+            return new BigNumber(0);
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
@@ -623,7 +672,7 @@ export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getBancorTokenReserve', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
         if (!params.tokenid) {
-            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+            return new BigNumber(0);
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
@@ -633,7 +682,7 @@ export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getBancorTokenSupply', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
         if (!params.tokenid) {
-            return new BigNumber(ErrorCode.RESULT_INVALID_PARAM);
+            return new BigNumber(0);
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
@@ -642,7 +691,7 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
-        return await context.getBalance("0");
+        return await context.getBalance('0');
     });
 
     //////////////////////////////////////////////////////////////
@@ -650,17 +699,20 @@ export function registerHandler(handler: ValueHandler) {
 
 
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
         return await context.vote(context.caller, params);
     });
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
         return await context.mortgage(context.caller, new BigNumber(params));
     });
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
         let err = await context.transferTo(context.caller, new BigNumber(params));
         if (err) {
             return err;
@@ -669,7 +721,8 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
         return await context.register(context.caller);
     });
 

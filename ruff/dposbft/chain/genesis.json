@@ -31,7 +31,8 @@
 		"amount": 100000000
 	}],
 	"miners": [
-		"1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79"
+		"1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79",
+		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ"
 	],
 	"candidates": [
 		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ",
