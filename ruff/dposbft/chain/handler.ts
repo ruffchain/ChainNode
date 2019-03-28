@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYSTEM_TX_FEE_BN } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -24,7 +24,6 @@ export interface IfConfigGlobal {
         dposVoteMaxProducers: number;
         maxBlockIntervalOffset: number;
     }
-
 }
 
 // Added by Yang Jun 2019-3-27
@@ -240,7 +239,11 @@ export function registerHandler(handler: ValueHandler) {
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
+                if (typeof params.preBalances[index].amount !== 'number') {
+                    return ErrorCode.RESULT_INVALID_TYPE;
+                }
+                let strAmount: string = strAmountPrecision(params.preBalances[index].amount, SYS_TOKEN_PRECISION);
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
             }
         }
         return ErrorCode.RESULT_OK;
@@ -258,7 +261,14 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
+
+        // Added by Yang Jun 2019-3-28
+        // if (typeof params.amount !== 'number') {
+        //     return ErrorCode.RESULT_INVALID_TYPE;
+        // }
+        // let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
         let amount = new BigNumber(params.amount);
+
         if (fromTotal.lt(amount)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
@@ -299,9 +309,14 @@ export function registerHandler(handler: ValueHandler) {
         // Added by Yang Jun 2019-3-27
         context.cost(SYSTEM_TX_FEE_BN);
 
-        const err = await context.transferTo(params.to, context.value);
+        // Added by Yang Jun 2019-3-28
+        let val: number = context.value.toNumber();
+        let val2: string = strAmountPrecision(val, SYS_TOKEN_PRECISION);
+
+        const err = await context.transferTo(params.to, new BigNumber(val2));
+
         if (!err) {
-            context.emit('transfer', { from: context.caller, to: params.to, value: context.value });
+            context.emit('transfer', { from: context.caller, to: params.to, value: new BigNumber(val2) });
         }
         return err;
     });
