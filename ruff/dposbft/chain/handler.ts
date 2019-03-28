@@ -654,10 +654,10 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     // Added by Yang Jun 2019-2-21
-    // handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
-    //     return await getTokenBalance(balancekv.kv!, params.address);
-    // });
+    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.address);
+    });
 
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
