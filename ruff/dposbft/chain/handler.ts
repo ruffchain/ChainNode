@@ -3,6 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
+import { SYSTEM_TX_FEE_BN } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;

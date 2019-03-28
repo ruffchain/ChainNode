@@ -56,7 +56,7 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
                 new DailyRotateFile({
                     dirname: options.loggerOptions.file!.root,
                     filename: 'info-%DATE%.log',
-                    datePattern: 'YYYY-MM-DD-HH',
+                    datePattern: 'YYYY-MM-DD',
                     zippedArchive: true,
                     maxSize: '100m',
                     maxFiles: '15'
