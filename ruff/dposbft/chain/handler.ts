@@ -1,4 +1,4 @@
-import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain } from '../../../src/host';
+import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
 import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
@@ -244,6 +244,11 @@ export function registerHandler(handler: ValueHandler) {
                     return ErrorCode.RESULT_INVALID_TYPE;
                 }
                 let strAmount: string = strAmountPrecision(params.preBalances[index].amount, SYS_TOKEN_PRECISION);
+
+                // check address valid
+                if (!isValidAddress(params.preBalances[index].address)) {
+                    return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+                }
                 await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
             }
         }
@@ -269,6 +274,10 @@ export function registerHandler(handler: ValueHandler) {
         }
         let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
         let amount = new BigNumber(strAmount);
+
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        }
 
         if (fromTotal.lt(amount)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
@@ -313,6 +322,10 @@ export function registerHandler(handler: ValueHandler) {
         // Added by Yang Jun 2019-3-28
         let val: number = context.value.toNumber();
         let val2: string = strAmountPrecision(val, SYS_TOKEN_PRECISION);
+
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        }
 
         const err = await context.transferTo(params.to, new BigNumber(val2));
 
@@ -372,6 +385,11 @@ export function registerHandler(handler: ValueHandler) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
                 let strAmount: string = strAmountPrecision(params.preBalances[index].amount, BANCOR_TOKEN_PRECISION);
+
+                // check address
+                if (!isValidAddress(params.preBalances[index].address)) {
+                    return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+                }
 
                 await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
 
@@ -454,6 +472,10 @@ export function registerHandler(handler: ValueHandler) {
             console.log('Yang-- less than amount', amount);
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        }
+
         await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
         await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
         return ErrorCode.RESULT_OK;

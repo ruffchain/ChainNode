@@ -48,6 +48,8 @@ export enum ErrorCode {
     RESULT_USER_DEFINE = 10000,     // 用户定义的错误码从此开始
 
     BANCOR_TOTAL_SUPPLY_LIMIT = 10001,
+
+    RESULT_CHECK_ADDRESS_INVALID = 20001,
 }
 
 export function stringifyErrorCode(err: ErrorCode): string {
