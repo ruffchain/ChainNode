@@ -61,6 +61,7 @@ export function bCheckTokenid(tokenid: string) {
   return true;
 }
 
-export function strAmountPrecision(num: number, precision: number): string {
-  return num.toFixed(precision);
+export function strAmountPrecision(num: string, precision: number): string {
+  let nTemp = parseFloat(num);
+  return nTemp.toFixed(precision);
 }

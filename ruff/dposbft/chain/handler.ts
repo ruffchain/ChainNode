@@ -83,6 +83,10 @@ export function registerHandler(handler: ValueHandler) {
             return undefined;
         }
 
+        if (!isValidAddress(params.address)) {
+            return undefined;
+        }
+
         return await getAddressCode(kvRet.kv!, params.address);
     });
 
@@ -92,6 +96,10 @@ export function registerHandler(handler: ValueHandler) {
 
         if (kvRet.err) {
             return kvRet.err;
+        }
+        // Added by Yang Jun 2019-3-29
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
         }
         let rawCode = await getAddressCode(kvRet.kv!, params.to);
         if (!rawCode) {
@@ -240,9 +248,9 @@ export function registerHandler(handler: ValueHandler) {
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
-                if (typeof params.preBalances[index].amount !== 'number') {
-                    return ErrorCode.RESULT_INVALID_TYPE;
-                }
+                // if (typeof params.preBalances[index].amount !== 'number') {
+                //     return ErrorCode.RESULT_INVALID_TYPE;
+                // }
                 let strAmount: string = strAmountPrecision(params.preBalances[index].amount, SYS_TOKEN_PRECISION);
 
                 // check address valid
@@ -269,9 +277,9 @@ export function registerHandler(handler: ValueHandler) {
         let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
 
         // Added by Yang Jun 2019-3-28
-        if (typeof params.amount !== 'number') {
-            return ErrorCode.RESULT_INVALID_TYPE;
-        }
+        // if (typeof params.amount !== 'number') {
+        //     return ErrorCode.RESULT_INVALID_TYPE;
+        // }
         let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
         let amount = new BigNumber(strAmount);
 
@@ -321,7 +329,7 @@ export function registerHandler(handler: ValueHandler) {
 
         // Added by Yang Jun 2019-3-28
         let val: number = context.value.toNumber();
-        let val2: string = strAmountPrecision(val, SYS_TOKEN_PRECISION);
+        let val2: string = val.toFixed(SYS_TOKEN_PRECISION);
 
         if (!isValidAddress(params.to)) {
             return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
@@ -453,27 +461,34 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
 
         console.log('Yang-- ', params)
 
         let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+
         if (tokenkv.err) {
             return tokenkv.err;
         }
 
         let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
 
+        // Added by Yang Jun 2019-3-28
+        // if (typeof params.amount !== 'number') {
+        //     return ErrorCode.RESULT_INVALID_TYPE;
+        // }
+
         // Added by Yang Jun 2019-3-29
         let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
         let amount = new BigNumber(strAmount);
 
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        }
+
         if (fromTotal.lt(amount)) {
             console.log('Yang-- less than amount', amount);
             return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-        if (!isValidAddress(params.to)) {
-            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
         }
 
         await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
@@ -502,7 +517,7 @@ export function registerHandler(handler: ValueHandler) {
         }
         let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
 
-        let strAmount = strAmountPrecision(context.value.toNumber(), SYS_TOKEN_PRECISION);
+        let strAmount = context.value.toFixed(SYS_TOKEN_PRECISION);
         let amount = new BigNumber(strAmount);
 
         if (fromTotalSys.lt(amount)) {
@@ -709,6 +724,35 @@ export function registerHandler(handler: ValueHandler) {
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
         return await getTokenBalance(balancekv.kv!, params.address);
     });
+
+    // Added by Yang Jun 2019-3-29, for quick reference of all parameters
+    // handler.addViewMethod('getBancorTokenParameter', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+    //     if (!params.tokenid) {
+    //         return new BigNumber(0);
+    //     }
+
+    //     // get F
+    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+    //     let result = await getTokenBalance(balancekv.kv!, params.tokenid);
+
+    //     let F = result;
+
+    //     // get S
+    //     balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+    //     result = await getTokenBalance(balancekv.kv!, params.tokenid);
+
+    //     let S = result;
+
+    //     // get R
+    //     balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+    //     result = await getTokenBalance(balancekv.kv!, params.tokenid);
+
+    //     let R = result;
+
+
+    // });
+
 
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
