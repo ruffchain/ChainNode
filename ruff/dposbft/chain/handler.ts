@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -224,10 +224,11 @@ export function registerHandler(handler: ValueHandler) {
         // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
 
         // 必须要有tokenid，一条链上tokenid不能重复
-        if (!params.tokenid) {
+        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
-        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        // Change tokenid to UpperCase()
+        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
         if (kvRet.err) {
             return kvRet.err;
@@ -263,11 +264,11 @@ export function registerHandler(handler: ValueHandler) {
         let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
 
         // Added by Yang Jun 2019-3-28
-        // if (typeof params.amount !== 'number') {
-        //     return ErrorCode.RESULT_INVALID_TYPE;
-        // }
-        // let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
-        let amount = new BigNumber(params.amount);
+        if (typeof params.amount !== 'number') {
+            return ErrorCode.RESULT_INVALID_TYPE;
+        }
+        let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
+        let amount = new BigNumber(strAmount);
 
         if (fromTotal.lt(amount)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
@@ -334,7 +335,7 @@ export function registerHandler(handler: ValueHandler) {
         console.log(params);
 
         // 参数检查
-        if (!params.tokenid) {
+        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
             console.log('Yang-- quit becasue tokenid')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
@@ -352,7 +353,8 @@ export function registerHandler(handler: ValueHandler) {
         console.log('Yang-- Before context.storage.createKeyValueWithDbname');
         console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
 
-        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        // put tokenid to uppercase
+        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
         if (kvRet.err) {
             console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
             return kvRet.err;
@@ -369,8 +371,11 @@ export function registerHandler(handler: ValueHandler) {
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
-                amountAll = amountAll.plus(new BigNumber(params.preBalances[index].amount));
+                let strAmount: string = strAmountPrecision(params.preBalances[index].amount, BANCOR_TOKEN_PRECISION);
+
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
+
+                amountAll = amountAll.plus(new BigNumber(strAmount));
             }
         }
 
@@ -429,26 +434,30 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     // Added by Yang Jun 2019-2-21
-    // handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-    //     context.cost(context.fee);
+    handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(context.fee);
 
-    //     console.log('Yang-- ', params)
+        console.log('Yang-- ', params)
 
-    //     let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
-    //     if (tokenkv.err) {
-    //         return tokenkv.err;
-    //     }
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        if (tokenkv.err) {
+            return tokenkv.err;
+        }
 
-    //     let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
-    //     let amount = new BigNumber(params.amount);
-    //     if (fromTotal.lt(amount)) {
-    //         console.log('Yang-- less than amount', amount);
-    //         return ErrorCode.RESULT_NOT_ENOUGH;
-    //     }
-    //     await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
-    //     await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
-    //     return ErrorCode.RESULT_OK;
-    // });
+        let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
+
+        // Added by Yang Jun 2019-3-29
+        let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
+        let amount = new BigNumber(strAmount);
+
+        if (fromTotal.lt(amount)) {
+            console.log('Yang-- less than amount', amount);
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
+        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
+        return ErrorCode.RESULT_OK;
+    });
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
@@ -470,7 +479,10 @@ export function registerHandler(handler: ValueHandler) {
             return syskv.err;
         }
         let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
-        let amount = new BigNumber(context.value);
+
+        let strAmount = strAmountPrecision(context.value.toNumber(), SYS_TOKEN_PRECISION);
+        let amount = new BigNumber(strAmount);
+
         if (fromTotalSys.lt(amount)) {
             console.log('Yang-- not enough balance');
             return ErrorCode.RESULT_NOT_ENOUGH;
@@ -617,7 +629,8 @@ export function registerHandler(handler: ValueHandler) {
 
 
         // do computation
-        let e = new BigNumber(params.amount);
+        let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
+        let e = new BigNumber(strAmount);
         let out: BigNumber;
 
         // Dont know if it will happen ever
@@ -723,13 +736,16 @@ export function registerHandler(handler: ValueHandler) {
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);
-        return await context.mortgage(context.caller, new BigNumber(params));
+        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
+
+        return await context.mortgage(context.caller, new BigNumber(strAmount));
     });
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);
-        let err = await context.transferTo(context.caller, new BigNumber(params));
+        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
+        let err = await context.transferTo(context.caller, new BigNumber(strAmount));
         if (err) {
             return err;
         }

@@ -1,47 +1,37 @@
 {
 	"preBalances": [{
-		"address": "1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79",
-		"amount": 9500000000
+		"address": "1Bbruv7E4nP62ZD4cJqxiGrUD43psK5E2J",
+		"amount": 4000000
 	}, {
-		"address": "12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ",
-		"amount": 10000
+		"address": "159ueJXY2cBK78pjrsJXwhPGsWfJTJeik1",
+		"amount": 4000000
 	}, {
-		"address": "1LuwjNj8wkqo237N7Gh8nZSSvUa6TZ5ds4",
-		"amount": 10000
+		"address": "16ZJ7mRgkWf4bMmQFoyLkqW8eUCA5JqTHg",
+		"amount": 4000000
 	}, {
-		"address": "13CS9dBwmaboedj2hPWx6Dgzt4cowWWoNZ",
-		"amount": 10000
+		"address": "1NAbrmtA3yDr2CsRMKmav8aLLyqhnjobU1",
+		"amount": 4000000
 	}, {
-		"address": "12LKjfgQW26dQZMxcJdkj2iVP2rtJSzT88",
-		"amount": 10000
+		"address": "13dhmGDEuaoV7QvwbTm4gC6fx7CCRM7VkY",
+		"amount": 4000000
 	}, {
-		"address": "1GHzPAoYxzuT2aTwpwHx2z2rcaSo16pyUy",
-		"amount": 100000000
+		"address": "1NsES7YKm8ZbRE4K5LaPGKeSELVtAwzoTw",
+		"amount": 4000000
 	}, {
-		"address": "1PwcUmrCd6CRViD5eyCXNb2nVCfrstZaS8",
-		"amount": 100000000
-	}, {
-		"address": "1L9SZu7Qrwu75mEsP683cAGYmRX1VFgwuP",
-		"amount": 100000000
-	}, {
-		"address": "1M4UqgkvuyaqvaxrwbKsppSDz7LvjaoEnD",
-		"amount": 100000000
-	}, {
-		"address": "1E1ESUPcKXj1cTV9fmxav24AnEXUddC2cA",
-		"amount": 100000000
+		"address": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r",
+		"amount": 76000000
 	}],
 	"miners": [
-		"1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79",
-		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ"
+		"1Bbruv7E4nP62ZD4cJqxiGrUD43psK5E2J",
+		"159ueJXY2cBK78pjrsJXwhPGsWfJTJeik1"
 	],
 	"candidates": [
-		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ",
-		"1LuwjNj8wkqo237N7Gh8nZSSvUa6TZ5ds4",
-		"13CS9dBwmaboedj2hPWx6Dgzt4cowWWoNZ",
-		"1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79",
-		"12nD5LgUnLZDbyncFnoFB43YxhSFsERcgQ",
-		"1LuwjNj8wkqo237N7Gh8nZSSvUa6TZ5ds4",
-		"13CS9dBwmaboedj2hPWx6Dgzt4cowWWoNZ"
+		"1Bbruv7E4nP62ZD4cJqxiGrUD43psK5E2J",
+		"159ueJXY2cBK78pjrsJXwhPGsWfJTJeik1",
+		"16ZJ7mRgkWf4bMmQFoyLkqW8eUCA5JqTHg",
+		"1NAbrmtA3yDr2CsRMKmav8aLLyqhnjobU1",
+		"13dhmGDEuaoV7QvwbTm4gC6fx7CCRM7VkY",
+		"1NsES7YKm8ZbRE4K5LaPGKeSELVtAwzoTw"
 	],
-	"coinbase": "1EYLLvMtXGeiBJ7AZ6KJRP2BdAQ2Bof79"
+	"coinbase": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r"
 }
