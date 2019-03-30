@@ -7,6 +7,7 @@ import { HostChainContext } from '../context/context';
 import { ChainEventFilterStub } from '../event/stub';
 import { ChainEvent } from '../event/element';
 import { TxStorage } from '../tx/element';
+import { DposBftChainTipState } from '../../core/dpos_bft_chain/chain_state';
 
 function promisify(f: any) {
     return () => {
@@ -170,11 +171,19 @@ export class ChainServer {
         this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
             console.log('Yang Jun --> m_chain');
             // Yang Jun 2019-3-18
-            let dChain = this.m_chain as DposChain;
-            let num = dChain.getCustomLIB();
+            // let dChain = this.m_chain as DposChain;
+            // let num = dChain.getCustomLIB();
 
             // let num = (this.m_chain as DposChain).chainTipState.IRB.number;
             // let num = this.m_chain.getLIB().number;
+            let dChain = this.m_chain as DposChain;
+            let tipState = dChain.chainTipState as DposBftChainTipState;
+
+            let bftNum = tipState.getBftIRB();
+            let proposedNum = tipState.getProposedIRB();
+            let num = (bftNum > proposedNum) ? bftNum : proposedNum;
+            console.log('Yang Jun --> ', num);
+
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());
         });
