@@ -1,17 +1,22 @@
 import { ErrorCode, stringifyErrorCode } from '../error_code';
-import {DposChainTipStateOptions, DposChainTipState, DposBlockHeader} from '../dpos_chain';
-import {DposBftBlockHeader, DposBftBlockHeaderSignature} from './block';
+import { DposChainTipStateOptions, DposChainTipState, DposBlockHeader } from '../dpos_chain';
+import { DposBftBlockHeader, DposBftBlockHeaderSignature } from './block';
 import * as libAddress from '../address';
-import {LRUCache} from '../lib/LRUCache';
+import { LRUCache } from '../lib/LRUCache';
 
 export class DposBftChainTipState extends DposChainTipState {
     protected m_bftLibSigns: DposBftBlockHeaderSignature[] = [];
     protected m_bftIRB: DposBftBlockHeader;
     protected m_hashMinerCache: LRUCache<string, string[]> = new LRUCache(10);
 
+    // added by Yang Jun 2019
+    private mBftIRB: number;
+
     constructor(options: DposChainTipStateOptions) {
         super(options);
         this.m_bftIRB = options.libHeader as DposBftBlockHeader;
+
+        this.mBftIRB = 0;
     }
 
     get bftIRB(): DposBftBlockHeader {
@@ -101,6 +106,14 @@ export class DposBftChainTipState extends DposChainTipState {
     toJsonData(): any {
         let d = super.toJsonData();
         d.bft_irreversible_blocknum = this.m_bftIRB.number;
+
+        // Added by Yang Jun
+        this.mBftIRB = this.m_bftIRB.number;
         return d;
+    }
+
+    // Add by Yang Jun
+    public getBftIRB() {
+        return this.mBftIRB;
     }
 }

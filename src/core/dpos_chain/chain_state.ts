@@ -30,6 +30,12 @@ export class DposChainTipState {
     protected m_irb: DposBlockHeader;
     protected m_headerStorage: IHeaderStorage;
 
+    // Added by Yang Jun
+    private mIRB: number;
+    private mProposedIRB: number;
+
+
+
     protected m_producerInfo: {
         // 各生产者确认的候选不可逆区块number
         lastImpliedIRB: Map<string, DposBlockHeader>,
@@ -49,6 +55,11 @@ export class DposChainTipState {
         this.m_getMiners = options.getMiners;
         this.m_tip = options.libHeader;
         this.m_irb = options.libHeader;
+
+        // Added by Yang Jun 2019
+        this.mIRB = 0;
+        this.mProposedIRB = 0;
+
     }
 
     get IRB(): DposBlockHeader {
@@ -158,6 +169,10 @@ export class DposChainTipState {
         }
         data.proposed_irreversible_blocknum = this.m_proposedIRBNum;
         data.irreversible_blocknum = this.m_irb.number;
+
+        // added by Yang Jun 2019
+        this.mProposedIRB = this.m_proposedIRBNum;
+        this.mIRB = this.m_irb.number;
         return data;
     }
 
@@ -206,6 +221,9 @@ export class DposChainTipState {
 
     // Yang Jun 2019-3-18
     public getIRB() {
-        return this.m_irb.number;
+        return this.mIRB;
+    }
+    public getProposedIRB() {
+        return this.mProposedIRB;
     }
 }

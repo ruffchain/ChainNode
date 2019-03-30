@@ -9,6 +9,7 @@ import { DposBlockExecutor, DposBlockExecutorOptions } from './executor';
 import { DposChainTipState } from './chain_state';
 import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from './chain_state_manager';
 import { LRUCache } from '../lib/LRUCache';
+import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -392,6 +393,12 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return hr.err;
         }
         this.logger.info(`==========dpos chain state=${this.chainTipState.dump()}`);
+        // Added by yang Jun 2019-3-30
+        // 
+        this.logger.info('Yang Jun output:');
+        console.log('iRB: ', this.chainTipState.getIRB());
+        console.log('proposedIRB ', this.chainTipState.getProposedIRB());
+        console.log('bftirb ', (this.chainTipState as DposBftChainTipState).getBftIRB());
         return ErrorCode.RESULT_OK;
     }
 
