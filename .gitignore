@@ -8,3 +8,6 @@ yarn.lock
 .projectile
 package-lock.json
 
+ruff/dposbft/miner1.sh
+ruff/dposbft/miner2.sh
+
