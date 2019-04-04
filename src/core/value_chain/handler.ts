@@ -27,6 +27,7 @@ export type MinerWageListener = (height: number) => Promise<BigNumber>;
 
 export class ValueHandler extends BaseHandler {
     protected m_minerWage: MinerWageListener;
+
     constructor() {
         super();
         this.m_minerWage = (height: number): Promise<BigNumber> => {

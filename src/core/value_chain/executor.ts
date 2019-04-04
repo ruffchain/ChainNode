@@ -20,7 +20,8 @@ export class ValueBlockExecutor extends BlockExecutor {
 
     async executeMinerWageEvent(): Promise<ErrorCode> {
         let l = (this.m_handler as ValueHandler).getMinerWageListener();
-        let wage = await l(this.m_block.number);
+        let wage = await l(this.m_block.number); // has nothing to do with block height
+
         let kvBalance = (await this.m_storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new Context(kvBalance);
@@ -38,6 +39,7 @@ export class ValueBlockExecutor extends BlockExecutor {
         if (err) {
             return { err };
         }
+        // return Receipt
         return await super.executePreBlockEvent();
     }
 }
@@ -96,12 +98,16 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         let nFee: BigNumber = (this.m_tx as ValueTransaction).fee;
         let nToValue: BigNumber = (this.m_tx as ValueTransaction).value.plus(nFee);
 
+
         let receipt: ValueReceipt = new ValueReceipt();
+
         receipt.setSource({ sourceType: ReceiptSourceType.transaction, txHash: this.m_tx.hash });
+
         let ve = new Context(kvBalance);
+
         if ((await ve.getBalance(fromAddress)).lt(nToValue)) {
             this.m_logger.error(`methodexecutor failed for value not enough need ${nToValue.toString()} but ${(await ve.getBalance(fromAddress)).toString()} address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
-            
+
             receipt.returnCode = ErrorCode.RESULT_NOT_ENOUGH;
 
             return { err: ErrorCode.RESULT_OK, receipt };
@@ -115,6 +121,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
             return { err: work.err };
         }
         let err = await ve.transferTo(fromAddress, ValueChain.sysAddress, (this.m_tx as ValueTransaction).value);
+
         if (err) {
             this.m_logger.error(`methodexecutor failed for transferTo sysAddress failed,address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
             await work.value!.rollback();
