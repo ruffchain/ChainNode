@@ -1,3 +1,4 @@
+import BigNumber from "bignumber.js";
 
 export const SYS_TOKEN_PRECISION = 9;
 export const NORMAL_TOKEN_PRECISION = 9;
@@ -64,4 +65,16 @@ export function bCheckTokenid(tokenid: string) {
 export function strAmountPrecision(num: string, precision: number): string {
   let nTemp = parseFloat(num);
   return nTemp.toFixed(precision);
+}
+
+export function bCheckTokenPrecision(precision: string) {
+  let bn = new BigNumber(precision);
+
+  if (bn.isNaN()) {
+    return false;
+  }
+
+  let num = parseInt(precision);
+
+  return num >= 0 && num <= NORMAL_TOKEN_PRECISION;
 }

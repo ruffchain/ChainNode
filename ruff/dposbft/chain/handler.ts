@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -199,32 +199,6 @@ export function registerHandler(handler: ValueHandler) {
         }
     });
 
-    // handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-    //     // context.cost(context.fee);
-    //     context.cost(SYSTEM_TX_FEE_BN);
-
-    //     // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
-
-    //     // 必须要有tokenid，一条链上tokenid不能重复
-    //     if (!params.tokenid) {
-    //         return ErrorCode.RESULT_INVALID_PARAM;
-    //     }
-    //     let kvRet = await context.storage.createKeyValue(params.tokenid);
-    //     if (kvRet.err) {
-    //         return kvRet.err;
-    //     }
-
-    //     await kvRet.kv!.set('creator', context.caller);
-
-    //     if (params.preBalances) {
-    //         for (let index = 0; index < params.preBalances.length; index++) {
-    //             // 按照address和amount预先初始化钱数
-    //             await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(params.preBalances[index].amount));
-    //         }
-    //     }
-    //     return ErrorCode.RESULT_OK;
-    // });
-
     handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);
@@ -232,7 +206,8 @@ export function registerHandler(handler: ValueHandler) {
         // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
 
         // 必须要有tokenid，一条链上tokenid不能重复
-        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
+        if (!params.tokenid || !bCheckTokenid(params.tokenid)
+            || !bCheckTokenPrecision(params.precision)) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
         // Change tokenid to UpperCase()
@@ -244,6 +219,8 @@ export function registerHandler(handler: ValueHandler) {
 
         await kvRet.kv!.set('creator', context.caller);
         await kvRet.kv!.set('type', 'default_token');
+        // Added by Yang Jun 2019-4-4
+        await kvRet.kv!.set('precision', parseInt(params.precision).toString());
 
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
@@ -268,7 +245,7 @@ export function registerHandler(handler: ValueHandler) {
         // Added by Yang Jun 2019-3-27
         context.cost(SYSTEM_TX_FEE_BN);
 
-        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
         if (tokenkv.err) {
             return tokenkv.err;
@@ -280,7 +257,15 @@ export function registerHandler(handler: ValueHandler) {
         // if (typeof params.amount !== 'number') {
         //     return ErrorCode.RESULT_INVALID_TYPE;
         // }
-        let strAmount: string = strAmountPrecision(params.amount, SYS_TOKEN_PRECISION);
+        let precision = await tokenkv.kv!.get('precision');
+
+        if (precision.err) {
+            context.logger.error('precision not found , transferTokenTo');
+
+            return precision.err;
+        }
+
+        let strAmount: string = strAmountPrecision(params.amount, parseInt(precision.value.replace('s', '')));
         let amount = new BigNumber(strAmount);
 
         if (!isValidAddress(params.to)) {
@@ -296,7 +281,7 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
         return await getTokenBalance(balancekv.kv!, params.address);
     });
 
@@ -407,11 +392,13 @@ export function registerHandler(handler: ValueHandler) {
 
         // Setting bancor parameters
         // set Factor
+        let tokenIdUpperCase = params.tokenid.toUpperCase();
+
         kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
         if (kvRet.err) {
             return kvRet.err;
         }
-        kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.factor)); // number type
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.factor)); // number type
         if (kvRet.err) {
             return kvRet.err;
         }
@@ -421,7 +408,7 @@ export function registerHandler(handler: ValueHandler) {
         if (kvRet.err) {
             return kvRet.err;
         }
-        kvRet = await kvRet.kv!.set(params.tokenid, context.value);
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, context.value);
         if (kvRet.err) {
             return kvRet.err;
         }
@@ -431,7 +418,7 @@ export function registerHandler(handler: ValueHandler) {
         if (kvRet.err) {
             return kvRet.err;
         }
-        kvRet = await kvRet.kv!.set(params.tokenid, amountAll);
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, amountAll);
         if (kvRet.err) {
             return kvRet.err;
         }
@@ -446,9 +433,9 @@ export function registerHandler(handler: ValueHandler) {
         // nonliquidity == 0; no limit for supply
         // nonliquidity !== 0, supply < nonliquidity!!
         if (!params.nonliquidity) {
-            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(0));
+            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(0));
         } else {
-            kvRet = await kvRet.kv!.set(params.tokenid, new BigNumber(params.nonliquidity).plus(amountAll));
+            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.nonliquidity).plus(amountAll));
         }
 
         if (kvRet.err) {
@@ -465,7 +452,7 @@ export function registerHandler(handler: ValueHandler) {
 
         console.log('Yang-- ', params)
 
-        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
         if (tokenkv.err) {
             return tokenkv.err;
@@ -509,6 +496,8 @@ export function registerHandler(handler: ValueHandler) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
+        let tokenIdUpperCase = params.tokenid.toUpperCase();
+
         // If context.value lt sys value
         let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
         if (syskv.err) {
@@ -530,7 +519,7 @@ export function registerHandler(handler: ValueHandler) {
         if (kvFactor.err) {
             return kvFactor.err;
         }
-        let retFactor = await kvFactor.kv!.get(params.tokenid);
+        let retFactor = await kvFactor.kv!.get(tokenIdUpperCase);
         if (retFactor.err) {
             return retFactor.err;
         }
@@ -541,7 +530,7 @@ export function registerHandler(handler: ValueHandler) {
         let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
         if (kvSupply.err) { return kvSupply.err; }
 
-        let retSupply = await kvSupply.kv!.get(params.tokenid);
+        let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
         if (retSupply.err) { return retSupply.err; }
 
         console.log('Yang-- supply:', retSupply.value.toString());
@@ -551,7 +540,7 @@ export function registerHandler(handler: ValueHandler) {
         let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
         if (kvReserve.err) { return kvReserve.err; }
 
-        let retReserve = await kvReserve.kv!.get(params.tokenid);
+        let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
         if (retReserve.err) { return retReserve.err; }
 
         console.log('Yang-- reserve:', retReserve.value.toString());
@@ -561,7 +550,7 @@ export function registerHandler(handler: ValueHandler) {
         let kvNonliquidity = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
         if (kvNonliquidity.err) { return kvNonliquidity.err; }
 
-        let retNonliquidity = await kvNonliquidity.kv!.get(params.tokenid);
+        let retNonliquidity = await kvNonliquidity.kv!.get(tokenIdUpperCase);
         if (retNonliquidity.err) { return retNonliquidity.err; }
 
         let N = new BigNumber(retNonliquidity.value);
@@ -594,20 +583,20 @@ export function registerHandler(handler: ValueHandler) {
             return ErrorCode.BANCOR_TOTAL_SUPPLY_LIMIT;
         }
 
-        let kvRet = await kvReserve.kv!.set(params.tokenid, R);
+        let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
         if (kvRet.err) {
             console.log('Yang-- update reserve failed')
             return kvRet.err;
         }
 
-        kvRet = await kvSupply.kv!.set(params.tokenid, S);
+        kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
         if (kvRet.err) {
             console.log('Yang-- update supply failed')
             return kvRet.err;
         }
 
         // Update User account
-        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
         if (kvToken.err) {
             console.log('Yang-- update user account failed')
             return kvToken.err;
@@ -632,12 +621,14 @@ export function registerHandler(handler: ValueHandler) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
+        let tokenIdUpperCase = params.tokenid.toUpperCase();
+
         // get F
         let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
         if (kvFactor.err) {
             return kvFactor.err;
         }
-        let retFactor = await kvFactor.kv!.get(params.tokenid);
+        let retFactor = await kvFactor.kv!.get(tokenIdUpperCase);
         if (retFactor.err) {
             return retFactor.err;
         }
@@ -648,7 +639,7 @@ export function registerHandler(handler: ValueHandler) {
         let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
         if (kvSupply.err) { return kvSupply.err; }
 
-        let retSupply = await kvSupply.kv!.get(params.tokenid);
+        let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
         if (retSupply.err) { return retSupply.err; }
 
         let S = new BigNumber(retSupply.value);
@@ -658,7 +649,7 @@ export function registerHandler(handler: ValueHandler) {
         let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
         if (kvReserve.err) { return kvReserve.err; }
 
-        let retReserve = await kvReserve.kv!.get(params.tokenid);
+        let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
         if (retReserve.err) { return retReserve.err; }
 
         let R = new BigNumber(retReserve.value);
@@ -689,14 +680,14 @@ export function registerHandler(handler: ValueHandler) {
         console.log('Yang-- reserve minus:', out.toString());
         console.log('Yang-- supply minus:', e.toString());
 
-        let kvRet = await kvReserve.kv!.set(params.tokenid, R);
+        let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
         if (kvRet.err) { return kvRet.err; }
 
-        kvRet = await kvSupply.kv!.set(params.tokenid, S);
+        kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
         if (kvRet.err) { return kvRet.err; }
 
         // Update User account
-        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
         if (kvToken.err) { return kvToken.err; }
 
         let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
@@ -721,37 +712,9 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid);
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
         return await getTokenBalance(balancekv.kv!, params.address);
     });
-
-    // Added by Yang Jun 2019-3-29, for quick reference of all parameters
-    // handler.addViewMethod('getBancorTokenParameter', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-    //     if (!params.tokenid) {
-    //         return new BigNumber(0);
-    //     }
-
-    //     // get F
-    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-    //     let result = await getTokenBalance(balancekv.kv!, params.tokenid);
-
-    //     let F = result;
-
-    //     // get S
-    //     balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-    //     result = await getTokenBalance(balancekv.kv!, params.tokenid);
-
-    //     let S = result;
-
-    //     // get R
-    //     balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-    //     result = await getTokenBalance(balancekv.kv!, params.tokenid);
-
-    //     let R = result;
-
-
-    // });
 
 
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
@@ -761,7 +724,7 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        return await getTokenBalance(balancekv.kv!, params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
     handler.addViewMethod('getBancorTokenReserve', async (context: DposViewContext, params: any): Promise<BigNumber> => {
@@ -771,7 +734,7 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        return await getTokenBalance(balancekv.kv!, params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
     handler.addViewMethod('getBancorTokenSupply', async (context: DposViewContext, params: any): Promise<BigNumber> => {
@@ -781,7 +744,7 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        return await getTokenBalance(balancekv.kv!, params.tokenid);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
     handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
