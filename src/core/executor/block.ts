@@ -154,7 +154,7 @@ export class BlockExecutor {
             eber.receipt!.setSource({ sourceType: ReceiptSourceType.preBlockEvent, eventIndex: l.index });
             receipts.push(eber.receipt!);
         }
-        console.log('Yang Jun, executePreBlockEvent: ', receipts);
+        // console.log('Yang Jun, executePreBlockEvent: ', receipts);
         return { err: ErrorCode.RESULT_OK, receipts };
     }
 

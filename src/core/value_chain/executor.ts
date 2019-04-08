@@ -34,10 +34,10 @@ export class ValueBlockExecutor extends BlockExecutor {
         if (!isValidAddress(coinbase)) {
             coinbase = ValueChain.sysAddress;
         }
-        console.log('Yang Jun, executeMinerWageEvent: ', wage.toNumber());
+        // console.log('Yang Jun, executeMinerWageEvent: ', wage.toNumber());
         // Yang Jun 2019-3-8, get wage
         M_WAGE = wage.toNumber();
-        console.log('Yang Jun, BlockExecutor: ', wage.toNumber());
+        // console.log('Yang Jun, BlockExecutor: ', wage.toNumber());
 
         return await ve.issue(coinbase, wage);
     }
