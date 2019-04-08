@@ -13,6 +13,9 @@ import { isNumber } from 'util';
 
 const assert = require('assert');
 
+// Yang Jun, global 
+export let M_WAGE = 0;
+
 export class ValueBlockExecutor extends BlockExecutor {
     protected _newTransactionExecutor(l: TxListener, tx: ValueTransaction): TransactionExecutor {
         return new ValueTransactionExecutor(this.m_handler as ValueHandler, l, tx, this.m_logger);
@@ -31,6 +34,11 @@ export class ValueBlockExecutor extends BlockExecutor {
         if (!isValidAddress(coinbase)) {
             coinbase = ValueChain.sysAddress;
         }
+        console.log('Yang Jun, executeMinerWageEvent: ', wage.toNumber());
+        // Yang Jun 2019-3-8, get wage
+        M_WAGE = wage.toNumber();
+        console.log('Yang Jun, BlockExecutor: ', wage.toNumber());
+
         return await ve.issue(coinbase, wage);
     }
 
@@ -145,6 +153,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         if (!isValidAddress(coinbase)) {
             coinbase = ValueChain.sysAddress;
         }
+
         err = await ve.transferTo(fromAddress, coinbase, receipt.cost);
         if (err) {
             return { err };

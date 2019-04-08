@@ -8,19 +8,20 @@ import { BufferWriter } from '../lib/writer';
 import { BufferReader } from '../lib/reader';
 import * as digest from '../lib/digest';
 
-import { BlockHeader } from './block'; 
+import { BlockHeader } from './block';
+import { BigNumber } from '../../host';
 
-export function instance(superClass: new(...args: any[]) => BlockHeader) {
+export function instance(superClass: new (...args: any[]) => BlockHeader) {
     return class extends superClass {
         constructor(...args: any[]) {
             super(args[0]);
         }
-        
+
         // Uint8Array(33)
         private m_pubkey: Buffer = Encoding.ZERO_KEY;
         // Uint8Array(64)
         private m_sign: Buffer = Encoding.ZERO_SIG64;
-    
+
         get pubkey(): Buffer {
             return this.m_pubkey;
         }
@@ -41,7 +42,7 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
             }
             return super.encode(writer);
         }
-    
+
         public decode(reader: BufferReader): ErrorCode {
             this.m_sign = reader.readBytes(64);
             return super.decode(reader);
@@ -57,7 +58,7 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
             } catch (e) {
                 return ErrorCode.RESULT_INVALID_FORMAT;
             }
-            
+
             return ErrorCode.RESULT_OK;
         }
 
@@ -98,7 +99,7 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
             } catch (e) {
                 return ErrorCode.RESULT_INVALID_FORMAT;
             }
-            
+
             return ErrorCode.RESULT_OK;
         }
 
@@ -109,7 +110,9 @@ export function instance(superClass: new(...args: any[]) => BlockHeader) {
             return Address.verifyBufferMsg(signHash, this.m_sign, this.m_pubkey);
         }
 
-        public stringify(): any { 
+        // Yang Jun , this is the right place to add the reward field?
+        // 
+        public stringify(): any {
             let obj = super.stringify();
             obj.creator = Address.addressFromPublicKey(this.m_pubkey);
             return obj;

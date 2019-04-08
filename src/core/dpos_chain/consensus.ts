@@ -302,7 +302,7 @@ export class Context extends ViewContext {
         let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let gvr = await this.getVote();
 
-        this.m_logger.info(`Yang Jun: into finishElection()`)
+        //this.m_logger.info(`Yang Jun: into finishElection()`)
 
         if (gvr.err) {
             this.m_logger.error(`finishElection, getvote failde,errcode=${gvr.err}`);
@@ -521,7 +521,7 @@ export class Context extends ViewContext {
 
         // 解禁
         let candidateInfo = await kvDPos.hgetall(ViewContext.keyCandidate);
-        this.m_logger.info(`Yang Jun ${JSON.stringify(candidateInfo)}`)
+        //this.m_logger.info(`Yang Jun ${JSON.stringify(candidateInfo)}`)
 
         for (let c of candidateInfo.value!) {
             this.m_logger.info(`Yang Jun , c is ${JSON.stringify(c)}`)
@@ -533,16 +533,16 @@ export class Context extends ViewContext {
     }
 
     async checkIfNeedBan(timestamp: number) {
-        this.m_logger.info(`Yang Jun check if need to Ban`)
+        //this.m_logger.info(`Yang Jun check if need to Ban`)
         let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let minersInfo = await this.getNextMiners();
         if (minersInfo.err) {
             return;
         }
-        this.m_logger.info(`Yang Jun check creators: ${JSON.stringify(minersInfo.creators)}`)
+        //this.m_logger.info(`Yang Jun check creators: ${JSON.stringify(minersInfo.creators)}`)
         for (let m of minersInfo.creators!) {
 
-            this.m_logger.info(`Yang Jun loop m is ${m}`)
+            //this.m_logger.info(`Yang Jun loop m is ${m}`)
 
 
             let hr = await kvDPos.hget(ViewContext.keyNewBlockTime, m);
@@ -550,7 +550,7 @@ export class Context extends ViewContext {
                 return;
             }
 
-            this.m_logger.info(`Yang Jun ${m} time:${timestamp} ${hr.value} >=  ${this.m_globalOptions.timeOffsetToLastBlock}`)
+            //this.m_logger.info(`Yang Jun ${m} time:${timestamp} ${hr.value} >=  ${this.m_globalOptions.timeOffsetToLastBlock}`)
 
             // Yang Jun
             // 只要newBlockTime满足就会更新candidates的value,这个地方显然有问题
@@ -559,7 +559,7 @@ export class Context extends ViewContext {
             if (candidateInfo.err) {
                 return;
             }
-            this.m_logger.info(`candidates.value: ${candidateInfo.value}`)
+            //this.m_logger.info(`candidates.value: ${candidateInfo.value}`)
             if ((candidateInfo.value as number) >= BanStatus.Delay) {
                 continue;
             }
@@ -567,7 +567,7 @@ export class Context extends ViewContext {
 
             if (timestamp - (hr.value! as number) >= this.m_globalOptions.timeOffsetToLastBlock) {
 
-                this.m_logger.info(`Yang Jun !! Ban ${m}`)
+                //this.m_logger.info(`Yang Jun !! Ban ${m}`)
                 await kvDPos.hset(ViewContext.keyCandidate, m, BanStatus.Delay);
             }
         }

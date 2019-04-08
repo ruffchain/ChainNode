@@ -2,6 +2,8 @@ import { BlockHeader } from '../chain';
 import { BufferWriter } from '../lib/writer';
 import { BufferReader } from '../lib/reader';
 import { ErrorCode } from '../error_code';
+// Yang Jun 2019-4-8
+import { M_WAGE } from './executor';
 
 export class ValueBlockHeader extends BlockHeader {
     constructor() {
@@ -29,7 +31,7 @@ export class ValueBlockHeader extends BlockHeader {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -49,6 +51,8 @@ export class ValueBlockHeader extends BlockHeader {
     public stringify(): any {
         let obj = super.stringify();
         obj.coinbase = this.coinbase;
+        // Yang Jun
+        obj.reward = M_WAGE;
         return obj;
     }
 }

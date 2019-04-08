@@ -1,11 +1,12 @@
 
-import {isString} from 'util';
+import { isString } from 'util';
 import { Receipt, Transaction, ReceiptSourceType, EventLog } from './transaction';
 import { Serializable, BufferReader, BufferWriter, SerializableWithHash } from '../serializable';
 import { ErrorCode } from '../error_code';
 import * as merkle from '../lib/merkle';
 import { Encoding } from '../lib/encoding';
 import * as assert from 'assert';
+import { BigNumber } from '../../host';
 const digest = require('../lib/digest');
 
 export class BlockHeader extends SerializableWithHash {
@@ -103,20 +104,20 @@ export class BlockHeader extends SerializableWithHash {
      * virtual
      * verify hash here
      */
-    public async verify(chain: any): Promise<{err: ErrorCode, valid?: boolean}> {
+    public async verify(chain: any): Promise<{ err: ErrorCode, valid?: boolean }> {
         if (typeof this.m_number !== 'number' || isNaN(this.m_number) || this.m_number < 0 || this.m_number % 1 !== 0) {
-            return {err: ErrorCode.RESULT_OK, valid: false};
+            return { err: ErrorCode.RESULT_OK, valid: false };
         }
 
         if (typeof this.timestamp !== 'number' || isNaN(this.timestamp)) {
-            return {err: ErrorCode.RESULT_OK, valid: true};
+            return { err: ErrorCode.RESULT_OK, valid: true };
         }
 
-        return {err: ErrorCode.RESULT_OK, valid: true};
+        return { err: ErrorCode.RESULT_OK, valid: true };
     }
 
     public verifyContent(content: BlockContent): boolean {
-        for ( let tx of content.transactions) {
+        for (let tx of content.transactions) {
             if (!tx.verify()) {
                 return false;
             }
@@ -146,7 +147,7 @@ export class BlockHeader extends SerializableWithHash {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -161,7 +162,7 @@ export class BlockHeader extends SerializableWithHash {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -253,7 +254,7 @@ export class BlockContent implements Serializable {
         return null;
     }
 
-    public getReceipt(options: string | {sourceType: ReceiptSourceType.preBlockEvent | ReceiptSourceType.postBlockEvent, eventIndex: number}): Receipt | undefined {
+    public getReceipt(options: string | { sourceType: ReceiptSourceType.preBlockEvent | ReceiptSourceType.postBlockEvent, eventIndex: number }): Receipt | undefined {
         if (isString(options)) {
             return this.m_txReceipts.get(options);
         } else {
@@ -287,7 +288,7 @@ export class BlockContent implements Serializable {
                 postBlockEventReceipts.push(r);
             } else {
                 assert(false, `invalid receipt source type ${r.sourceType}`);
-                return ;
+                return;
             }
         }
         this.m_txReceipts = txReceipts;
@@ -309,9 +310,9 @@ export class BlockContent implements Serializable {
                     return err;
                 }
             }
-            const receiptLength = this.m_txReceipts.size 
-                                + this.m_preBlockEventReceipts.length
-                                + this.m_postBlockEventReceipts.length;
+            const receiptLength = this.m_txReceipts.size
+                + this.m_preBlockEventReceipts.length
+                + this.m_postBlockEventReceipts.length;
             if (receiptLength) {
                 if (this.m_txReceipts.size !== this.m_transactions.length) {
                     return ErrorCode.RESULT_INVALID_BLOCK;
@@ -343,21 +344,21 @@ export class BlockContent implements Serializable {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
     public decode(reader: BufferReader): ErrorCode {
         this.m_transactions = [];
         this.m_txReceipts = new Map();
-        
+
         let txCount: number;
         try {
             txCount = reader.readU16();
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         for (let ix = 0; ix < txCount; ++ix) {
             let tx = new this.m_transactionType();
             let err = tx.decode(reader);
@@ -387,7 +388,7 @@ export class BlockContent implements Serializable {
                 receipts.push(receipt);
             }
         }
-        
+
         this.setReceipts(receipts);
         return ErrorCode.RESULT_OK;
     }

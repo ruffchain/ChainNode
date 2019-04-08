@@ -14,19 +14,21 @@ export class DposBlockExecutor extends ValueBlockExecutor {
         return this.m_externParams[0].value as IReadableStorage;
     }
 
+    
+
     public async executePostBlockEvent(): Promise<{ err: ErrorCode, receipt?: Receipt }> {
 
-        this.m_logger.info(`Yang Jun: into executor.ts, before calling super BlockNumber: ${this.m_block.number}`)
+        // this.m_logger.info(`Yang Jun: into executor.ts, before calling super BlockNumber: ${this.m_block.number}`)
 
         let ebr = await super.executePostBlockEvent();
 
-        //this.m_logger.info(`Yang Jun: ${ebr.err}`)
+        // this.m_logger.info(`Yang Jun: ${ebr.err}`)
 
         if (ebr.err) {
             return { err: ebr.err };
         }
 
-        //this.m_logger.info(`Yang Jun: into executor.ts, executePostBlockEvent: ${this.m_block.number}`)
+        // this.m_logger.info(`Yang Jun: into executor.ts, executePostBlockEvent: ${this.m_block.number}`)
 
         if (this.m_block.number > 0) {
             let dbr = await this.m_storage.getReadWritableDatabase(Chain.dbSystem);

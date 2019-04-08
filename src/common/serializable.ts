@@ -1,23 +1,23 @@
-import {BufferWriter} from './lib/writer';
-import {BufferReader} from './lib/reader';
+import { BufferWriter } from './lib/writer';
+import { BufferReader } from './lib/reader';
 
-export {BufferWriter} from './lib/writer';
-export {BufferReader} from './lib/reader';
+export { BufferWriter } from './lib/writer';
+export { BufferReader } from './lib/reader';
 
-import {ErrorCode} from './error_code';
-export {ErrorCode} from './error_code';
+import { ErrorCode } from './error_code';
+export { ErrorCode } from './error_code';
 
-import {Encoding} from './lib/encoding';
+import { Encoding } from './lib/encoding';
 import * as digest from './lib/digest';
-import {BigNumber} from 'bignumber.js';
+import { BigNumber } from 'bignumber.js';
 import { isUndefined, isNull, isNumber, isBuffer, isBoolean, isString, isArray, isObject } from 'util';
 
 export interface JSONable {
     stringify(): any;
 }
 
-export function MapToObject( input: Map<string, any> ) {
-    if (!( input instanceof Map)) {
+export function MapToObject(input: Map<string, any>) {
+    if (!(input instanceof Map)) {
         throw new Error('input MUST be a Map');
     }
     let ret: any = {};
@@ -31,8 +31,8 @@ export function MapToObject( input: Map<string, any> ) {
     return ret;
 }
 
-export function SetToArray( input: Set<any> ) {
-    if (!( input instanceof Set)) {
+export function SetToArray(input: Set<any>) {
+    if (!(input instanceof Set)) {
         throw new Error('input MUST be a Set');
     }
     let ret = new Array();
@@ -96,7 +96,7 @@ export function deepCopy(o: any): any {
             s[k] = deepCopy(o[k]);
         }
         return s;
-    }  else {
+    } else {
         throw new Error('not JSONable');
     }
 }
@@ -117,7 +117,7 @@ export function toEvalText(o: any): string {
         for (let e of o) {
             s.push(toEvalText(e));
         }
-        return `[${s.join(',')}]`; 
+        return `[${s.join(',')}]`;
     } else if (o instanceof Map) {
         throw new Error(`use MapToObject before toStringifiable`);
     } else if (o instanceof Set) {
@@ -128,7 +128,7 @@ export function toEvalText(o: any): string {
             s.push(`'${k}':${toEvalText(o[k])}`);
         }
         return `{${s.join(',')}}`;
-    }  else {
+    } else {
         throw new Error('not JSONable');
     }
 }
@@ -160,7 +160,7 @@ export function toStringifiable(o: any, parsable: boolean = false): any {
             s[k] = toStringifiable(o[k], parsable);
         }
         return s;
-    }  else {
+    } else {
         throw new Error('not JSONable');
     }
 }
@@ -234,7 +234,7 @@ export class SerializableWithHash implements Serializable, JSONable {
     }
 
     protected _genHash(): string {
-        let contentWriter: BufferWriter = new  BufferWriter();
+        let contentWriter: BufferWriter = new BufferWriter();
         this._encodeHashContent(contentWriter);
         let content: Buffer = contentWriter.render();
         return digest.hash256(content).toString('hex');
@@ -245,6 +245,6 @@ export class SerializableWithHash implements Serializable, JSONable {
     }
 
     stringify(): any {
-        return {hash: this.hash};
+        return { hash: this.hash };
     }
 }

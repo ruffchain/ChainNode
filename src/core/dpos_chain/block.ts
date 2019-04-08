@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import { ErrorCode } from '../error_code';
 
-import {BlockWithSign, ValueBlockHeader, Chain} from '../value_chain';
+import { BlockWithSign, ValueBlockHeader, Chain } from '../value_chain';
 import { DposChain } from './chain';
 
 //  出块计算从1开始，假设重新选举周期为100：
@@ -31,37 +31,37 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
 
     private async _verifyMiner(chain: Chain): Promise<{ err: ErrorCode, valid?: boolean }> {
         if (!this.number) {
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
 
         let hr = await chain.getHeader(this.preBlockHash);
         if (hr.err) {
-            return {err: hr.err};
+            return { err: hr.err };
         }
         // 时间不可回退
         let preHeader = hr.header! as DposBlockHeader;
         if (this.timestamp < preHeader.timestamp) {
-            return {err: ErrorCode.RESULT_OK, valid: false};
+            return { err: ErrorCode.RESULT_OK, valid: false };
         }
-        
+
         let dmr = await this.getDueMiner(chain);
         if (dmr.err) {
-            return {err: dmr.err};
+            return { err: dmr.err };
         }
 
-        return {err: ErrorCode.RESULT_OK, valid: dmr.miner === this.miner};
+        return { err: ErrorCode.RESULT_OK, valid: dmr.miner === this.miner };
     }
 
-    public async getDueMiner(chain: Chain): Promise<{err: ErrorCode, miner?: string}> {
+    public async getDueMiner(chain: Chain): Promise<{ err: ErrorCode, miner?: string }> {
         if (!this.number) {
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
         let thisIndex = this.getTimeIndex(chain as DposChain);
 
         let gcr = await (chain as DposChain).getMiners(this);
         if (gcr.err) {
             chain.logger.error(`getMiners failed, err ${gcr.err}`);
-            return {err: gcr.err};
+            return { err: gcr.err };
         }
 
         let electionHeader = gcr.header!;
@@ -70,9 +70,15 @@ export class DposBlockHeader extends BlockWithSign(ValueBlockHeader) {
         let index = (thisIndex - electionIndex) % gcr.creators!.length;
         if (index < 0) {
             chain.logger.error(`calcute index failed, thisIndex ${thisIndex}, electionIndex ${electionIndex}, creators length ${gcr.creators!.length}`);
-            return {err: ErrorCode.RESULT_FAILED};
+            return { err: ErrorCode.RESULT_FAILED };
         }
         let creators = gcr.creators!;
-        return {err: ErrorCode.RESULT_OK, miner: creators[index]};
+        return { err: ErrorCode.RESULT_OK, miner: creators[index] };
+    }
+    // Yang Jun , this is the right place to add the reward field?
+    // This is a good place to 
+    public stringify(): any {
+        let obj = super.stringify();
+        return obj;
     }
 }
