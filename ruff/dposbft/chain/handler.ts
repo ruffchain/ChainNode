@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -771,7 +771,7 @@ export function registerHandler(handler: ValueHandler) {
         }
         let resultLst: { address: string, balance: BigNumber }[] = [];
 
-        for (let i = 0; i < obj.length; i++) {
+        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
             if (!isValidAddress(obj[i])) {
                 return [];
             }
@@ -801,7 +801,7 @@ export function registerHandler(handler: ValueHandler) {
         // return await ;
         let resultLst: { address: string, balance: BigNumber }[] = [];
 
-        for (let i = 0; i < obj.length; i++) {
+        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
             if (!isValidAddress(obj[i])) {
                 return [];
             }
@@ -829,7 +829,7 @@ export function registerHandler(handler: ValueHandler) {
         // return await ;
         let resultLst: { address: string, balance: BigNumber }[] = [];
 
-        for (let i = 0; i < obj.length; i++) {
+        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
             if (!isValidAddress(obj[i])) {
                 return [];
             }
