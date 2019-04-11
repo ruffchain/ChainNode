@@ -893,7 +893,6 @@ export function registerHandler(handler: ValueHandler) {
     //////////////////////////////////////////////////////////////
 
 
-
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);

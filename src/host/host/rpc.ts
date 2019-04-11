@@ -175,6 +175,41 @@ export class ChainServer {
             await promisify(resp.end.bind(resp))();
         });
 
+        // Yang Jun 2019-4-11 
+        this.m_server!.on('getBlocks', async (params: { min: number, max: number, transactions?: boolean, eventLog?: boolean }, resp) => {
+            let output: any = { err: ErrorCode.RESULT_OK, blocks: [] };
+
+            let max_num = (params.max - params.min) >= 50 ? 50 : (params.max - params.min);
+            for (let i = 0; i < (max_num + 1); i++) {
+                let hr = await this.m_chain.getHeader(params.min + i);
+                if (hr.err) {
+                    // await promisify(resp.write.bind(resp)(JSON.stringify({ err: hr.err })));
+                    break;
+                } else {
+                    // 是否返回 block的transactions内容
+                    if (params.transactions || params.eventLog) {
+                        let block = await this.m_chain.getBlock(hr.header!.hash);
+                        if (block) {
+                            // 处理block content 中的transaction, 然后再响应请求
+                            let res: any = { block: hr.header!.stringify() };
+                            if (params.transactions) {
+                                res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
+                            }
+                            if (params.eventLog) {
+                                res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
+                            }
+                            output.blocks.push(res);
+                        }
+                    } else {
+                        output.blocks.push(hr.header!.stringify());
+                    }
+                }
+            }
+            await promisify(resp.write.bind(resp)(JSON.stringify(output)));
+            await promisify(resp.end.bind(resp))();
+        });
+
+
         this.m_server!.on('getPeers', async (args, resp) => {
             let peers = this.m_chain.node.getNetwork()!.node.dumpConns();
             await promisify(resp.write.bind(resp)(JSON.stringify(peers)));
@@ -182,7 +217,7 @@ export class ChainServer {
         });
 
         this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
-            console.log('Yang Jun --> m_chain');
+            //console.log('Yang Jun --> m_chain');
             // Yang Jun 2019-3-18
             // let dChain = this.m_chain as DposChain;
             // let num = dChain.getCustomLIB();
@@ -195,7 +230,7 @@ export class ChainServer {
             let bftNum = tipState.getBftIRB();
             let proposedNum = tipState.getProposedIRB();
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
-            console.log('Yang Jun --> ', num);
+            //console.log('Yang Jun --> ', num);
 
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());
