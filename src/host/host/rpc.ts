@@ -69,11 +69,11 @@ export class ChainServer {
 
                     // Yang Jun added 2019-4-8
                     // this.m_logger.info('Yang Jun tx.input');
-                    // this.m_logger.info(tx.input);
-                    if (tx.input.tokenid !== undefined) {
+                    this.m_logger.info(tx.input);
+                    if (tx.input.tokenid) {
                         tx.input.tokenid = tx.input.tokenid.toUpperCase();
                     }
-
+                    this.m_logger.info(tx.input);
                     const err = await this.m_chain.addTransaction(tx);
                     await promisify(resp.write.bind(resp)(JSON.stringify(err)));
                 }
