@@ -1,2 +1,0 @@
-
-node ./dist/blockchain-sdk/src/tool/host.js miner --genesis "./data/dposbft/genesis"   --dataDir "./data/dposbft/miner7" --loggerConsole --loggerLevel debug --minerSecret 67091033899af84c918dd8394b4954cd79fc4da1e238c545479b7cccfbeccf0c   --rpchost localhost --rpcport 18097  --feelimit 100 --net bdt --host 127.0.0.1 --port "13107|13007" --peerid 16ZJ7mRgkWf4bMmQFoyLkqW8eUCA5JqTHg --sn SN_PEER_TEST@45.62.98.174@10000@10001 --bdt_log_level info --txServer
