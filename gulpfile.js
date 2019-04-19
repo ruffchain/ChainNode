@@ -3,6 +3,7 @@ const ts = require("gulp-typescript");
 const sourcemaps = require("gulp-sourcemaps");
 const tsProject = ts.createProject("tsconfig.json");
 const fs = require("fs-extra");
+const shell = require('gulp-shell');
 
 gulp.task("compile", function () {
     return tsProject.src()
@@ -58,4 +59,19 @@ gulp.task("prepareCli", () => {
     });
 });
 
+let imageName = process.env.CHAINNODE_DOCKER_IMAGENAME;
+
 gulp.task("publish", ["build", "_publish", "prepareCli"]);
+
+const genGenisisCmd = [
+    "rm -fr distDocker",
+    "./ruff/dposbft/create.sh >/dev/null 2>&1 || true",
+    "mkdir -p distDocker/chainsdk",
+    "cp Dockerfile distDocker",
+    "cp -a dist distDocker/chainsdk",
+    "cp -a scripts distDocker/ && cp scripts/* distDocker/chainsdk",
+    "cp package.json distDocker/chainsdk && cp tsconfig.json distDocker/chainsdk && cp tslint.json distDocker/chainsdk && cp gulpfile.js distDocker/chainsdk",
+    `cd distDocker && docker build -t ${imageName} . && docker push ${imageName}`
+];
+
+gulp.task("build-docker", ["build"], shell.task(genGenisisCmd));
