@@ -9,7 +9,8 @@
     "test": "mocha dist/blockchain-sdk/test/*/**.js --timeout 120000",
     "profile": "mocha dist/blockchain-sdk/test/block/test_executor.js --timeout 120000 --prof",
     "build": "gulp build",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "docker": "gulp build-docker"
   },
   "repository": {
     "type": "git",
