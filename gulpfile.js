@@ -68,8 +68,8 @@ const genGenisisCmd = [
     "./ruff/dposbft/create.sh >/dev/null 2>&1 || true",
     "mkdir -p distDocker/chainsdk",
     "cp Dockerfile distDocker",
-    "cp -a dist distDocker/chainsdk",
-    "cp -a scripts distDocker/ && cp scripts/* distDocker/chainsdk",
+    "cp -a src distDocker/chainsdk/",
+    "cp scripts/* distDocker/chainsdk",
     "cp package.json distDocker/chainsdk && cp tsconfig.json distDocker/chainsdk && cp tslint.json distDocker/chainsdk && cp gulpfile.js distDocker/chainsdk",
     `cd distDocker && docker build -t ${imageName} . && docker push ${imageName}`
 ];

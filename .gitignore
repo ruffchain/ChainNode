@@ -7,8 +7,8 @@ test_data*
 data_*
 yarn.lock
 .projectile
-package-lock.json
-
+config.tar.gz
+distDocker/
 
 ruff/dposbft/*.sh
 !ruff/dposbft/create.sh

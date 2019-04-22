@@ -337,27 +337,27 @@ export function registerHandler(handler: ValueHandler) {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);
 
-        console.log('Yang-- received createBancorToken');
+        // console.log('Yang-- received createBancorToken');
         console.log(params);
 
         // 参数检查
         if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-            console.log('Yang-- quit becasue tokenid')
+            // console.log('Yang-- quit becasue tokenid')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
         if (!params.preBalances) {
-            console.log('Yang-- quit becasue preBalances')
+            // console.log('Yang-- quit becasue preBalances')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
         // supply has been incorporated into preBalances
         if (!params.factor) {
-            console.log('Yang-- quit becasue factor')
+            // console.log('Yang-- quit becasue factor')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
-        console.log('Yang-- Before context.storage.createKeyValueWithDbname');
-        console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
+        // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
+        // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
 
         // put tokenid to uppercase
         let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
