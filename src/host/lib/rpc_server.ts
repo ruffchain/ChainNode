@@ -12,22 +12,22 @@ export class RPCServer extends EventEmitter {
     }
 
     on(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
-    on(event: string, listener: any): this  {
+    on(event: string, listener: any): this {
         return super.on(event, listener);
     }
 
     once(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
-    once(event: string, listener: any): this  {
+    once(event: string, listener: any): this {
         return super.once(event, listener);
     }
 
     prependListener(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
-    prependListener(event: string, listener: any): this  {
+    prependListener(event: string, listener: any): this {
         return super.prependListener(event, listener);
     }
 
     prependOnceListener(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
-    prependOnceListener(event: string, listener: any): this  {
+    prependOnceListener(event: string, listener: any): this {
         return super.prependOnceListener(event, listener);
     }
 
@@ -46,13 +46,25 @@ export class RPCServer extends EventEmitter {
                     jsonData += chunk;
                 });
                 req.on('end', () => {
-                    let reqObj = JSON.parse(jsonData);
+
+                    let reqObj: any;
+                    // Added by Yang Jun 2019-4-26
+
+                    try {
+                        reqObj = JSON.parse(jsonData);
+                    } catch (e) {
+                        console.error('Wrong format of jsonData');
+                        resp.writeHead(404);
+                        resp.end();
+                        return;
+                    }
+
                     // console.info(`RPCServer emit request ${reqObj.funName}, params ${JSON.stringify(reqObj.args)}`);
                     if (!this.emit(reqObj.funName, reqObj.args, resp)) {
                         resp.writeHead(404);
                         resp.end();
                     }
-                    
+
                 });
             }
         });
