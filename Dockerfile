@@ -14,7 +14,7 @@ RUN useradd -m ruff -g root && echo "ruff:123456" | chpasswd && adduser ruff sud
 
 WORKDIR /home/ruff
 ENV NVM_DIR /home/ruff/.nvm
-ENV NODE_VERSION 8.11.2
+ENV NODE_VERSION 10.15.3
 
 
 RUN curl https://raw.githubusercontent.com/creationix/nvm/v0.25.0/install.sh | bash \
