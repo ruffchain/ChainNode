@@ -9,4 +9,4 @@ then
     npm run build
 fi
 
-node ./dist/blockchain-sdk/src/tool/host.js miner $*
+node ./dist/blockchain-sdk/src/tool/host.js peer $*
