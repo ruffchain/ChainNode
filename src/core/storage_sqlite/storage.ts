@@ -35,8 +35,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
         try {
             assert(key);
             const json = JSON.stringify(toStringifiable(value, true));
-            const sql = `REPLACE INTO '${this.fullName}' (name, field, value) VALUES ('${key}', "____default____", '${json}')`;
-            await this.db.exec(sql);
+            await this.db.run(`REPLACE INTO '${this.fullName}' (name, field, value) VALUES (?, "____default____", ?)`, key, json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`set ${key} `, e);
@@ -65,8 +64,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             assert(field);
             const json = JSON.stringify(toStringifiable(value, true));
-            const sql = `REPLACE INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${field}', '${json}')`;
-            await this.db.exec(sql);
+            await this.db.run(`REPLACE INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`, key, field, json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hset ${key} ${field} `, e);
@@ -92,7 +90,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
 
     public async hdel(key: string, field: string): Promise<{ err: ErrorCode }> {
         try {
-            await this.db.exec(`DELETE FROM '${this.fullName}' WHERE name='${key}' and field='${field}'`);
+            await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, field);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hdel ${key} ${field} `, e);
@@ -200,7 +198,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
 
     public async hclean(key: string): Promise<{ err: ErrorCode }> {
         try {
-            const result = await this.db.exec(`DELETE FROM ${this.fullName} WHERE name='${key}'`);
+            const result = await this.db.run(`DELETE FROM ${this.fullName} WHERE name=?`, key);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`hclean ${key} `, e);
@@ -217,8 +215,8 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(key);
             assert(!isNullOrUndefined(index));
             const json = JSON.stringify(toStringifiable(value, true));
-            const sql = `REPLACE INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${index.toString()}', '${json}')`;
-            await this.db.exec(sql);
+            await this.db.run(`REPLACE INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`,
+            key, index.toString(), json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`lset ${key} ${index} `, e);
@@ -272,10 +270,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             // update index += 1
             // set index[0] = value
             const json = JSON.stringify(toStringifiable(value, true));
-            await this.db.exec(`UPDATE '${this.fullName}' SET field=field+1 WHERE name='${key}'`);
-            const sql = `INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '0', '${json}')`;
+            await this.db.run(`UPDATE '${this.fullName}' SET field=field+1 WHERE name=?`, key);
+            // const sql = `INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '0', '${json}')`;
             // console.log('lpush', { sql });
-            await this.db.exec(sql);
+            await this.db.run(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, '0', ?)`, key, json);
 
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
@@ -288,10 +286,10 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
         try {
             assert(key);
             const len = value.length;
-            await this.db.exec(`UPDATE '${this.fullName}' SET field=field+${len} WHERE name='${key}'`);
+            await this.db.run(`UPDATE '${this.fullName}' SET field=field+? WHERE name=?`, len, key);
             for (let i = 0; i < len; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
-                await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${i}', '${json}')`);
+                await this.db.run(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`, key, i, json);
             }
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
@@ -313,10 +311,9 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             } else {
                 const { err: err2, value } = await this.lindex(key, index);
                 let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
-                await this.db.exec(sql);
+                await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, index);
                 for (let i = index + 1; i < len!; i++) {
-                    sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
-                    await this.db.exec(sql);
+                    await this.db.run(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field = ?`, key, i);
                 }
 
                 return { err: ErrorCode.RESULT_OK, value };
@@ -335,7 +332,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err };
             }
             const json = JSON.stringify(toStringifiable(value, true));
-            await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) VALUES ('${key}', '${len}', '${json}')`);
+            await this.db.run(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`, key, len, json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`rpush ${key} `, e);
