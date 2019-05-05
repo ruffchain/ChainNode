@@ -164,20 +164,20 @@ function defineStorageTest(rootDir: string, storageType: new (...args: any[]) =>
                 filePath: redoStoragePath,
                 logger
             });
-            await storage.uninit();
             redoLog.finish();
             let logWriter = new BufferWriter();
             assert(!redoLog.encode(logWriter));
             let logBuf = logWriter.render();
             logger.info('redo log : ', logBuf.toString('utf-8'));
-            
+
             assert(!(await redoStorage.init()));
             assert(!(await redoStorage.redo(logBuf)));
 
-            await redoStorage.uninit();
 
             const md1 = (await storage.messageDigest()).value!;
             const md2 = (await redoStorage.messageDigest()).value!;
+            await storage.uninit();
+            await redoStorage.uninit();
             assert(md1 === md2);
         }
         __test().then(done);

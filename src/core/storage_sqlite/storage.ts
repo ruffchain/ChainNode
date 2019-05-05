@@ -349,8 +349,8 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             }
             for (let i = 0; i < value.length; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
-                await this.db.exec(`INSERT INTO '${this.fullName}' (name, field, value) \
-                    VALUES ('${key}', '${len! + i}', '${json}')`);
+                await this.db.run(`INSERT INTO '${this.fullName}' (name, field, value) \
+                    VALUES (?, ?, ?)`, key, len!+i,json);
             }
 
             return { err: ErrorCode.RESULT_OK };
@@ -371,7 +371,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             } else {
                 const { err: err2, value } = await this.lindex(key, len! - 1);
-                await this.db.exec(`DELETE FROM '${this.fullName}' WHERE name='${key}' AND field=${len! - 1}`);
+                await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, len!-1);
                 return { err: ErrorCode.RESULT_OK, value };
             }
         } catch (e) {
@@ -391,7 +391,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return await this.lset(key, len!, value);
             } else {
                 for (let i = len! - 1; i >= index; i--) {
-                    await this.db.exec(`UPDATE '${this.fullName}' SET field=field+1 WHERE name='${key}' AND field = ${i}`);
+                    await this.db.run(`UPDATE '${this.fullName}' SET field=field+1 WHERE name=? AND field = ?`, key, i);
                 }
 
                 return await this.lset(key, index, value);
@@ -415,11 +415,11 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 const { err: err2, value } = await this.lindex(key, index);
                 let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
                 // console.log('lremove', { sql });
-                await this.db.exec(sql);
+                await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, index);
                 for (let i = index + 1; i < len!; i++) {
-                    sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
+                    //sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
                     // console.log({ sql });
-                    await this.db.exec(sql);
+                    await this.db.run( `UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =?`, key, i);
                 }
 
                 return { err: ErrorCode.RESULT_OK, value };
