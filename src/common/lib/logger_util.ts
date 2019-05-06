@@ -23,47 +23,46 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
                 humanReadableUnhandledException: true
             }));
         }
-        if (options.loggerOptions.file) {
-            fs.ensureDirSync(options.loggerOptions.file.root);
-            loggerTransports.push(new transports.File({
-                json: false,
-                level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
-                timestamp: true,
-                filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
-                datePattern: 'yyyy-MM-dd.',
-                prepend: true,
-                handleExceptions: true,
-                humanReadableUnhandledException: true
-            }));
-        }
+        //if (options.loggerOptions.file) {
+        //    fs.ensureDirSync(options.loggerOptions.file.root);
+        //    loggerTransports.push(new transports.File({
+        //        json: false,
+        //        level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
+        //        timestamp: true,
+        //        filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
+        //        datePattern: 'yyyy-MM-dd.',
+        //        prepend: true,
+        //        handleExceptions: true,
+        //        humanReadableUnhandledException: true
+        //    }));
+        //}
         // Yang Jun 2019-3-15
+        //
+        //const logger = new Logger({
+        //    level: options.loggerOptions.level || 'info',
+        //    transports: loggerTransports
+        //});
         let logger: any;
         logger = new Logger({
             transports: []
         });
 
-        fs.ensureDirSync(options.loggerOptions.file!.root);
+        if (options.loggerOptions.file) {
+            fs.ensureDirSync(options.loggerOptions.file!.root);
+            loggerTransports.push(new DailyRotateFile({
+                dirname: options.loggerOptions.file!.root,
+                filename: 'info-%DATE%.log',
+                datePattern: 'YYYY-MM-DD',
+                zippedArchive: true,
+                maxSize: '100m',
+                maxFiles: '15'
+            }));
+        }
 
         logger.configure({
             level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
-            transports: [
-                new transports.Console({
-                    level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
-                    timestamp: true,
-                    handleExceptions: true,
-                    humanReadableUnhandledException: true
-                }),
-                new DailyRotateFile({
-                    dirname: options.loggerOptions.file!.root,
-                    filename: 'info-%DATE%.log',
-                    datePattern: 'YYYY-MM-DD',
-                    zippedArchive: true,
-                    maxSize: '100m',
-                    maxFiles: '15'
-                })
-            ]
+            transports: loggerTransports,
         });
-
         return new LogShim(logger).log;
     } else {
         const loggerTransports = [];
