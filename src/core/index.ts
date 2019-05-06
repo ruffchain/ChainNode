@@ -61,7 +61,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
         return new nodeType(peers, {network, peerid: `${_host}:${port}` , host: _host, port});
     });
-    
+
     networkCreator.registerNode('standalone', (commandOptions: Map<string, any>): any => {
         let network = commandOptions.get('network');
         if (!network) {
@@ -73,7 +73,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         }
         return new StandaloneNode(network, peerid);
     });
-    
+
     networkCreator.registerNode('bdt', (commandOptions: Map<string, any>): any => {
         let network = commandOptions.get('network');
         if (!network) {
@@ -89,22 +89,29 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             console.error('no bdt port');
             return ;
         }
-    
+        let vport = 7883;
+        if (commandOptions.has('vport')) {
+            vport = parseInt(commandOptions.get('vport'));
+            if (isNaN(vport)) {
+                vport = 7883;
+            }
+        };
+
         port = (port as string).split('|');
         let udpport = 0;
         let tcpport = parseInt(port[0]);
-    
+
         if (port.length === 1) {
             udpport = tcpport + 10;
         } else {
             udpport = parseInt(port[1]);
         }
-    
+
         if (isNaN(tcpport) || isNaN(udpport)) {
             console.error('invalid bdt port');
             return ;
         }
-    
+
         let peerid = commandOptions.get('peerid');
         if (!peerid) {
             peerid = `${_host}:${port}`;
@@ -140,14 +147,14 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
                 dhtAppID = 0;
             }
         }
-    
+
         let initDHTEntry;
         const initDHTFile = commandOptions.get('dataDir') + '/peers';
         if (fs.pathExistsSync(initDHTFile)) {
             initDHTEntry = fs.readJSONSync(initDHTFile);
         }
-    
-        return new BdtNode({network, host: _host, tcpport, udpport, peerid, snPeer, dhtAppID, bdtLoggerOptions: bdt_logger, initDHTEntry});
+
+        return new BdtNode({network, host: _host, tcpport, udpport, peerid, snPeer, dhtAppID, vport, bdtLoggerOptions: bdt_logger, initDHTEntry});
     });
 
     networkCreator.registerNetwork('random', RandomOutNetwork);
@@ -155,10 +162,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
     networkCreator.registerNetwork('dposbft', DposBftNetwork);
 
     let _creator = new ChainCreator({logger, networkCreator});
-    _creator.registerChainType('pow', { 
+    _creator.registerChainType('pow', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
-        }, 
+        },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): PowChain {
             return new PowChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         },
@@ -166,10 +173,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new PowMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         }
     });
-    _creator.registerChainType('dpos', { 
+    _creator.registerChainType('dpos', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
-        }, 
+        },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposChain {
             return new DposChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         },
@@ -177,10 +184,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new DposMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         }
     });
-    _creator.registerChainType('dbft', { 
+    _creator.registerChainType('dbft', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
-        }, 
+        },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DbftChain {
             return new DbftChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         },
@@ -188,10 +195,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new DbftMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         }
     });
-    _creator.registerChainType('dposbft', { 
+    _creator.registerChainType('dposbft', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
-        }, 
+        },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposBftChain {
             return new DposBftChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
         },

@@ -11,16 +11,14 @@ export class BdtNode extends INode {
     private m_host: any;
     private m_tcpListenPort: number;
     private m_udpListenPort: number;
-    // vport 只是提供给bdt connect的一个抽象，可以不用在调用时传入
-    // 先定死， bdt connect 和 listen都先用这个
-    private m_vport: number = 7833;
+    private m_vport: number;
     private m_skipList: string[] = [];
 
     // 初始化传入tcp port和udp port，传入0就不监听对应协议
     // @param options {
     //              logger.level ['off', 'all', 'debug', 'info', 'trace', 'warn']
     // }
-    constructor(options: {network: string, host: string, tcpport: number, udpport: number, peerid: string,
+    constructor(options: {network: string, host: string, tcpport: number, udpport: number, peerid: string, vport: number
         snPeer: {peerid: string, eplist: string[]},
         dhtAppID: number,
         bdtLoggerOptions: {level: string, file_dir: string, file_name: string}, initDHTEntry?: {peerid: string, eplist: string[]}[]}
@@ -30,7 +28,7 @@ export class BdtNode extends INode {
         this.m_tcpListenPort = options.tcpport;
         this.m_udpListenPort = options.udpport;
         this.m_host = options.host;
-
+        this.m_vport = options.vport;
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
 
