@@ -507,7 +507,7 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
         // 先判断表是否存在
         let count;
         try {
-            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
+            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name=?`, fullName);
             count = ret['COUNT(*)'];
         } catch (e) {
             this.logger.error(`select table name failed `, e);
@@ -541,7 +541,7 @@ class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IRead
         this.logger.info('Yang-- fullName is:', fullName);
 
         try {
-            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name='${fullName}'`);
+            let ret = await this.m_db!.get(`SELECT COUNT(*) FROM sqlite_master where type='table' and name=?`, fullName);
             count = ret['COUNT(*)'];
         } catch (e) {
             this.logger.error(`select table name failed `, e);
