@@ -61,6 +61,10 @@ export function registerHandler(handler: ValueHandler) {
         return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value.code : undefined;
     }
 
+    async function getTableValue(tableKv: IReadableKeyValue, keyName: string): Promise<String | undefined> {
+        let retInfo = await tableKv.get(keyName);
+        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
+    }
     handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         if (!params.userCode) {
@@ -147,6 +151,10 @@ export function registerHandler(handler: ValueHandler) {
         let usedValue = new BigNumber(0);
 
         const sandbox = {
+//            bcLog : function (resolve: any, arg0: string, arg1: string) {
+//                console.log(arg0, arg1);
+//            },
+
             bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
                 console.log('in bcTransfer to:', to, ' amount:', amount);
                 try {
@@ -214,6 +222,7 @@ export function registerHandler(handler: ValueHandler) {
                     const kvRet = await context
                         .storage
                         .getReadWritableKeyValue(dbName);
+
                     if (kvRet.err) {
                         resolve(false);
                     }
@@ -231,6 +240,38 @@ export function registerHandler(handler: ValueHandler) {
                 catch (err) {
                     console.log('error when DB Set', err);
                     resolve(false);
+                }
+            },
+            bcDBGet: async (resolve: any, name: string, key: string): Promise<any> => {
+                let ret = undefined;
+
+                try {
+
+                    if (!bCheckDBName(name)) {
+                        resolve(ret);
+                    }
+
+                    if (key.length > DB_KEY_MAX_LEN) {
+                        console.log('Invalid input for bcDBSet');
+                        resolve(ret);
+                    }
+
+                    var dbName = `${context.caller}-${name}`;
+
+                    const kvRet = await context
+                        .storage
+                        .getReadWritableKeyValue(dbName);
+
+                    if (kvRet.err) {
+                        resolve(ret);
+                    } else {
+                        ret = await getTableValue(kvRet.kv!, key);
+                        resolve(ret);
+                    }
+                }
+                catch (err) {
+                    console.log('error when DB Set', err);
+                    resolve(ret);
                 }
             },
         };
