@@ -746,8 +746,19 @@ export function registerHandler(handler: ValueHandler) {
         return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
+    // Add getBancorTokenNonliquidity,
+    handler.addViewMethod('getBancorTokenNonliquidity', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        if (!params.tokenid) {
+            return new BigNumber(0);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
+    });
+
     // Yang Jun 2019-4-10
-    handler.addViewMethod('getBancorTokenParams', async (context: DposViewContext, params: any): Promise<{ F: BigNumber, S: BigNumber, R: BigNumber } | number> => {
+    handler.addViewMethod('getBancorTokenParams', async (context: DposViewContext, params: any): Promise<{ F: BigNumber, S: BigNumber, R: BigNumber, N: BigNumber } | number> => {
 
         // let outputError = { F: new BigNumber(0), S: new BigNumber(0), R: new BigNumber(0) };
         if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
@@ -791,7 +802,18 @@ export function registerHandler(handler: ValueHandler) {
         let Reserve = new BigNumber(retReserve.value);
         // console.log('Yang-- R:', R.toString());
 
-        return { F: Factor, S: Supply, R: Reserve };
+        // get N
+        let kvNonliquidity = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        if (kvNonliquidity.err) {
+            context.logger.error('getbancortokenparams() fail open kvNonliquidity'); return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
+        }
+
+        let retNonliquidity = await kvNonliquidity.kv!.get(tokenIdUpperCase);
+        if (retNonliquidity.err) { return ErrorCode.RESULT_DB_RECORD_EMPTY; }
+
+        let Nonliquidity = new BigNumber(retNonliquidity.value);
+
+        return { F: Factor, S: Supply, R: Reserve, N: Nonliquidity };
     });
 
     handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
