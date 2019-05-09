@@ -50,7 +50,7 @@ export function bCheckTokenid(tokenid: string) {
   if (str === SYS_TOKEN) {
     return false;
   }
-  // 1st not number, 
+  // 1st not number,
   if (str.match(REGPAT) === null) {
     return false;
   }
@@ -77,4 +77,24 @@ export function bCheckTokenPrecision(precision: string) {
   let num = parseInt(precision);
 
   return num >= 0 && num <= NORMAL_TOKEN_PRECISION;
+}
+
+const DB_REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g
+const DB_NAME_MIN_LEN = 3;
+const DB_NAME_MAX_LEN = 12;
+
+export function bCheckDBName(dbName: string) {
+  let str = dbName.toUpperCase();
+
+  // 3~12位
+  if (str.length < DB_NAME_MIN_LEN || str.length > DB_NAME_MAX_LEN) {
+    return false;
+  }
+
+  // 1st not number,
+  if (str.match(DB_REGPAT) === null) {
+    return false;
+  }
+
+  return true;
 }

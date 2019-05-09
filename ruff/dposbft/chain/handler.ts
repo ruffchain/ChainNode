@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -34,8 +34,12 @@ try {
 } catch (e) {
     throw new Error('handler.ts read ./config.json')
 }
-// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo 
+// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo
 const SYSTEM_TX_FEE_BN = new BigNumber(0.001);
+
+const DB_NAME_MAX_LEN: number = 12;
+const DB_KEY_MAX_LEN: number = 256;
+const DB_VALUE_MAX_LEN: number = 512;
 
 ////////////////
 
@@ -90,6 +94,38 @@ export function registerHandler(handler: ValueHandler) {
         return await getAddressCode(kvRet.kv!, params.address);
     });
 
+    handler.addViewMethod('getUserTableValue', async (context: DposViewContext, params: any): Promise <String | undefined> => {
+        let contractAddr = params.contractAddr;
+        let tableName = params.tableName;
+        let keyName = params.keyName;
+
+        if (!isValidAddress(contractAddr)) {
+            return undefined;
+        }
+
+        if (!bCheckDBName(tableName)) {
+            return undefined;
+        }
+
+        if (keyName.length > DB_KEY_MAX_LEN) {
+            return undefined;
+        }
+
+        const dbName = `${contractAddr}-${tableName}`;
+        const kvRet = await context
+                        .storage
+                        .getReadableKeyValue(dbName);
+
+        if (kvRet.err) {
+            return undefined;
+        }
+
+        let retInfo = await kvRet.kv!.get(keyName);
+
+        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
+
+    });
+
     handler.addTX('runUserMethod', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         let kvRet = await context.storage.getReadableKeyValue('userCode');
@@ -137,49 +173,66 @@ export function registerHandler(handler: ValueHandler) {
                     resolve(false);
                 }
             },
-            //bcDBCreate: async (resolve: any, name: string): Promise<any> => {
-            //    var dbName = `${context.caller}-${name}`;
-            //    try {
-            //        const kvRet = await context
-            //            .storage
-            //            .createKeyValue(dbName);
-            //        if (kvRet.err) {
-            //            resolve(false);
-            //        }
-            //        else {
-            //            resolve(true);
-            //        }
-            //    }
-            //    catch (err) {
-            //        console.log('error when DB create', err);
-            //        resolve(false);
-            //    }
-            //},
-            //bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
-            //    var dbName = `${context.caller}-${name}`;
-            //    try {
-            //        const kvRet = await context
-            //            .storage
-            //            .getReadWritableKeyValue(dbName);
-            //        if (kvRet.err) {
-            //            resolve(false);
-            //        }
-            //        else {
-            //            kvRet.kv!.set(key, value).then(ret => {
-            //                if (ret.err) {
-            //                    resolve(false);
-            //                }
-            //                else {
-            //                    resolve(true);
-            //                }
-            //            });
-            //        }
-            //    }
-            //    catch (err) {
-            //        console.log('error when DB Set', err);
-            //        resolve(false);
-            //    }
-            //},
+            bcDBCreate: async (resolve: any, name: string): Promise<any> => {
+                try {
+
+                    if (!bCheckDBName(name)) {
+                        resolve(false);
+                    }
+
+                    const dbName = `${context.caller}-${name}`;
+
+                    const kvRet = await context
+                        .storage
+                        .createKeyValue(dbName);
+                    if (kvRet.err) {
+                        resolve(false);
+                    }
+                    else {
+                        resolve(true);
+                    }
+                }
+                catch (err) {
+                    console.log('error when DB create', err);
+                    resolve(false);
+                }
+            },
+            bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
+
+                try {
+                    if (!bCheckDBName(name)) {
+                        resolve(false);
+                    }
+
+                    if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
+                        console.log('Invalid input for bcDBSet');
+                        resolve(false);
+                    }
+
+                    var dbName = `${context.caller}-${name}`;
+
+                    const kvRet = await context
+                        .storage
+                        .getReadWritableKeyValue(dbName);
+                    if (kvRet.err) {
+                        resolve(false);
+                    }
+                    else {
+                        kvRet.kv!.set(key, value).then(ret => {
+                            if (ret.err) {
+                                resolve(false);
+                            }
+                            else {
+                                resolve(true);
+                            }
+                        });
+                    }
+                }
+                catch (err) {
+                    console.log('error when DB Set', err);
+                    resolve(false);
+                }
+            },
         };
 
         let actionCode = `
