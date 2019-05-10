@@ -151,29 +151,32 @@ export function registerHandler(handler: ValueHandler) {
         let usedValue = new BigNumber(0);
 
         const sandbox = {
-//            bcLog : function (resolve: any, arg0: string, arg1: string) {
-//                console.log(arg0, arg1);
-//            },
+            bcLog : function (resolve: any, arg0: string, arg1: string) {
+                //console.log(arg0, arg1);
+            },
 
             bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
                 console.log('in bcTransfer to:', to, ' amount:', amount);
                 try {
                     let toValue = new BigNumber(amount);
 
+                    if (toValue.isNaN() || !isValidAddress(to)) {
+                        return(resolve(false));
+                    }
                     if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
                         console.log('exceed the amount');
-                        resolve(false);
+                        return(resolve(false));
                     }
 
                     const ret = await context
                         .transferTo(to, toValue);
                     if (ret === ErrorCode.RESULT_OK) {
                         usedValue = usedValue.plus(toValue);
-                        resolve(true);
+                        return(resolve(true));
                     }
                     else {
                         console.log('ret is', ret);
-                        resolve(false);
+                        return(resolve(false));
                     }
                 }
                 catch (err) {
@@ -185,7 +188,7 @@ export function registerHandler(handler: ValueHandler) {
                 try {
 
                     if (!bCheckDBName(name)) {
-                        resolve(false);
+                        return(resolve(false));
                     }
 
                     const dbName = `${context.caller}-${name}`;
@@ -194,10 +197,9 @@ export function registerHandler(handler: ValueHandler) {
                         .storage
                         .createKeyValue(dbName);
                     if (kvRet.err) {
-                        resolve(false);
-                    }
-                    else {
-                        resolve(true);
+                        return(resolve(false));
+                    } else {
+                        return(resolve(true));
                     }
                 }
                 catch (err) {
@@ -209,12 +211,12 @@ export function registerHandler(handler: ValueHandler) {
 
                 try {
                     if (!bCheckDBName(name)) {
-                        resolve(false);
+                        return(resolve(false));
                     }
 
                     if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
                         console.log('Invalid input for bcDBSet');
-                        resolve(false);
+                        return(resolve(false));
                     }
 
                     var dbName = `${context.caller}-${name}`;
@@ -224,17 +226,15 @@ export function registerHandler(handler: ValueHandler) {
                         .getReadWritableKeyValue(dbName);
 
                     if (kvRet.err) {
-                        resolve(false);
+                        return(resolve(false));
                     }
                     else {
-                        kvRet.kv!.set(key, value).then(ret => {
-                            if (ret.err) {
-                                resolve(false);
-                            }
-                            else {
-                                resolve(true);
-                            }
-                        });
+                        let ret = await kvRet.kv!.set(key, value);
+                        if (ret.err) {
+                            return(resolve(false));
+                        } else {
+                            return(resolve(true));
+                        }
                     }
                 }
                 catch (err) {
@@ -248,12 +248,12 @@ export function registerHandler(handler: ValueHandler) {
                 try {
 
                     if (!bCheckDBName(name)) {
-                        resolve(ret);
+                        return(resolve(ret));
                     }
 
                     if (key.length > DB_KEY_MAX_LEN) {
                         console.log('Invalid input for bcDBSet');
-                        resolve(ret);
+                        return(resolve(ret));
                     }
 
                     var dbName = `${context.caller}-${name}`;
@@ -263,10 +263,10 @@ export function registerHandler(handler: ValueHandler) {
                         .getReadWritableKeyValue(dbName);
 
                     if (kvRet.err) {
-                        resolve(ret);
+                        return(resolve(ret));
                     } else {
                         ret = await getTableValue(kvRet.kv!, key);
-                        resolve(ret);
+                        return(resolve(ret));
                     }
                 }
                 catch (err) {
