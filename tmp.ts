@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -34,12 +34,8 @@ try {
 } catch (e) {
     throw new Error('handler.ts read ./config.json')
 }
-// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo
+// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo 
 const SYSTEM_TX_FEE_BN = new BigNumber(0.001);
-
-const DB_NAME_MAX_LEN: number = 12;
-const DB_KEY_MAX_LEN: number = 256;
-const DB_VALUE_MAX_LEN: number = 512;
 
 ////////////////
 
@@ -61,10 +57,6 @@ export function registerHandler(handler: ValueHandler) {
         return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value.code : undefined;
     }
 
-    async function getTableValue(tableKv: IReadableKeyValue, keyName: string): Promise<string | undefined> {
-        let retInfo = await tableKv.get(keyName);
-        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
-    }
     handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         if (!params.userCode) {
@@ -98,38 +90,6 @@ export function registerHandler(handler: ValueHandler) {
         return await getAddressCode(kvRet.kv!, params.address);
     });
 
-    handler.addViewMethod('getUserTableValue', async (context: DposViewContext, params: any): Promise<string | undefined> => {
-        let contractAddr = params.contractAddr;
-        let tableName = params.tableName;
-        let keyName = params.keyName;
-
-        if (!isValidAddress(contractAddr)) {
-            return undefined;
-        }
-
-        if (!bCheckDBName(tableName)) {
-            return undefined;
-        }
-
-        if (keyName.length > DB_KEY_MAX_LEN) {
-            return undefined;
-        }
-
-        const dbName = `${contractAddr}-${tableName}`;
-        const kvRet = await context
-            .storage
-            .getReadableKeyValue(dbName);
-
-        if (kvRet.err) {
-            return undefined;
-        }
-
-        let retInfo = await kvRet.kv!.get(keyName);
-
-        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
-
-    });
-
     handler.addTX('runUserMethod', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         let kvRet = await context.storage.getReadableKeyValue('userCode');
@@ -151,126 +111,75 @@ export function registerHandler(handler: ValueHandler) {
         let usedValue = new BigNumber(0);
 
         const sandbox = {
-            // bcLog: function (resolve: any, arg0: string, arg1: string) {
-            //     // console.log(arg0, arg1);
-            // },
-            bcLog: (resolve: any, arg0: string, arg1: string) => {
-                // console.log(arg0, arg1);
-            },
-
             bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
                 console.log('in bcTransfer to:', to, ' amount:', amount);
                 try {
                     let toValue = new BigNumber(amount);
 
-                    if (toValue.isNaN() || !isValidAddress(to)) {
-                        return (resolve(false));
-                    }
                     if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
                         console.log('exceed the amount');
-                        return (resolve(false));
+                        resolve(false);
                     }
 
                     const ret = await context
                         .transferTo(to, toValue);
                     if (ret === ErrorCode.RESULT_OK) {
                         usedValue = usedValue.plus(toValue);
-                        return (resolve(true));
-                    } else {
-                        console.log('ret is', ret);
-                        return (resolve(false));
+                        resolve(true);
                     }
-                } catch (err) {
+                    else {
+                        console.log('ret is', ret);
+                        resolve(false);
+                    }
+                }
+                catch (err) {
                     console.log('err when transfer', err);
                     resolve(false);
                 }
             },
-            bcDBCreate: async (resolve: any, name: string): Promise<any> => {
-                try {
-
-                    if (!bCheckDBName(name)) {
-                        return (resolve(false));
-                    }
-
-                    const dbName = `${context.caller}-${name}`;
-
-                    const kvRet1 = await context
-                        .storage
-                        .createKeyValue(dbName);
-                    if (kvRet1.err) {
-                        return (resolve(false));
-                    } else {
-                        return (resolve(true));
-                    }
-                } catch (err) {
-                    console.log('error when DB create', err);
-                    resolve(false);
-                }
-            },
-            bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
-
-                try {
-                    if (!bCheckDBName(name)) {
-                        return (resolve(false));
-                    }
-
-                    if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
-                        console.log('Invalid input for bcDBSet');
-                        return (resolve(false));
-                    }
-
-                    let dbName = `${context.caller}-${name}`;
-
-                    const kvRet2 = await context
-                        .storage
-                        .getReadWritableKeyValue(dbName);
-
-                    if (kvRet2.err) {
-                        return (resolve(false));
-                    } else {
-                        let ret = await kvRet2.kv!.set(key, value);
-                        if (ret.err) {
-                            return (resolve(false));
-                        } else {
-                            return (resolve(true));
-                        }
-                    }
-                } catch (err) {
-                    console.log('error when DB Set', err);
-                    resolve(false);
-                }
-            },
-            bcDBGet: async (resolve: any, name: string, key: string): Promise<any> => {
-                let ret;
-
-                try {
-
-                    if (!bCheckDBName(name)) {
-                        return (resolve(ret));
-                    }
-
-                    if (key.length > DB_KEY_MAX_LEN) {
-                        console.log('Invalid input for bcDBSet');
-                        return (resolve(ret));
-                    }
-
-                    let dbName = `${context.caller}-${name}`;
-
-                    const kvRet3 = await context
-                        .storage
-                        .getReadWritableKeyValue(dbName);
-
-                    if (kvRet3.err) {
-                        return (resolve(ret));
-                    } else {
-                        ret = await getTableValue(kvRet3.kv!, key);
-                        return (resolve(ret));
-                    }
-                } catch (err) {
-                    console.log('error when DB Set', err);
-                    resolve(ret);
-                }
-            },
+            //bcDBCreate: async (resolve: any, name: string): Promise<any> => {
+            //    var dbName = `${context.caller}-${name}`;
+            //    try {
+            //        const kvRet = await context
+            //            .storage
+            //            .createKeyValue(dbName);
+            //        if (kvRet.err) {
+            //            resolve(false);
+            //        }
+            //        else {
+            //            resolve(true);
+            //        }
+            //    }
+            //    catch (err) {
+            //        console.log('error when DB create', err);
+            //        resolve(false);
+            //    }
+            //},
+            //bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
+            //    var dbName = `${context.caller}-${name}`;
+            //    try {
+            //        const kvRet = await context
+            //            .storage
+            //            .getReadWritableKeyValue(dbName);
+            //        if (kvRet.err) {
+            //            resolve(false);
+            //        }
+            //        else {
+            //            kvRet.kv!.set(key, value).then(ret => {
+            //                if (ret.err) {
+            //                    resolve(false);
+            //                }
+            //                else {
+            //                    resolve(true);
+            //                }
+            //            });
+            //        }
+            //    }
+            //    catch (err) {
+            //        console.log('error when DB Set', err);
+            //        resolve(false);
+            //    }
+            //},
         };
 
         let actionCode = `
@@ -428,27 +337,27 @@ export function registerHandler(handler: ValueHandler) {
         // context.cost(context.fee);
         context.cost(SYSTEM_TX_FEE_BN);
 
-        // console.log('Yang-- received createBancorToken');
+        console.log('Yang-- received createBancorToken');
         console.log(params);
 
         // 参数检查
         if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-            // console.log('Yang-- quit becasue tokenid')
+            console.log('Yang-- quit becasue tokenid')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
         if (!params.preBalances) {
-            // console.log('Yang-- quit becasue preBalances')
+            console.log('Yang-- quit becasue preBalances')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
         // supply has been incorporated into preBalances
         if (!params.factor) {
-            // console.log('Yang-- quit becasue factor')
+            console.log('Yang-- quit becasue factor')
             return ErrorCode.RESULT_INVALID_PARAM;
         }
 
-        // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
-        // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
+        console.log('Yang-- Before context.storage.createKeyValueWithDbname');
+        console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
 
         // put tokenid to uppercase
         let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
@@ -753,6 +662,7 @@ export function registerHandler(handler: ValueHandler) {
 
         // Dont know if it will happen ever
         if (S.lt(e)) {
+            console.log('Yang-- ');
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
@@ -771,14 +681,23 @@ export function registerHandler(handler: ValueHandler) {
         console.log('Yang-- supply minus:', e.toString());
 
         let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
-        if (kvRet.err) { return kvRet.err; }
+        if (kvRet.err) {
+            console.log('Yang-- save R failed R=', R.toString());
+            return kvRet.err;
+        }
 
         kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
-        if (kvRet.err) { return kvRet.err; }
+        if (kvRet.err) {
+            console.log('Yang-- save S failed S=', R.toString());
+            return kvRet.err;
+        }
 
         // Update User account
         let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
-        if (kvToken.err) { return kvToken.err; }
+        if (kvToken.err) {
+            console.log('Yang-- open token table failed')
+            return kvToken.err;
+        }
 
         let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
         if (fromTotal.lt(new BigNumber(params.amount))) {
@@ -787,13 +706,17 @@ export function registerHandler(handler: ValueHandler) {
         }
 
         let retToken = await kvToken.kv!.set(context.caller, fromTotal.minus(new BigNumber(params.amount)));
-        if (retToken.err) { return retToken.err; }
+        if (retToken.err) {
+            console.log('Yang-- save token account failed')
+            return retToken.err;
+        }
 
         // Update User's SYS account, directly change account?
         const err = await context.transferTo(context.caller, out);
         if (!err) {
             context.emit('transfer', { from: '0', to: context.caller, value: out });
         } else {
+            console.log('Yang-- send sys to user failed');
             return err;
         }
 
@@ -837,19 +760,8 @@ export function registerHandler(handler: ValueHandler) {
         return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
-    // Add getBancorTokenNonliquidity,
-    handler.addViewMethod('getBancorTokenNonliquidity', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        if (!params.tokenid) {
-            return new BigNumber(0);
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
-    });
-
     // Yang Jun 2019-4-10
-    handler.addViewMethod('getBancorTokenParams', async (context: DposViewContext, params: any): Promise<{ F: BigNumber, S: BigNumber, R: BigNumber, N: BigNumber } | number> => {
+    handler.addViewMethod('getBancorTokenParams', async (context: DposViewContext, params: any): Promise<{ F: BigNumber, S: BigNumber, R: BigNumber } | number> => {
 
         // let outputError = { F: new BigNumber(0), S: new BigNumber(0), R: new BigNumber(0) };
         if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
@@ -893,18 +805,7 @@ export function registerHandler(handler: ValueHandler) {
         let Reserve = new BigNumber(retReserve.value);
         // console.log('Yang-- R:', R.toString());
 
-        // get N
-        let kvNonliquidity = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        if (kvNonliquidity.err) {
-            context.logger.error('getbancortokenparams() fail open kvNonliquidity'); return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
-        }
-
-        let retNonliquidity = await kvNonliquidity.kv!.get(tokenIdUpperCase);
-        if (retNonliquidity.err) { return ErrorCode.RESULT_DB_RECORD_EMPTY; }
-
-        let Nonliquidity = new BigNumber(retNonliquidity.value);
-
-        return { F: Factor, S: Supply, R: Reserve, N: Nonliquidity };
+        return { F: Factor, S: Supply, R: Reserve };
     });
 
     handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
