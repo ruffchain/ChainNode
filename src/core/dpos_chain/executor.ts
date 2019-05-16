@@ -14,8 +14,6 @@ export class DposBlockExecutor extends ValueBlockExecutor {
         return this.m_externParams[0].value as IReadableStorage;
     }
 
-    
-
     public async executePostBlockEvent(): Promise<{ err: ErrorCode, receipt?: Receipt }> {
 
         // this.m_logger.info(`Yang Jun: into executor.ts, before calling super BlockNumber: ${this.m_block.number}`)
@@ -52,7 +50,6 @@ export class DposBlockExecutor extends ValueBlockExecutor {
             await denv.checkIfNeedBan(this.m_block.header.timestamp);
 
             let bReSelect = false;
-
 
             if (this.m_block.number % this.m_globalOptions.reSelectionBlocks === 0) {
                 this.m_logger.info('Yang Jun reselectionBlocks triggered')

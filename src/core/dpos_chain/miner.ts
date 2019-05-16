@@ -122,9 +122,9 @@ export class DposMiner extends ValueMiner {
             if (dmr.err) {
                 return ;
             }
-            this.m_logger.info(`calcuted block ${blockHeader.number} creator: ${dmr.miner}`);
+            this.m_logger.info(`calculated block ${blockHeader.number} creator: ${dmr.miner}`);
             if (!dmr.miner) {
-                assert(false, 'calcuted undefined block creator!!');
+                assert(false, 'calculated undefined block creator!!');
                 process.exit(1);
             }
             if (this.m_address === dmr.miner) {

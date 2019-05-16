@@ -229,14 +229,14 @@ export class ViewContext {
         let candidates: string[] = [];
         for (let v of gr.value!) {
             // Yang Jun changded 2019-3-8
-            if ((v.value as number) === BanStatus.NoBan
-                || (v.value as number) === BanStatus.Delay) {
-                candidates.push(v.key);
-            }
-            // original
-            // if ((v.value as number) >= BanStatus.NoBan) {
+            // if ((v.value as number) === BanStatus.NoBan
+            //     || (v.value as number) === BanStatus.Delay) {
             //     candidates.push(v.key);
             // }
+            // original
+            if ((v.value as number) >= BanStatus.NoBan) {
+                candidates.push(v.key);
+            }
             /////////////////////////////////////////////////
         }
 
@@ -302,7 +302,7 @@ export class Context extends ViewContext {
         let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let gvr = await this.getVote();
 
-        //this.m_logger.info(`Yang Jun: into finishElection()`)
+        // this.m_logger.info(`Yang Jun: into finishElection()`)
 
         if (gvr.err) {
             this.m_logger.error(`finishElection, getvote failde,errcode=${gvr.err}`);
@@ -521,36 +521,35 @@ export class Context extends ViewContext {
 
         // 解禁
         let candidateInfo = await kvDPos.hgetall(ViewContext.keyCandidate);
-        //this.m_logger.info(`Yang Jun ${JSON.stringify(candidateInfo)}`)
+        // this.m_logger.info(`Yang Jun ${JSON.stringify(candidateInfo)}`)
 
         for (let c of candidateInfo.value!) {
-            this.m_logger.info(`Yang Jun , c is ${JSON.stringify(c)}`)
+            this.m_logger.info(`Yang Jun , c is ${JSON.stringify(c)}`);
             if ((c.value as number) >= BanStatus.Ban && (c.value as number) <= timestamp) {
-                this.m_logger.info(`Yang Jun , unban  ${JSON.stringify(c)}`)
+                this.m_logger.info(`Yang Jun , unban  ${JSON.stringify(c)}`);
                 await kvDPos.hset(ViewContext.keyCandidate, c.key, BanStatus.NoBan);
             }
         }
     }
 
     async checkIfNeedBan(timestamp: number) {
-        //this.m_logger.info(`Yang Jun check if need to Ban`)
+        // this.m_logger.info(`Yang Jun check if need to Ban`)
         let kvDPos = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
         let minersInfo = await this.getNextMiners();
         if (minersInfo.err) {
             return;
         }
-        //this.m_logger.info(`Yang Jun check creators: ${JSON.stringify(minersInfo.creators)}`)
+        // this.m_logger.info(`Yang Jun check creators: ${JSON.stringify(minersInfo.creators)}`)
         for (let m of minersInfo.creators!) {
 
-            //this.m_logger.info(`Yang Jun loop m is ${m}`)
-
+            // this.m_logger.info(`Yang Jun loop m is ${m}`)
 
             let hr = await kvDPos.hget(ViewContext.keyNewBlockTime, m);
             if (hr.err) {
                 return;
             }
 
-            //this.m_logger.info(`Yang Jun ${m} time:${timestamp} ${hr.value} >=  ${this.m_globalOptions.timeOffsetToLastBlock}`)
+            // this.m_logger.info(`Yang Jun ${m} time:${timestamp} ${hr.value} >=  ${this.m_globalOptions.timeOffsetToLastBlock}`)
 
             // Yang Jun
             // 只要newBlockTime满足就会更新candidates的value,这个地方显然有问题
@@ -559,15 +558,18 @@ export class Context extends ViewContext {
             if (candidateInfo.err) {
                 return;
             }
-            //this.m_logger.info(`candidates.value: ${candidateInfo.value}`)
+            // this.m_logger.info(`candidates.value: ${candidateInfo.value}`)
+            // Yang Jun comment
+            // If it's delayed already, then do nothing
             if ((candidateInfo.value as number) >= BanStatus.Delay) {
                 continue;
             }
             //////////////////////////////////////
 
             if (timestamp - (hr.value! as number) >= this.m_globalOptions.timeOffsetToLastBlock) {
-
-                //this.m_logger.info(`Yang Jun !! Ban ${m}`)
+                // this.m_logger.info(`Yang Jun !! Ban ${m}`)
+                // Yang Jun comment,
+                // Otherwise set it to delay
                 await kvDPos.hset(ViewContext.keyCandidate, m, BanStatus.Delay);
             }
         }
@@ -627,7 +629,8 @@ export class Context extends ViewContext {
                     break;
                 }
             }
-
+            // Yang Jun comment
+            // Can not find it in miner table, so delete it
             if (i === minersInfo.creators!.length) {
                 let her = await kvDPos.hexists(ViewContext.keyNewBlockTime, p.key);
                 if (her.err) {
