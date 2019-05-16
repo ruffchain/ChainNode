@@ -215,6 +215,45 @@ export class ViewContext {
         return { err: ErrorCode.RESULT_OK, vote };
     }
 
+    // Yang Jun
+    // include value into the feedback value
+    async getCandidatesInfo(): Promise<{ err: ErrorCode, candidates?: { address: string, value: string }[] }> {
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let gr = await this.getValidCandidatesInfo();
+        if (gr.err) {
+            return { err: gr.err };
+        }
+
+        let gv = await kvDPos.hgetall(ViewContext.keyVote);
+        if (gv.err) {
+            return { err: gv.err };
+        }
+        let vote = new Map<string, BigNumber>();
+        for (let v of gv.value!) {
+            vote.set(v.key, v.value);
+        }
+        gr.candidates!.sort((a: { address: string, value: string }, b: { address: string, value: string }): number => {
+            if (vote.has(a.address) && vote.has(b.address)) {
+                if (vote.get(a.address)!.eq(vote.get(b.address)!)) {
+                    return 0;
+                }
+                return vote.get(a.address)!.gt(vote.get(b.address)!) ? -1 : 1;
+            }
+
+            if (!vote.has(a.address) && !vote.has(b.address)) {
+                return 0;
+            }
+
+            if (vote.has(a.address)) {
+                return -1;
+            }
+
+            return 1;
+        });
+
+        return { err: ErrorCode.RESULT_OK, candidates: gr.candidates! };
+
+    }
     async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
         let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
         let gr = await this.getValidCandidates();
@@ -270,6 +309,24 @@ export class ViewContext {
                 candidates.push(v.key);
             }
             /////////////////////////////////////////////////
+        }
+
+        return { err: ErrorCode.RESULT_OK, candidates };
+    }
+    // Yang Jun
+    protected async getValidCandidatesInfo(): Promise<{ err: ErrorCode, candidates?: { address: string, value: string }[] }> {
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let gr = await kvDPos.hgetall(ViewContext.keyCandidate);
+
+        if (gr.err) {
+            return { err: gr.err };
+        }
+        let candidates: { address: string, value: string }[] = [];
+        for (let v of gr.value!) {
+            // original
+            if ((v.value as number) >= BanStatus.NoBan) {
+                candidates.push({ address: v.key, value: v.value });
+            }
         }
 
         return { err: ErrorCode.RESULT_OK, candidates };

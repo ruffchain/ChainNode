@@ -159,7 +159,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         let de = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
-        
+
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
             let vr = await de.vote(from, candiates);
             if (vr.err) {
@@ -210,9 +210,10 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             if (gc.err) {
                 throw Error();
             }
-
             return gc.candidates!;
         };
+
+
 
         externalContext.getMiners = async (): Promise<string[]> => {
             let gm = await de.getNextMiners();
@@ -266,6 +267,16 @@ export class DposChain extends ValueChain implements IChainStateStorage {
                 throw Error();
             }
 
+            return gc.candidates!;
+        };
+
+        // Yang Jun
+        // Add a new API for candidates information with 
+        externalContext.getCandidatesInfo = async (): Promise<{ address: string, value: string }[]> => {
+            let gc = await de.getCandidatesInfo();
+            if (gc.err) {
+                throw Error();
+            }
             return gc.candidates!;
         };
 
