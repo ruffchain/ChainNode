@@ -6,6 +6,7 @@ export const BANCOR_TOKEN_PRECISION = 12;
 export const MAX_QUERY_NUM = 21;
 
 export const SYS_TOKEN = 'SYS';
+export const SVT_TOKEN = 'SVT';
 const TOKEN_MIN_LEN = 3;
 const TOKEN_MAX_LEN = 12;
 
@@ -47,7 +48,7 @@ export function bCheckTokenid(tokenid: string) {
     return false;
   }
 
-  if (str === SYS_TOKEN) {
+  if (str === SYS_TOKEN || str === SVT_TOKEN) {
     return false;
   }
   // 1st not number,
