@@ -182,6 +182,38 @@ export class ViewContext {
         }
         return { err: ErrorCode.RESULT_OK, vote };
     }
+    // Yang Jun added
+    // return vote nodes, who's not banned 
+    async getModifiedVote(): Promise<{ err: ErrorCode, vote?: Map<string, BigNumber> }> {
+        let kvCurDPOS = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let gr = await kvCurDPOS.hgetall(ViewContext.keyVote);
+        if (gr.err) {
+            return { err: gr.err };
+        }
+        let cans = await this.getModifiedValidCandidates();
+        if (cans.err) {
+            return { err: cans.err };
+        }
+
+        cans.candidates!.sort();
+        let isValid: (s: string) => boolean = (s: string): boolean => {
+            for (let c of cans.candidates!) {
+                if (c === s) {
+                    return true;
+                } else if (c > s) {
+                    return false;
+                }
+            }
+            return false;
+        };
+        let vote = new Map();
+        for (let v of gr.value!) {
+            if (isValid(v.key)) {
+                vote.set(v.key, v.value);
+            }
+        }
+        return { err: ErrorCode.RESULT_OK, vote };
+    }
 
     async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
         let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
@@ -238,6 +270,26 @@ export class ViewContext {
                 candidates.push(v.key);
             }
             /////////////////////////////////////////////////
+        }
+
+        return { err: ErrorCode.RESULT_OK, candidates };
+    }
+
+    // Yang Jun
+    // return only not banned node
+    protected async getModifiedValidCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
+        let kvDPos = (await this.currDatabase.getReadableKeyValue(ViewContext.kvDPOS)).kv!;
+        let gr = await kvDPos.hgetall(ViewContext.keyCandidate);
+        if (gr.err) {
+            return { err: gr.err };
+        }
+        let candidates: string[] = [];
+        for (let v of gr.value!) {
+            // Yang Jun changded 2019-3-8
+            if ((v.value as number) === BanStatus.NoBan
+                || (v.value as number) === BanStatus.Delay) {
+                candidates.push(v.key);
+            }
         }
 
         return { err: ErrorCode.RESULT_OK, candidates };
@@ -300,19 +352,32 @@ export class Context extends ViewContext {
 
     async finishElection(libDatabase: IReadableDatabase, shuffleFactor: string): Promise<{ err: ErrorCode }> {
         let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
-        let gvr = await this.getVote();
 
-        // this.m_logger.info(`Yang Jun: into finishElection()`)
+
+        // let gvr = await this.getVote();
+        // Yang Jun
+        let gvr = await this.getModifiedVote();
+
+
+        this.m_logger.info(`Yang Jun: into finishElection()`)
 
         if (gvr.err) {
             this.m_logger.error(`finishElection, getvote failde,errcode=${gvr.err}`);
             return { err: gvr.err };
         }
 
+        // Yang Jun
+        this.m_logger.info('Yang Jun - ');
+        console.log(gvr.vote!.keys());
+
+
         let election: Array<{ address: string, vote: BigNumber }> = new Array();
         for (let address of gvr.vote!.keys()) {
             election.push({ address, vote: gvr.vote!.get(address)! });
         }
+        // Yang Jun
+        console.log('length:', election.length);
+
         // 按照投票权益排序
         election.sort((l, r) => {
             if (l.vote.eq(r.vote)) {
@@ -329,7 +394,7 @@ export class Context extends ViewContext {
         if (creators.length === 0) {
             return { err: ErrorCode.RESULT_OK };
         } else {
-            this.m_logger.info(`Yang Jun :maxCreateor: ${this.m_globalOptions.maxCreateor} creators: ${JSON.stringify(creators)}`)
+            this.m_logger.info(`Yang Jun :maxCreateor: ${this.m_globalOptions.maxCreateor} creators: ${JSON.stringify(creators)}`);
         }
 
         let minersInfo = await this.getProposeMiners();
@@ -338,6 +403,11 @@ export class Context extends ViewContext {
             return minersInfo;
         }
 
+        // Yang Jun
+        this.m_logger.info('Yang Jun - creators:');
+        console.log(creators);
+
+        /*
         if (creators.length < this.m_globalOptions.minCreateor) {
             this.m_logger.warn(`finishElection not update propose miners,for new miners count (${creators.length}) less than minCreateor(${this.m_globalOptions.minCreateor})`);
             // 总的个数比最小要求的个数还少也不补
@@ -351,7 +421,7 @@ export class Context extends ViewContext {
             // 每次更新miner的时候，总的个数不能少于上一轮的个数，否则不补
             return { err: ErrorCode.RESULT_OK };
         }
-
+        */
         this._shuffle(shuffleFactor, creators);
         this.m_logger.info(`1st -> finishElection propose miners,${JSON.stringify(creators)}`);
 
@@ -380,6 +450,10 @@ export class Context extends ViewContext {
         if (hr.err) {
             return hr;
         }
+
+        // Yang Jun
+        this.m_logger.info('Yang Jun - proposeminer');
+        console.log(hr.creators);
 
         // 取得不可逆块的proposeMiners,这个和上面的是不一样的
         this.m_logger.info(`2nd -> final finishElection miners,${JSON.stringify(hr.creators!)}`);

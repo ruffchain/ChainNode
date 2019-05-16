@@ -6,12 +6,12 @@
     },
     "global": {
         "minCreateor": 2,
-        "maxCreateor": 7,
-        "reSelectionBlocks": 30,
+        "maxCreateor": 4,
+        "reSelectionBlocks": 20,
         "blockInterval": 10,
-        "timeOffsetToLastBlock": 600,
-        "timeBan": 1800,
-        "unbanBlocks": 180,
+        "timeOffsetToLastBlock": 240,
+        "timeBan": 480,
+        "unbanBlocks": 30,
         "dposVoteMaxProducers": 7,
         "maxBlockIntervalOffset": 1
     }
