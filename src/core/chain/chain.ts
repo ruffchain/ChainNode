@@ -137,6 +137,18 @@ export class Chain extends EventEmitter implements IConsistency {
     public static kvSupply: string = 'supply';
     public static kvNonliquidity: string = 'nonliquidity';
 
+    // Added by Yang Jun 2019-5-17
+    // to summarize the vote result
+    public static dbVote: string = '__vote';
+    public static kvVoteCandidate: string = 'vote';
+
+    // to summarize the SVT token result
+    public static dbSVT: string = '__svt';
+    public static kvSVTDeposit: string = 'deposit';
+    public static kvSVTVote: string = 'vote';
+    public static kvSVTFree: string = 'free';
+
+
     ///////////////////////////////////////////////
 
     public static s_dbFile: string = 'database';
@@ -1495,7 +1507,6 @@ export class Chain extends EventEmitter implements IConsistency {
             return dbr.err;
         }
 
-
         // Added by Yang Jun 2019-2-20
         dbr = await storage.createDatabase(Chain.dbToken);
         if (dbr.err) {
@@ -1503,7 +1514,6 @@ export class Chain extends EventEmitter implements IConsistency {
 
             return dbr.err;
         }
-
 
         dbr = await storage.createDatabase(Chain.dbBancor);
         if (dbr.err) {
@@ -1535,8 +1545,47 @@ export class Chain extends EventEmitter implements IConsistency {
             this.m_logger.error(`miner create genensis block failed for create nonliquidity table to storage failed ${kvHandle.err}`);
             return kvHandle.err;
         }
-        ///////////////////////////////
 
+        // Added by Yang Jun 2019-5-17
+        let dbVote = await storage.createDatabase(Chain.dbVote);
+        if (dbVote.err) {
+            this.m_logger.error(`miner create genensis block failed for create vote table to storage failed ${dbr.err}`);
+
+            return dbVote.err;
+        }
+
+        kvHandle = await dbVote.value!.createKeyValue(Chain.kvVoteCandidate);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create vote#vote table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        let dbSVT = await storage.createDatabase(Chain.dbSVT);
+        if (dbSVT.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt db to storage failed ${dbr.err}`);
+
+            return dbSVT.err;
+        }
+
+        kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTDeposit);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt#deposit table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTVote);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt#vote table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTFree);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt#free table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+
+        ///////////////////////////////
 
         dbr = await storage.createDatabase(Chain.dbSystem);
         if (dbr.err) {

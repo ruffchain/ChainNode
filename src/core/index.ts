@@ -162,6 +162,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
     networkCreator.registerNetwork('dposbft', DposBftNetwork);
 
     let _creator = new ChainCreator({logger, networkCreator});
+    
     _creator.registerChainType('pow', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();

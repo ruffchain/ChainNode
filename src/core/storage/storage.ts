@@ -58,7 +58,6 @@ export type IReadWritableKeyValue = IReadableKeyValue & IWritableKeyValue;
 export interface IReadableDatabase {
     getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
 
-
     // Added by Yang Jun 2019-2-20
     getReadableKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
 

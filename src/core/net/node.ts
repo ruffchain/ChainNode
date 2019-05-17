@@ -14,7 +14,6 @@ import { isNullOrUndefined } from 'util';
 export enum CMD_TYPE {
     version= 0x01,
     versionAck = 0x02,
-
     userCmd = 0x10,
 }
 
