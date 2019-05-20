@@ -206,6 +206,46 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
         }
     }
 
+    // Added by Yang Jun 2019-5-19
+    // Add new API for field 
+    public async hgetallbyfield(field: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+        try {
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE field=?`, field);
+
+            return {
+                err: ErrorCode.RESULT_OK, value: result.map((x) => {
+                    return { name: x.name, field: x.field, value: fromStringifiable(JSON.parse(x.value)) };
+                })
+            };
+        } catch (e) {
+            this.logger.error(`hgetallbyfield ${field} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+
+    }
+
+    public async hgetallbyname(name: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+
+        try {
+            const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE name=?`, name);
+
+            return {
+                err: ErrorCode.RESULT_OK, value: result.map((x) => {
+                    return { name: x.name, field: x.field, value: fromStringifiable(JSON.parse(x.value)) };
+                })
+            };
+        } catch (e) {
+            this.logger.error(`hgetallbyname ${name} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+
+
+
+
+
+    /////////////////////
+
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
         return this.hget(key, index.toString());
     }
@@ -216,7 +256,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             assert(!isNullOrUndefined(index));
             const json = JSON.stringify(toStringifiable(value, true));
             await this.db.run(`REPLACE INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`,
-            key, index.toString(), json);
+                key, index.toString(), json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`lset ${key} ${index} `, e);
@@ -350,7 +390,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
             for (let i = 0; i < value.length; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
                 await this.db.run(`INSERT INTO '${this.fullName}' (name, field, value) \
-                    VALUES (?, ?, ?)`, key, len!+i,json);
+                    VALUES (?, ?, ?)`, key, len! + i, json);
             }
 
             return { err: ErrorCode.RESULT_OK };
@@ -371,7 +411,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             } else {
                 const { err: err2, value } = await this.lindex(key, len! - 1);
-                await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, len!-1);
+                await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, len! - 1);
                 return { err: ErrorCode.RESULT_OK, value };
             }
         } catch (e) {
@@ -419,7 +459,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 for (let i = index + 1; i < len!; i++) {
                     //sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
                     // console.log({ sql });
-                    await this.db.run( `UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =?`, key, i);
+                    await this.db.run(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =?`, key, i);
                 }
 
                 return { err: ErrorCode.RESULT_OK, value };

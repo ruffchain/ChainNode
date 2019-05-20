@@ -1,15 +1,15 @@
 import { BigNumber } from 'bignumber.js';
 import { ErrorCode } from '../error_code';
 const assert = require('assert');
-import {isValidAddress} from '../address';
+import { isValidAddress } from '../address';
 
 import { Storage } from '../storage';
-import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor, ChainContructOptions, BlockExecutorExternParam} from '../chain';
-import { ValueBlockHeader} from './block';
+import { TransactionContext, EventContext, ViewContext, ChainInstanceOptions, ChainGlobalOptions, Chain, Block, BlockHeader, IReadableStorage, BlockExecutor, ViewExecutor, ChainContructOptions, BlockExecutorExternParam } from '../chain';
+import { ValueBlockHeader } from './block';
 import { ValueTransaction, ValueReceipt } from './transaction';
-import { ValueBlockExecutor} from './executor';
+import { ValueBlockExecutor } from './executor';
 import * as ValueContext from './context';
-import {ValuePendingTransactions} from './pending';
+import { ValuePendingTransactions } from './pending';
 
 export type ValueTransactionContext = {
     value: BigNumber;
@@ -36,7 +36,7 @@ export class ValueChain extends Chain {
         super(options);
     }
 
-    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{err: ErrorCode, executor?: BlockExecutor}> {
+    protected async _newBlockExecutor(block: Block, storage: Storage, externParams: BlockExecutorExternParam[]): Promise<{ err: ErrorCode, executor?: BlockExecutor }> {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.Context(kvBalance);
         let externContext = Object.create(null);
@@ -47,18 +47,18 @@ export class ValueChain extends Chain {
             return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
         let executor = new ValueBlockExecutor({
-            logger: this.logger, 
-            block, 
-            storage, 
-            handler: this.m_handler, 
-            externContext, 
+            logger: this.logger,
+            block,
+            storage,
+            handler: this.m_handler,
+            externContext,
             globalOptions: this.m_globalOptions,
             externParams
         });
-        return {err: ErrorCode.RESULT_OK, executor};
+        return { err: ErrorCode.RESULT_OK, executor };
     }
 
-    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer|string|number|undefined): Promise<{err: ErrorCode, executor?: ViewExecutor}> {
+    public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer | string | number | undefined): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
         let dbSystem = (await storage.getReadableDataBase(Chain.dbSystem)).value!;
         let kvBalance = (await dbSystem.getReadableKeyValue(ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.ViewContext(kvBalance);
@@ -66,14 +66,14 @@ export class ValueChain extends Chain {
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
-        let executor = new ViewExecutor({logger: this.logger, header, storage, method, param, handler: this.m_handler, externContext});
-        return {err: ErrorCode.RESULT_OK, executor};
+        let executor = new ViewExecutor({ logger: this.logger, header, storage, method, param, handler: this.m_handler, externContext });
+        return { err: ErrorCode.RESULT_OK, executor };
     }
 
     protected _getBlockHeaderType(): new () => BlockHeader {
         return ValueBlockHeader;
     }
-    
+
     protected _getTransactionType() {
         return ValueTransaction;
     }
@@ -83,10 +83,10 @@ export class ValueChain extends Chain {
     }
 
     protected _createPending(): ValuePendingTransactions {
-        return new ValuePendingTransactions({ 
-            storageManager: this.m_storageManager!, 
-            logger: this.logger, 
-            overtime: this.m_instanceOptions!.pendingOvertime!, 
+        return new ValuePendingTransactions({
+            storageManager: this.m_storageManager!,
+            logger: this.logger,
+            overtime: this.m_instanceOptions!.pendingOvertime!,
             handler: this.m_handler!,
             maxCount: this.m_instanceOptions!.maxPendingCount!,
             warnCount: this.m_instanceOptions!.warnPendingCount!
@@ -97,7 +97,7 @@ export class ValueChain extends Chain {
         let err = await super.onCreateGenesisBlock(block, storage, genesisOptions);
         if (err) {
             return err;
-        } 
+        }
         let dbr = await storage.getReadWritableDatabase(Chain.dbSystem);
         if (dbr.err) {
             assert(false, `value chain create genesis failed for no system database`);
@@ -108,6 +108,26 @@ export class ValueChain extends Chain {
         if (gkvr.err) {
             return gkvr.err;
         }
+
+        // Added by Yang Jun 2019-5-20
+        let dbSVT = await storage.getReadWritableDatabase(Chain.dbSVT);
+        if (dbSVT.err) {
+            assert(false, `value chain create genesis failed for no svt database`);
+            return dbSVT.err;
+        }
+        const dbSVTInstance = dbSVT.value!;
+        let gkvSVT = await dbSVTInstance.getReadWritableKeyValue(Chain.kvSVTDeposit);
+        if (gkvSVT.err) {
+            return gkvSVT.err;
+        }
+
+        // If balance of candidates is lower than 300W, error
+        // get amount value 
+        let DEPOSIT_AMOUNT = this.globalOptions.depositAmount;
+
+        ///////////////////////////////
+
+
         let rpr = await gkvr.kv!.rpush('features', 'value');
         if (rpr.err) {
             return rpr.err;
@@ -117,14 +137,29 @@ export class ValueChain extends Chain {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
         (block.header as ValueBlockHeader).coinbase = genesisOptions.coinbase;
+
         let kvr = await dbSystem.createKeyValue(ValueChain.kvBalance);
         // 在这里给用户加钱
         if (genesisOptions && genesisOptions.preBalances) {
             // 这里要给几个账户放钱
             let kvBalance = kvr.kv!;
             for (let index = 0; index < genesisOptions.preBalances.length; index++) {
-                // 按照address和amount预先初始化钱数
-                await kvBalance.set(genesisOptions.preBalances[index].address, new BigNumber(genesisOptions.preBalances[index].amount));
+                // Add by Yang Jun 2019-5-20
+                // if address in Candidates list
+                if (genesisOptions.candidates.indexOf(genesisOptions.preBalances[index].address) !== -1) {
+                    let amount = genesisOptions.preBalances[index].amount;
+                    if (amount < DEPOSIT_AMOUNT) {
+                        throw new Error('Not enough balance for candidates');
+                    }
+                    await kvBalance.set(genesisOptions.preBalances[index].address, new BigNumber(genesisOptions.preBalances[index].amount - DEPOSIT_AMOUNT));
+
+                    // update SVT deposit table
+                    await gkvSVT.kv!.hset(genesisOptions.preBalances[index].address, this.globalOptions.depositPeriod.toString(), DEPOSIT_AMOUNT);
+
+                } else { // else not in Candidates list
+                    // 按照address和amount预先初始化钱数
+                    await kvBalance.set(genesisOptions.preBalances[index].address, new BigNumber(genesisOptions.preBalances[index].amount));
+                }
             }
         }
         return kvr.err;
