@@ -18,14 +18,14 @@ type ByteString = string;
 
 import { ErrorCode } from '../error_code';
 import { toStringifiable, fromStringifiable } from '../serializable';
-import { Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValue, StorageTransaction, JStorageLogger } from '../storage';
+import { Storage, IReadWritableDatabase, IReadableDatabase, StorageTransaction, JStorageLogger, IReadWritableKeyValue } from '../storage';
 import { LoggerInstance } from '../lib/logger_util';
 import { JsonStorage } from '../storage_json/storage';
 import { isUndefined, isArray, isNullOrUndefined } from 'util';
 const digest = require('../lib/digest');
 const { LogShim } = require('../lib/log_shim');
 
-class SqliteStorageKeyValue implements IReadWritableKeyValue {
+export class SqliteStorageKeyValue implements IReadWritableKeyValue {
     protected readonly logger: LoggerInstance;
     constructor(readonly db: sqlite.Database, readonly fullName: string, logger: LoggerInstance) {
         this.logger = new LogShim(logger).bind(`[transaction: ${this.fullName}]`, true).log;
@@ -240,9 +240,15 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
         }
     }
 
-
-
-
+    public async hdelallbyname(name: string): Promise<{ err: ErrorCode }> {
+        try {
+            await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=?`, name);
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`hdelallbyname ${name} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
 
     /////////////////////
 
@@ -457,7 +463,7 @@ class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 // console.log('lremove', { sql });
                 await this.db.run(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`, key, index);
                 for (let i = index + 1; i < len!; i++) {
-                    //sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
+                    // sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
                     // console.log({ sql });
                     await this.db.run(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =?`, key, i);
                 }
@@ -537,7 +543,7 @@ class SqliteReadableDatabase implements IReadableDatabase {
     }
 }
 
-class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IReadWritableDatabase {
+export class SqliteReadWritableDatabase extends SqliteReadableDatabase implements IReadWritableDatabase {
     public async createKeyValue(name: string) {
         let err = Storage.checkTableName(name);
         if (err) {

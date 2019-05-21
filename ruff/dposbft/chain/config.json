@@ -7,7 +7,7 @@
     "global": {
         "minCreateor": 2,
         "maxCreateor": 4,
-        "reSelectionBlocks": 20,  
+        "reSelectionBlocks": 20,
         "blockInterval": 10,
         "timeOffsetToLastBlock": 240,
         "timeBan": 480,
@@ -16,6 +16,6 @@
         "maxBlockIntervalOffset": 1,
         "depositAmount": 3000000,
         "depositPeriod": 90,
-        "mortgagePeriod": 3
+        "mortgagePeriod": 30
     }
 }

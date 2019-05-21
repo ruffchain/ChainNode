@@ -10,6 +10,8 @@ import { DposChainTipState } from './chain_state';
 import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from './chain_state_manager';
 import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
+import { SVTContext } from './svt';
+import { SqliteReadWritableDatabase } from '../storage_sqlite/storage';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -158,6 +160,28 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return { err: dbr.err };
         }
 
+        // Add by Yang Jun 2019-5-21
+        let dbvote = await storage.getReadWritableDatabase(Chain.dbVote);
+        if (dbvote.err) {
+            return { err: dbvote.err };
+        }
+
+        let dbsvt = await storage.getReadWritableDatabase(Chain.dbSVT);
+        if (dbsvt.err) {
+            return { err: dbsvt.err };
+        }
+
+        let dsvt = new SVTContext({
+            svtDatabase: dbsvt.value! as SqliteReadWritableDatabase,
+            voteDatabase: dbvote.value! as SqliteReadWritableDatabase,
+            systemDatabase: dbr.value! as SqliteReadWritableDatabase,
+            logger: this.m_logger,
+            chain: this
+        });
+
+        ////////////////////////////
+
+
         let de = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
 
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
@@ -168,7 +192,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return vr.returnCode!;
         };
         externalContext.mortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
-            let mr = await de.mortgage(from, amount);
+            // let mr = await de.mortgage(from, amount);
+            let mr = await dsvt.mortgage(from, amount);
             if (mr.err) {
                 throw new Error();
             }
@@ -176,7 +201,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return mr.returnCode!;
         };
         externalContext.unmortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
-            let mr = await de.unmortgage(from, amount);
+            // let mr = await de.unmortgage(from, amount);
+            let mr = await dsvt.unmortgage(from, amount);
             if (mr.err) {
                 throw new Error();
             }
@@ -238,6 +264,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     }
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer | string | number | undefined): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
+        // Add by Yang Jun 2019-5-21
+
+
         let nvex = await super.newViewExecutor(header, storage, method, param);
 
         let externalContext = nvex.executor!.externContext;

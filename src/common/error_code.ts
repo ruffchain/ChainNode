@@ -102,6 +102,8 @@ export enum ErrorCode {
 
     RESULT_CHECK_ADDRESS_INVALID = 20001,
     RESULT_CHECK_TOKENID_EXIST = 20002,
+
+    RESULT_TIME_NOT_DUE = 21000,
 }
 
 export function stringifyErrorCode(err: ErrorCode): string {

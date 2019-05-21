@@ -8,6 +8,7 @@ import { Storage, IReadWritableDatabase, IReadableDatabase, IReadWritableKeyValu
 import { LoggerInstance } from '../lib/logger_util';
 import * as digest from '../lib/digest';
 import { isNullOrUndefined, isUndefined } from 'util';
+import { IReadableKeyValue } from '../chain';
 
 // Added by Yang Jun 2019-2-21
 type ByteString = string;
@@ -387,7 +388,7 @@ class JsonReadableDatabase implements IReadableDatabase {
         return r;
     }
 
-    public async getReadableKeyValue(name: string) {
+    public async getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }> {
         const err = Storage.checkTableName(name);
         if (err) {
             return { err };
@@ -397,7 +398,7 @@ class JsonReadableDatabase implements IReadableDatabase {
     }
 
     // Added by Yang Jun 2019-2-20, no use here, for compiling error coverage
-    public async getReadableKeyValueWithDbname(dbname: string, name: string) {
+    public async getReadableKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }> {
         const err = Storage.checkTableName(name);
         if (err) {
             return { err };
@@ -561,7 +562,7 @@ export class JsonStorage extends Storage {
         }
     }
 
-    public async getReadableDataBase(name: string) {
+    public async getReadableDataBase(name: string): Promise<{ err: ErrorCode, value?: JsonReadableDatabase }> {
         let err = Storage.checkDataBaseName(name);
         if (err) {
             return { err };

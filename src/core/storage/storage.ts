@@ -22,6 +22,8 @@ export interface IReadableKeyValue {
     hvalues(key: string): Promise<{ err: ErrorCode, value?: any[] }>;
     hgetall(key: string): Promise<{ err: ErrorCode; value?: { key: string, value: any }[]; }>;
 
+
+
     // array
     lindex(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
     llen(key: string): Promise<{ err: ErrorCode, value?: number }>;
@@ -52,8 +54,15 @@ export interface IWritableKeyValue {
     linsert(key: string, index: number, value: any): Promise<{ err: ErrorCode }>;
     lremove(key: string, index: number): Promise<{ err: ErrorCode, value?: any }>;
 }
-
+// export interface IReadableKeyValueAppend {
+//     // Add by Yang Jun 2019-5-20
+//     hgetallbyfield(field: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }>;
+//     hgetallbyname(name: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }>;
+// }
 export type IReadWritableKeyValue = IReadableKeyValue & IWritableKeyValue;
+
+// Add by Yang Jun 2019-5-20
+// export type IReadWritableKeyValueAppend = IReadableKeyValue & IWritableKeyValue & IReadableKeyValueAppend;
 
 export interface IReadableDatabase {
     getReadableKeyValue(name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }>;
