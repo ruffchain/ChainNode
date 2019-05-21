@@ -76,12 +76,14 @@ export class SVTContext {
 
       let effectiveAmount: BigNumber = new BigNumber(0);
       for (let voteItem of items) {
-        let stake: BigNumber = voteItem.value!;
-        let hisDueBlock = parseInt(fromStringifiable(voteItem.field));
+        console.log('voteItem:');
+        console.log(voteItem);
+        let stake: BigNumber = new BigNumber(voteItem.value!);
+        let hisDueBlock: number = parseInt(voteItem.field);
         console.log('hisDueBlock:', hisDueBlock);
 
         if (curBlock > hisDueBlock) {
-          effectiveAmount.plus(stake);
+          effectiveAmount = effectiveAmount.plus(stake);
         }
       }
       console.log('effectiveAmount:', effectiveAmount.toString());
@@ -90,12 +92,11 @@ export class SVTContext {
       if (effectiveAmount.lt(amount)) {
         console.log('Yang Jun -- effectiveAmount less than amount');
         return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_TIME_NOT_DUE };
-      } else {
-
       }
+
       let sumAll: BigNumber = amount;
       for (let voteItem of items) {
-        let stake: BigNumber = voteItem.value!;
+        let stake: BigNumber = new BigNumber(voteItem.value!);
         // let hisDueBlock = parseInt(voteItem.field);
         console.log('Yang Jun -- stake:', stake.toString());
 
@@ -104,7 +105,7 @@ export class SVTContext {
           break;
         } else if (stake.lt(sumAll)) {
           await kvSvtVote.hdel(from, voteItem.field);
-          sumAll.minus(stake);
+          sumAll = sumAll.minus(stake);
         } else {
           await kvSvtVote.hdel(from, voteItem.field);
           break;
