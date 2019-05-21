@@ -1,9 +1,9 @@
 import { IReadWritableDatabase } from '../chain';
 import { LoggerInstance } from 'winston';
 import { DposChain } from './chain';
-import { BigNumber, ErrorCode, Chain } from '..';
+import { BigNumber, ErrorCode, Chain, IReadableDatabase } from '..';
 import assert = require('assert');
-import { SqliteStorage, SqliteReadWritableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
+import { SqliteStorage, SqliteReadWritableDatabase, SqliteStorageKeyValue, SqliteReadableDatabase } from '../storage_sqlite/storage';
 // import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 
 // This is used to query SVT, Vote, Dpos table at once
@@ -20,7 +20,7 @@ export type SVTContextOptions = {
   systemDatabase: IReadWritableDatabase,
   logger: LoggerInstance,
   chain: DposChain
-}
+};
 
 export class SVTContext {
   protected m_logger: LoggerInstance;
@@ -129,8 +129,8 @@ export class SVTContext {
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv!;
 
-    kvSvtVote.hset(from, '0', 1000);
-    console.log('write into svt vote');
+    // kvSvtVote.hset(from, '0', 1000);
+    // console.log('write into svt vote');
 
     let stakeInfo = await kvSvtVote.hget(from, dueBlock.toString());
 
@@ -197,4 +197,63 @@ export class SVTContext {
     return ErrorCode.RESULT_OK;
   }
 
+}
+export type SVTViewContextOptions = {
+  svtDatabase: IReadableDatabase,
+  voteDatabase: IReadableDatabase,
+  systemDatabase: IReadableDatabase,
+  logger: LoggerInstance,
+  chain: DposChain
+}
+export class SVTViewContext {
+  protected m_logger: LoggerInstance;
+  protected m_chain: DposChain;
+
+  protected m_svtDatabase: IReadableDatabase;
+  protected m_voteDatabase: IReadableDatabase;
+  protected m_systemDatabase: IReadableDatabase;
+
+  // passin database handler
+  constructor(options: SVTViewContextOptions) {
+    this.m_logger = options.logger;
+    this.m_chain = options.chain;
+
+    this.m_svtDatabase = options.svtDatabase;
+    this.m_voteDatabase = options.voteDatabase;
+    this.m_systemDatabase = options.systemDatabase;
+  }
+
+  public async getStake(address: string): Promise<{ err: ErrorCode, stake?: any }> {
+    console.log('Yang Jun -- into svt::getStake()');
+    let out = Object.create(null);
+
+    let kvSVTDeposit = (await this.m_svtDatabase.getReadableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
+
+    let hdps = await kvSVTDeposit.hgetallbyname(address);
+    if (hdps.err) {
+      return { err: hdps.err };
+    }
+
+    out.deposit = [];
+    for (let p of hdps.value!) {
+      out.deposit.push({ amount: p.value, dueBlock: p.field });
+    }
+
+    let kvSVTVote = (await this.m_svtDatabase.getReadableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
+    // 如果投票者的权益不够，则返回
+    let her = await kvSVTVote.hgetallbyname(address);
+    if (her.err) {
+      return { err: her.err };
+    }
+
+    out.vote = [];
+    for (let p of her.value!) {
+      out.vote.push({ amount: p.value, dueBlock: p.field });
+    }
+
+    console.log('Yang Jun -- getStake()');
+    console.log(out);
+
+    return { err: ErrorCode.RESULT_OK, stake: out };
+  }
 }

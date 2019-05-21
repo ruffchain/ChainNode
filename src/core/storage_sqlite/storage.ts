@@ -523,7 +523,7 @@ class SqliteStorageTransaction implements StorageTransaction {
     }
 }
 
-class SqliteReadableDatabase implements IReadableDatabase {
+export class SqliteReadableDatabase implements IReadableDatabase {
     protected m_db?: sqlite.Database;
     constructor(protected readonly name: string, db: sqlite.Database, protected readonly logger: LoggerInstance) {
         this.m_db = db;

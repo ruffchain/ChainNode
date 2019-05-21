@@ -10,8 +10,8 @@ import { DposChainTipState } from './chain_state';
 import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from './chain_state_manager';
 import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
-import { SVTContext } from './svt';
-import { SqliteReadWritableDatabase } from '../storage_sqlite/storage';
+import { SVTContext, SVTViewContext } from './svt';
+import { SqliteReadWritableDatabase, SqliteReadableDatabase } from '../storage_sqlite/storage';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -224,13 +224,18 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             }
             return gvr.vote!;
         };
-        externalContext.getStake = async (address: string): Promise<BigNumber> => {
-            let gsr = await de.getStake(address);
-            if (gsr.err) {
-                throw new Error();
-            }
-            return gsr.stake!;
-        };
+        // externalContext.getStake = async (address: string): Promise<BigNumber> => {
+        //     let gsr = await de.getStake(address);
+        //     // Add by Yang Jun 2019-5-21
+        //     console.log('Yang Jun --')
+        //     console.log('_newBlockExecutor getStake');
+        //     // let gsr = await dsvt.getStake(address);
+
+        //     if (gsr.err) {
+        //         throw new Error();
+        //     }
+        //     return gsr.stake!;
+        // };
         externalContext.getCandidates = async (): Promise<string[]> => {
             let gc = await de.getCandidates();
             if (gc.err) {
@@ -265,15 +270,35 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
     public async newViewExecutor(header: BlockHeader, storage: IReadableStorage, method: string, param: Buffer | string | number | undefined): Promise<{ err: ErrorCode, executor?: ViewExecutor }> {
         // Add by Yang Jun 2019-5-21
+        let dbvote = await storage.getReadableDataBase(Chain.dbVote);
+        if (dbvote.err) {
+            return { err: dbvote.err };
+        }
 
+        let dbsvt = await storage.getReadableDataBase(Chain.dbSVT);
+        if (dbsvt.err) {
+            return { err: dbsvt.err };
+        }
 
-        let nvex = await super.newViewExecutor(header, storage, method, param);
-
-        let externalContext = nvex.executor!.externContext;
         let dbr = await storage.getReadableDataBase(Chain.dbSystem);
         if (dbr.err) {
             return { err: dbr.err };
         }
+
+        let dsvt = new SVTViewContext({
+            svtDatabase: dbsvt.value!,
+            voteDatabase: dbvote.value!,
+            systemDatabase: dbr.value!,
+            logger: this.m_logger,
+            chain: this
+        });
+
+        ////////////////////////////
+
+        let nvex = await super.newViewExecutor(header, storage, method, param);
+
+        let externalContext = nvex.executor!.externContext;
+
         let de = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger });
 
         externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
@@ -284,7 +309,12 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return gvr.vote!;
         };
         externalContext.getStake = async (address: string): Promise<BigNumber> => {
-            let gsr = await de.getStake(address);
+            // let gsr = await de.getStake(address);
+            // Add by Yang Jun 2019-5-21
+            console.log('Yang Jun --');
+            console.log('newViewExecutor getStake');
+
+            let gsr = await dsvt.getStake(address);
             if (gsr.err) {
                 throw new Error();
             }
