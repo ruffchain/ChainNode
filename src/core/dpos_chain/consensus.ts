@@ -65,7 +65,7 @@ export function onCheckGlobalOptions(globalOptions: any) {
     return true;
 }
 
-enum BanStatus {
+export enum BanStatus {
     NoBan = 0,
     Delay = 1, // 已经达到禁用条件，但是延时生效(产生不可逆块后才生效)
     Ban = 2, // 判断用，value大于等于它就表示已经ban了

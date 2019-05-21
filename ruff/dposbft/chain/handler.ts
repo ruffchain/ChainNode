@@ -1028,7 +1028,7 @@ export function registerHandler(handler: ValueHandler) {
         if (err) {
             return err;
         }
-        return await context.unmortgage(context.caller, new BigNumber(params));
+        return await context.unmortgage(context.caller, new BigNumber(strAmount));
     });
 
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {

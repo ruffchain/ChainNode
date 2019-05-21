@@ -172,9 +172,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         let dsvt = new SVTContext({
-            svtDatabase: dbsvt.value! as SqliteReadWritableDatabase,
-            voteDatabase: dbvote.value! as SqliteReadWritableDatabase,
-            systemDatabase: dbr.value! as SqliteReadWritableDatabase,
+            svtDatabase: dbsvt.value!,
+            voteDatabase: dbvote.value!,
+            systemDatabase: dbr.value!,
             logger: this.m_logger,
             chain: this
         });
@@ -202,6 +202,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
         externalContext.unmortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
             // let mr = await de.unmortgage(from, amount);
+            console.log('Yang Jun -- unmortgage dsvt');
             let mr = await dsvt.unmortgage(from, amount);
             if (mr.err) {
                 throw new Error();
@@ -211,6 +212,15 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
         externalContext.register = async (from: string): Promise<ErrorCode> => {
             let mr = await de.registerToCandidate(from);
+            if (mr.err) {
+                throw new Error();
+            }
+
+            return mr.returnCode!;
+        };
+        // Add by Yang Jun 2019-5-21
+        externalContext.unregister = async (from: string): Promise<ErrorCode> => {
+            let mr = await dsvt.unregister(from);
             if (mr.err) {
                 throw new Error();
             }
