@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -47,8 +47,8 @@ const DB_VALUE_MAX_LEN: number = 512;
 
 export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
-        await context.storage.createKeyValue('bid');
-        await context.storage.createKeyValue('bidInfo');
+        // await context.storage.createKeyValue('bid');
+        // await context.storage.createKeyValue('bidInfo');
         await context.storage.createKeyValue('userCode');
         return ErrorCode.RESULT_OK;
     };
@@ -371,8 +371,8 @@ export function registerHandler(handler: ValueHandler) {
     });
 
 
-
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
+
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         // Added by Yang Jun 2019-3-27
@@ -1014,22 +1014,38 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
-        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
+        console.log('Yang Jun - mortgage, handler.ts');
 
-        return await context.mortgage(context.caller, new BigNumber(strAmount));
+        // if value is differnt from params
+        if (!context.value.eq(new BigNumber(params))) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+
+        let strAmount = strAmountPrecision(context.value.toString(), SYS_MORTGAGE_PRECISION);
+
+        let bnAmount = new BigNumber(strAmount);
+
+        let balance: BigNumber = await context.getBalance(context.caller);
+        if (balance.lt(bnAmount)) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+
+        return await context.mortgage(context.caller, bnAmount);
     });
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
-        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
-        let err = await context.transferTo(context.caller, new BigNumber(strAmount));
-        if (err) {
-            return err;
+        // context.cost(context.fee); no Fee needed for mortgage
+        // context.cost(SYSTEM_TX_FEE_BN);
+        console.log('Yang Jun - unmortgage, handler.ts');
+        let strAmount = strAmountPrecision(params, SYS_MORTGAGE_PRECISION);
+
+        console.log('amount:', strAmount);
+        let bnAmount = new BigNumber(strAmount);
+        let hret = await context.unmortgage(context.caller, bnAmount);
+        if (hret) {
+            return hret;
         }
-        return await context.unmortgage(context.caller, new BigNumber(strAmount));
+        return context.transferTo(context.caller, bnAmount);
     });
 
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {

@@ -1,5 +1,6 @@
 import BigNumber from 'bignumber.js';
 
+export const SYS_MORTGAGE_PRECISION = 0;
 export const SYS_TOKEN_PRECISION = 9;
 export const NORMAL_TOKEN_PRECISION = 9;
 export const BANCOR_TOKEN_PRECISION = 12;
