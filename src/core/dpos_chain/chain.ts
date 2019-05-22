@@ -185,7 +185,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         let de = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
 
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
-            let vr = await de.vote(from, candiates);
+            // let vr = await de.vote(from, candiates);
+            let vr = await dsvt.vote(from, candiates);
             if (vr.err) {
                 throw new Error();
             }

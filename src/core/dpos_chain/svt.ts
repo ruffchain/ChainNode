@@ -10,10 +10,7 @@ import { BanStatus } from './consensus';
 // This is used to query SVT, Vote, Dpos table at once
 // Added by Yang Jun 2019-5-20
 
-export function computeDueBlock(curBlock: number, blockInterval: number, mortgageBlock: number): number {
-  let sixHours = 0.1 * 3600 / blockInterval;
-  return (Math.round(curBlock / sixHours) + 1) * sixHours + mortgageBlock;
-}
+
 
 export type SVTContextOptions = {
   svtDatabase: IReadWritableDatabase,
@@ -50,6 +47,50 @@ export class SVTContext {
 
   public static kvDpos = 'dpos';
   public static kvDposVote = 'vote';
+
+  public static INTERVAL_IN_HOURS: number = 0.1;
+
+  // public static computeDueBlock(curBlock: number, blockInterval: number, mortgageBlock: number): number {
+  //   let sixHours = 0.1 * 3600 / blockInterval;
+  //   return (Math.round(curBlock / sixHours) + 1) * sixHours + mortgageBlock;
+  // }
+
+  public static removeDuplicate(s: string[]): string[] {
+    let s1 = [];
+    let bit: Map<string, number> = new Map();
+    for (let v of s) {
+      if (!bit.has(v)) {
+        s1.push(v);
+        bit.set(v, 1);
+      }
+    }
+    return s1;
+  }
+  public static bIncorporate(realCandidates: string[], candidates: string[]): boolean {
+    for (let p of candidates) {
+      if (realCandidates.indexOf(p) === -1) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private nGetCurBlock(): number {
+    return this.m_chain.tipBlockHeader!.number;
+  }
+  private nGetCurDueBlock(delay: number): number {
+    let BLOCK_INTERVAL = this.m_chain.globalOptions.blockInterval;
+
+    let intervals = SVTContext.INTERVAL_IN_HOURS * 3600 / BLOCK_INTERVAL;
+    return (Math.round(this.nGetCurBlock() / intervals) + 1) * intervals + delay;
+
+  }
+  private nGetCurMortgageDueBlock(): number {
+    return this.nGetCurDueBlock(this.m_chain.globalOptions.mortgagePeriod);
+  }
+  private nGetCurDepositDueBlock(): number {
+    return this.nGetCurDueBlock(this.m_chain.globalOptions.depositPeriod);
+  }
 
   // Add by Yang Jun 2019-5-21
   async unmortgage(from: string, amount: BigNumber): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
@@ -122,20 +163,14 @@ export class SVTContext {
   async mortgage(from: string, amount: BigNumber): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     assert(amount.gt(0), 'amount must positive');
 
-    let curBlock = this.m_chain.tipBlockHeader!.number;
-    let UNMORTGAGE_PERIOD = this.m_chain.globalOptions.mortgagePeriod;
-    let BLOCK_INTERVAL = this.m_chain.globalOptions.blockInterval;
-
     console.log('Yang Jun -- mortgage');
-    console.log('curBlock:', curBlock, ' unortgage period:', UNMORTGAGE_PERIOD);
+    console.log('curBlock:', this.nGetCurBlock());
 
-    let dueBlock = computeDueBlock(curBlock, BLOCK_INTERVAL, UNMORTGAGE_PERIOD);
+    let dueBlock = this.nGetCurMortgageDueBlock();
+
     console.log('dueBlock:', dueBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv!;
-
-    // kvSvtVote.hset(from, '0', 1000);
-    // console.log('write into svt vote');
 
     let stakeInfo = await kvSvtVote.hget(from, dueBlock.toString());
 
@@ -232,14 +267,10 @@ export class SVTContext {
     await kvDPos.hset('candidate', from, BanStatus.NoBan);
 
     // 在SVT-depoist里面添加, 不再检测是否存在
-    let curBlock = this.m_chain.tipBlockHeader!.number;
-    let UNMORTGAGE_PERIOD = this.m_chain.globalOptions.depositPeriod;
-    let BLOCK_INTERVAL = this.m_chain.globalOptions.blockInterval;
-
     console.log('Yang Jun -- register');
-    console.log('curBlock:', curBlock, ' unortgage period:', UNMORTGAGE_PERIOD);
+    console.log('curBlock:', this.nGetCurBlock());
 
-    let dueBlock = computeDueBlock(curBlock, BLOCK_INTERVAL, UNMORTGAGE_PERIOD);
+    let dueBlock = this.nGetCurDepositDueBlock();
     console.log('dueBlock:', dueBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv!;
@@ -290,6 +321,178 @@ export class SVTContext {
     await this._updatevotee(from);
 
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
+  }
+  protected async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
+    let kvDPos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
+    let gr = await kvDPos.hgetallbyname('candidate');
+    if (gr.err) {
+      return { err: gr.err };
+    }
+    let candidates: string[] = [];
+    for (let v of gr.value!) {
+      candidates.push(v.field);
+    }
+
+    return { err: ErrorCode.RESULT_OK, candidates: candidates! };
+  }
+  private async updateVoteToDpos(from: string, bOperation: boolean): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
+    let kvDposVote = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDposVote)).kv! as SqliteStorageKeyValue;
+
+    let kvvote = await kvVoteVote.hgetallbyname(from);
+    if (kvvote.err) {
+      return { err: kvvote.err };
+    }
+
+    let items = kvvote.value!;
+    for (let item of items) {
+      // delete every vote from dpos-vote table
+      let votee = item.field; // address
+      let amountVote = item.value;
+      let hvalue = await kvDposVote.hget(SVTContext.kvDposVote, votee);
+      if (hvalue.err) {
+        return { err: hvalue.err };
+      }
+      let amount: BigNumber = hvalue.value!;
+      console.log('updateVote: old  ', amount.toString());
+
+      if (bOperation === true) {
+        amount = amount.plus(amountVote);
+      } else {
+        amount = amount.minus(amountVote);
+      }
+
+      console.log('updateVote: new  ', amount.toString());
+
+      let hret;
+      if (amount.eq(0)) {
+        hret = await kvDposVote.hdel(SVTContext.kvDposVote, votee);
+      } else {
+        hret = await kvDposVote.hset(SVTContext.kvDposVote, votee, amount);
+      }
+
+      if (hret.err) {
+        return { err: hret.err };
+      }
+
+    }
+    return { err: ErrorCode.RESULT_OK };
+  }
+  private async checkCandidateToDpos(candidates: string[]): Promise<{ err: ErrorCode, value?: boolean }> {
+    console.log('Yang Jun -- checkCandidateToDpos');
+    let hcand = await this.getCandidates();
+    if (hcand.err) {
+      return { err: ErrorCode.RESULT_NOT_FOUND };
+    }
+    let alreadyCandidates = hcand.candidates;
+    console.log('Yang Jun -- alreadycandidates')
+    console.log(alreadyCandidates);
+
+    if (!SVTContext.bIncorporate(alreadyCandidates!, candidates)) {
+      console.log('Some candidates are Not within alreadycandidates');
+      return { err: ErrorCode.RESULT_OK, value: false };
+    } else {
+      return { err: ErrorCode.RESULT_OK, value: true };
+    }
+  }
+
+  private async addVoteToDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    console.log('Yang Jun -- addVoteToDpos');
+    return this.updateVoteToDpos(from, true);
+  }
+
+  private async removeVoteFromDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    return this.updateVoteToDpos(from, false);
+  }
+
+  private async removeVoteFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    console.log('Yang Jun -- removeVoteFromVote table');
+    let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
+
+    let hret = await kvVoteVote.hdelallbyname(from);
+    return hret;
+  }
+  private async addVoteToVote(from: string, votee: string[], amount: BigNumber[]): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    console.log('Yang Jun -- addVoteToVote table');
+    let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
+
+    let hret = await kvVoteVote.hmset(from, votee, amount);
+    return hret;
+  }
+
+  private async calcVoteFromMortgage(from: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
+    // calculate svt-vote, voteSum
+    let kvSVTVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
+
+    let kvVote = await kvSVTVote.hgetallbyname(from);
+    if (kvVote.err) {
+      return { err: ErrorCode.RESULT_EXCEPTION };
+    }
+
+    let items: any[] = kvVote.value!;
+    let votSum: BigNumber = new BigNumber(0);
+    for (let p of items) {
+      console.log(p);
+      votSum = votSum.plus(p.value);
+    }
+    console.log('votsum:', votSum.toString());
+
+    return { err: ErrorCode.RESULT_OK, value: votSum };
+  }
+
+  // vote
+  public async vote(from: string, candidates: string[]): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+
+    candidates = SVTContext.removeDuplicate(candidates);
+    assert(candidates.length > 0 && candidates.length <= this.m_chain.globalOptions.dposVoteMaxProducers, 'candidates.length must right');
+
+    // check with dpos-candidates
+    let hcand = await this.checkCandidateToDpos(candidates);
+    if (hcand.err) {
+      return { err: ErrorCode.RESULT_NOT_FOUND, returnCode: ErrorCode.RESULT_NOT_FOUND };
+    }
+    if (hcand.value === false) {
+      return { err: ErrorCode.RESULT_WRONG_ARG, returnCode: ErrorCode.RESULT_WRONG_ARG };
+    }
+
+    // remove vote from dpos
+    let hret = await this.removeVoteFromDpos(from);
+    if (hret.err) {
+      return hret;
+    }
+
+    let hret1 = await this.removeVoteFromVote(from);
+    if (hret1.err) {
+      return hret1;
+    }
+
+    // calculate svt-vote, voteSum
+    let hret2 = await this.calcVoteFromMortgage(from);
+    if (hret2.err) {
+      return { err: hret2.err };
+    }
+
+    console.log('votsum:', hret2.value!.toString());
+    let amount: BigNumber = hret2.value!;
+    let amountAll: BigNumber[] = [];
+
+    candidates.map(() => {
+      amountAll.push(amount);
+    });
+
+    // update to Vote-vote table, 
+    let hret3 = await this.addVoteToVote(from, candidates, amountAll);
+    if (hret3.err) {
+      return hret3;
+    }
+
+    // update dpos vote table
+    // 如何去更新 dpos vote 表格呢？
+    let hret4 = await this.addVoteToDpos(from);
+    if (hret4.err) {
+      return hret4;
+    }
+    return { err: ErrorCode.RESULT_OK };
   }
 }
 /// SVTViewContext definitions
