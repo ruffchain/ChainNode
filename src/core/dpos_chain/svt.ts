@@ -453,7 +453,6 @@ export class SVTContext {
     return hret;
   }
 
-
   private async calcVoteFromMortgage(from: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
     // calculate svt-vote, voteSum
     let kvSVTVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
@@ -505,7 +504,12 @@ export class SVTContext {
 
     console.log('votsum:', hret2.value!.toString());
     let amount: BigNumber = hret2.value!;
+
+    if (amount.eq(0)) {
+      return { err: ErrorCode.RESULT_UNKNOWN_VALUE };
+    }
     let amountAll: BigNumber[] = [];
+
 
     candidates.map(() => {
       amountAll.push(amount);
@@ -528,6 +532,7 @@ export class SVTContext {
 }
 ////////////////////////////////////////////////////////////////////////
 /// SVTViewContext definitions
+///////////////////////////////////////////////////////////////////////
 export type SVTViewContextOptions = {
   svtDatabase: IReadableDatabase,
   voteDatabase: IReadableDatabase,
