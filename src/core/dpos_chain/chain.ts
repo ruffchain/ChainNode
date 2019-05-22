@@ -24,16 +24,16 @@ export type DposTransactionContext = {
     getMiners(): Promise<string[]>;
 } & ValueTransactionContext;
 
-export type DposEventContext = {
-    vote: (from: string, candiates: string) => Promise<ErrorCode>;
-    mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    register: (from: string) => Promise<ErrorCode>;
-    getVote: () => Promise<Map<string, BigNumber>>;
-    getStake: (address: string) => Promise<BigNumber>;
-    getCandidates: () => Promise<string[]>;
-    getMiners(): Promise<string[]>;
-} & ValueEventContext;
+// export type DposEventContext = {
+//     vote: (from: string, candiates: string) => Promise<ErrorCode>;
+//     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
+//     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
+//     register: (from: string) => Promise<ErrorCode>;
+//     getVote: () => Promise<Map<string, BigNumber>>;
+//     getStake: (address: string) => Promise<BigNumber>;
+//     getCandidates: () => Promise<string[]>;
+//     getMiners(): Promise<string[]>;
+// } & ValueEventContext;
 
 export type DposViewContext = {
     getVote: () => Promise<Map<string, BigNumber>>;
