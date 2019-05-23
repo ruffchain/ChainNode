@@ -39,7 +39,7 @@ export type DposTransactionContext = {
 export type DposViewContext = {
     getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
-    getTicket: (address: string) => Promise<BigNumber>;
+    getTicket: (address: string) => Promise<Map<string, BigNumber>>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
 } & ValueViewContext;
@@ -335,6 +335,15 @@ export class DposChain extends ValueChain implements IChainStateStorage {
                 throw new Error();
             }
             return gvr.vote!;
+        };
+
+        // getticket
+        externalContext.getTicket = async (address: string): Promise<Map<string, BigNumber>> => {
+            let gvr = await dsvt.getTicket(address);
+            if (gvr.err) {
+                throw new Error();
+            }
+            return gvr.value!;
         };
 
         // getstake

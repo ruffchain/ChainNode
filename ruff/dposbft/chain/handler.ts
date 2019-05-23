@@ -787,6 +787,11 @@ export function registerHandler(handler: ValueHandler) {
         let v: Map<string, BigNumber> = await context.getVote();
         return MapToObject(v);
     });
+    // Added by Yang Jun 2019-5-22
+    handler.addViewMethod('getTicket', async (context: DposViewContext, params: any): Promise<any> => {
+        let v: Map<string, BigNumber> = await context.getTicket(params);
+        return MapToObject(v);
+    });
 
     handler.addViewMethod('getStake', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         return await context.getStake(params.address);

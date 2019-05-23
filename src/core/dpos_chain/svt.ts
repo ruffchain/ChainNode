@@ -48,10 +48,6 @@ export class SVTContext {
 
   public static INTERVAL_IN_HOURS: number = 0.1;
 
-  // public static computeDueBlock(curBlock: number, blockInterval: number, mortgageBlock: number): number {
-  //   let sixHours = 0.1 * 3600 / blockInterval;
-  //   return (Math.round(curBlock / sixHours) + 1) * sixHours + mortgageBlock;
-  // }
 
   public static removeDuplicate(s: string[]): string[] {
     let s1 = [];
@@ -156,10 +152,18 @@ export class SVTContext {
       }
     }
 
-    let hret = await this._updatevote(from, (new BigNumber(0)).minus
+    let hret = await this._updatevotevote(from, (new BigNumber(0)).minus
       (amount));
     if (hret) {
       return { err: hret };
+    }
+
+    // update dpos-vote
+    let hret4 = await this._updatedposvote(from, (new BigNumber(0)).minus
+      (amount));
+    if (hret4) {
+      console.log('addVoteToDPos fail: ', hret4);
+      return { err: hret4, returnCode: hret4 };
     }
 
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
@@ -194,7 +198,14 @@ export class SVTContext {
 
     await kvSvtVote.hset(from, dueBlock.toString(), stake.plus(amount));
 
-    let hret = await this._updatevote(from, amount);
+    // update Vote-vote
+    let hret = await this._updatevotevote(from, amount);
+    if (hret) {
+      return { err: hret };
+    }
+
+    // update dpos-vote
+    hret = await this._updatedposvote(from, amount);
     if (hret) {
       return { err: hret };
     }
@@ -216,11 +227,53 @@ export class SVTContext {
     }
     return ErrorCode.RESULT_OK;
   }
-  protected async _updatevote(voter: string, amount: BigNumber): Promise<ErrorCode> {
-    // update Vote table
+  protected async _updatedposvote(voter: string, amount: BigNumber): Promise<ErrorCode> {
+    console.log('_updatedposvote ', voter, ' ', amount);
+
+    let kvDpos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
     let kvVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
-    let kvDPos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
+    let voterInfo = await kvVote.hgetallbyname(voter);
+    if (voterInfo.err === ErrorCode.RESULT_OK) {
+      let producers = voterInfo.value!;
+
+      for (let p of producers) {
+        console.log('Yang Jun -- _updatedposvote');
+        console.log(p);
+
+        let hret = await kvDpos.hexists('vote', p.field);
+
+        if (hret.err) {
+          return hret.err;
+        }
+
+        if (hret.value === true) {
+          let hret1 = await kvDpos.hget('vote', p.field);
+          if (hret1.err) { return hret1.err; }
+
+          let amountNew = hret1.value.plus(amount);
+
+          if (amountNew.eq(0)) {
+            let hret4 = await kvDpos.hdel('vote', p.field);
+            if (hret4.err) { return hret4.err; }
+          } else {
+            let hret3 = await kvDpos.hset('vote', p.field, amountNew);
+            if (hret3.err) { return hret3.err; }
+          }
+        }
+        if (hret.value === false) {
+          let hret2 = await kvDpos.hset('vote', p.field, amount);
+          if (hret2.err) { return hret2.err; }
+        }
+      }
+    }
+    return ErrorCode.RESULT_OK;
+  }
+  protected async _updatevotevote(voter: string, amount: BigNumber): Promise<ErrorCode> {
+    // update Vote table
+    console.log('_updatevotevote ', voter, ' ', amount);
+
+    let kvVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let voterInfo = await kvVote.hgetallbyname(voter);
 
@@ -228,38 +281,42 @@ export class SVTContext {
       let producers = voterInfo.value!;
 
       for (let p of producers) {
-        console.log('Yang Jun -- _updatevote');
+        console.log('Yang Jun -- _updatevotevote');
         console.log(p);
 
         let newvote: BigNumber = p.value.plus(amount);
 
-        let hret = await kvVote.hset(voter, p.field, newvote);
-        if (hret.err) {
-          return hret.err;
+        if (newvote.eq(0)) {
+          let hret1 = await kvVote.hdel(voter, p.field);
+          if (hret1.err) { return hret1.err; }
+        } else {
+          let hret = await kvVote.hset(voter, p.field, newvote);
+          if (hret.err) { return hret.err; }
         }
 
         // 只能添加，不可能减少
-        let voteSum = await kvDPos.hget(SVTContext.kvDposVote, p.field);
+        // let voteSum = await kvDPos.hexists(SVTContext.kvDposVote, p.field);
 
-        if (voteSum.err === ErrorCode.RESULT_OK) {
-          let vote: BigNumber = voteSum.value!.plus(amount);
-          let hret1;
-          if (vote.eq(0)) {
-            hret1 = await kvVote.hdel(SVTContext.kvDposVote, p.field);
-          } else {
-            hret1 = await kvVote.hset(SVTContext.kvDposVote, p.field, vote);
-          }
-          if (hret1.err) {
-            return hret1.err;
-          }
+        // if (voteSum.err !== ErrorCode.RESULT_OK) {
+        //   return voteSum.err;
+        // }
 
-        } else if (voteSum.err === ErrorCode.RESULT_NOT_FOUND) {
-          assert(amount.gt(0), '_updatevote amount must positive');
-          let hret2 = await kvDPos.hset(SVTContext.kvDposVote, p.field, amount);
-          if (hret2.err) {
-            return hret2.err;
-          }
-        }
+        // if (voteSum.value === true) {
+        //   let hvote = await kvDPos.hget(SVTContext.kvDposVote, p.field);
+        //   if (hvote.err) { return hvote.err; }
+        //   let vote = hvote.value!.plus(amount);
+
+        //   let hvote1 = await kvDPos.hset(SVTContext.kvDposVote, p.field, vote);
+        //   if (hvote1.err) {
+        //     return hvote1.err;
+        //   }
+        // }
+        // if (voteSum.value === false) {
+        //   let hvote = await kvDPos.hset(SVTContext.kvDposVote, p.field, newvote);
+        //   if (hvote.err) {
+        //     return hvote.err;
+        //   }
+        // }
       }
     }
     // it does not vote yet
@@ -612,7 +669,6 @@ export class SVTContext {
       return hret3;
     }
 
-
     // update dpos vote table
     // 如何去更新 dpos vote 表格呢？
     let hret4 = await this.addVoteToDpos(from);
@@ -651,17 +707,19 @@ export class SVTViewContext {
     this.m_systemDatabase = options.systemDatabase;
   }
 
-  public async getTicket(address: string): Promise<{ err: ErrorCode, value?: any }> {
+  public async getTicket(address: string): Promise<{ err: ErrorCode, value?: Map<string, BigNumber> }> {
     console.log('Yang Jun -- into getTicket()');
     let kvVoteVote = (await this.m_voteDatabase.getReadableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
-    let out: any = [];
+
     let hret = await kvVoteVote.hgetallbyname(address);
     if (hret.err) {
-      return hret;
+      return { err: hret.err, value: new Map() };
     }
 
+    let out = new Map();
+
     for (let item of hret.value!) {
-      out.push({ candidate: item.field, amount: item.value.toString() });
+      out.set(item.field, item.value);
     }
     return { err: ErrorCode.RESULT_OK, value: out };
   }
