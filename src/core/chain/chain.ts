@@ -141,6 +141,7 @@ export class Chain extends EventEmitter implements IConsistency {
     // to summarize the vote result
     public static dbVote: string = '__vote';
     public static kvVoteCandidate: string = 'vote';
+    public static kvVoteLasttime: string = 'last';
 
     // to summarize the SVT token result
     public static dbSVT: string = '__svt';
@@ -1557,6 +1558,12 @@ export class Chain extends EventEmitter implements IConsistency {
         kvHandle = await dbVote.value!.createKeyValue(Chain.kvVoteCandidate);
         if (kvHandle.err) {
             this.m_logger.error(`miner create genensis block failed for create vote#vote table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+        // Added by Yang Jun 2019-5-22
+        kvHandle = await dbVote.value!.createKeyValue(Chain.kvVoteLasttime);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create vote#last table to storage failed ${kvHandle.err}`);
             return kvHandle.err;
         }
 

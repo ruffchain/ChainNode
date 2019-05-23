@@ -1005,10 +1005,19 @@ export function registerHandler(handler: ValueHandler) {
     });
     //////////////////////////////////////////////////////////////
 
-
+    // api_vote
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        // context.cost(SYSTEM_TX_FEE_BN); cost nothing
+        let objJson: any;
+        try {
+            objJson = JSON.parse(JSON.stringify(params));
+        } catch (e) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        if (!objJson.length || objJson.length <= 0 || objJson.length > configObj.global.dposVoteMaxProducers) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
         return await context.vote(context.caller, params);
     });
 
