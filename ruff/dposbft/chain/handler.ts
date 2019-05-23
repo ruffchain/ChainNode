@@ -27,10 +27,9 @@ export interface IfConfigGlobal {
         mortgagePeriod: number;
     };
 }
-
 // Added by Yang Jun 2019-3-27
 let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
-let configObj: any = {};
+let configObj: IfConfigGlobal;
 try {
     configObj = JSON.parse(configBuffer.toString())
 } catch (e) {
@@ -792,7 +791,7 @@ export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getStake', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         return await context.getStake(params.address);
     });
-
+    // api_getcandidates
     handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<string[]> => {
         return await context.getCandidates();
     });
@@ -1047,36 +1046,48 @@ export function registerHandler(handler: ValueHandler) {
         }
         return context.transferTo(context.caller, bnAmount);
     });
-
+    // api_register
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        // context.cost(SYSTEM_TX_FEE_BN);
+        let bnThreshold = new BigNumber(configObj.global.depositAmount);
+        if (!context.value.eq(bnThreshold)) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
         return await context.register(context.caller);
+    });
+    handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        // context.cost(context.fee);
+        // context.cost(SYSTEM_TX_FEE_BN);
+        if (params !== context.caller) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        return await context.unregister(context.caller);
     });
 
     // 拍卖
-    handler.addTX('publish', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        // params.name: 发布的name, name不能相同
-        // context.value: 最低出价, BigNumber
-        // params.duation: 持续时间，单位是block
+    // handler.addTX('publish', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+    //     context.cost(context.fee);
+    //     // params.name: 发布的name, name不能相同
+    //     // context.value: 最低出价, BigNumber
+    //     // params.duation: 持续时间，单位是block
 
-        // 暂时没有对发布方有value的要求，可以加上发布方要扣除一定数量币的功能
-        if (isNullOrUndefined(params.name) || !params.duation || params.duation <= 0 || !(params.lowest instanceof BigNumber)) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
+    //     // 暂时没有对发布方有value的要求，可以加上发布方要扣除一定数量币的功能
+    //     if (isNullOrUndefined(params.name) || !params.duation || params.duation <= 0 || !(params.lowest instanceof BigNumber)) {
+    //         return ErrorCode.RESULT_INVALID_PARAM;
+    //     }
 
-        let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-        let ret = await bidKV.get(params.name);
-        if (ret.err === ErrorCode.RESULT_OK) {
-            return ErrorCode.RESULT_ALREADY_EXIST;
-        }
-        let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
-        await bidInfoKV.hset('biding', params.name, { publisher: context.caller, finish: context.height + params.duation });
-        await bidKV.set(params.name, { caller: context.caller, value: context.value });
-        await bidKV.rpush((context.height + params.duation).toString(), params.name);
-        return ErrorCode.RESULT_OK;
-    });
+    //     let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
+    //     let ret = await bidKV.get(params.name);
+    //     if (ret.err === ErrorCode.RESULT_OK) {
+    //         return ErrorCode.RESULT_ALREADY_EXIST;
+    //     }
+    //     let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
+    //     await bidInfoKV.hset('biding', params.name, { publisher: context.caller, finish: context.height + params.duation });
+    //     await bidKV.set(params.name, { caller: context.caller, value: context.value });
+    //     await bidKV.rpush((context.height + params.duation).toString(), params.name);
+    //     return ErrorCode.RESULT_OK;
+    // });
 
     // 出价
     // handler.addTX('bid', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {

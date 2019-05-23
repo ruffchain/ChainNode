@@ -290,8 +290,12 @@ export class SVTContext {
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv!;
 
     let hret = await kvSvtVote.hset(from, dueBlock.toString(), this.m_chain.globalOptions.depositAmount);
+    if (hret.err) {
+      console.log('hret err:', hret.err);
+      return { err: hret.err, returnCode: hret.err };
+    }
 
-    return hret;
+    return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
   }
   public async unregister(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     // 查看svt-deposit记录，看时间上是否到期
@@ -310,6 +314,8 @@ export class SVTContext {
     if (!her.value) {
       return { err: ErrorCode.RESULT_NOT_FOUND, returnCode: ErrorCode.RESULT_NOT_FOUND };
     }
+    console.log(her.value!);
+
     let item = her.value[0];
     let dueBlock: number = parseInt(item.field);
     if (dueBlock > curBlock) {

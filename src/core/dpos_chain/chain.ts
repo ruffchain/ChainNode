@@ -217,7 +217,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             console.log('Yang Jun -- unmortgage dsvt');
             let mr = await dsvt.unmortgage(from, amount);
             if (mr.err) {
-                throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;
@@ -225,9 +225,11 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
         // register
         externalContext.register = async (from: string): Promise<ErrorCode> => {
-            let mr = await de.registerToCandidate(from);
+            // let mr = await de.registerToCandidate(from);
+            // Add by Yang Jun 
+            let mr = await dsvt.register(from);
             if (mr.err) {
-                throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;
@@ -238,7 +240,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         externalContext.unregister = async (from: string): Promise<ErrorCode> => {
             let mr = await dsvt.unregister(from);
             if (mr.err) {
-                throw new Error();
+                // throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;

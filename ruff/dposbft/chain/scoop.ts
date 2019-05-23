@@ -11,7 +11,9 @@ export const SVT_TOKEN = 'SVT';
 const TOKEN_MIN_LEN = 3;
 const TOKEN_MAX_LEN = 12;
 
-const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g
+const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g;
+
+
 
 function isANumber(args: string) {
   // only contain numbers
