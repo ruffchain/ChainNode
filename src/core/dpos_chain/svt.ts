@@ -419,14 +419,23 @@ export class SVTContext {
     console.log('Yang Jun -- addVoteToDpos');
     return this.updateVoteToDpos(from, true);
   }
-
+  /// remove from 's vote from the list
   private async removeVoteFromDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     return this.updateVoteToDpos(from, false);
   }
   private async removeVoteeFromDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    let kvDposVote = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDposVote)).kv! as SqliteStorageKeyValue;
+    let kvDpos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
 
-    let hret = await kvDposVote.hdel('vote', from);
+    let hfind = await kvDpos.hexists('vote', from);
+
+    if (hfind.err === ErrorCode.RESULT_NOT_FOUND) {
+      return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_NOT_FOUND }
+    }
+    if (hfind.err) {
+      return { err: hfind.err, returnCode: hfind.err };
+    }
+
+    let hret = await kvDpos.hdel('vote', from);
     return hret;
 
   }
@@ -441,7 +450,34 @@ export class SVTContext {
     console.log('Yang Jun -- removeVoteFromVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
+    let hfind = await kvVoteVote.hgetallbyname(from);
+
+    if (hfind.err) {
+      return { err: hfind.err, returnCode: hfind.err };
+    }
+
+    if (!hfind.value) {
+      return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_NOT_FOUND };
+    }
+
     let hret = await kvVoteVote.hdelallbyname(from);
+    return hret;
+  }
+  private async removeVoteeFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+    console.log('Yang Jun -- removeVoteeFromVote table');
+    let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
+
+    let hfind = await kvVoteVote.hgetallbyfield(from);
+
+    if (hfind.err) {
+      return { err: hfind.err, returnCode: hfind.err };
+    }
+
+    if (!hfind.value) {
+      return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_NOT_FOUND };
+    }
+
+    let hret = await kvVoteVote.hdelallbyfield(from);
     return hret;
   }
   private async addVoteToVote(from: string, votee: string[], amount: BigNumber[]): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
@@ -451,13 +487,7 @@ export class SVTContext {
     let hret = await kvVoteVote.hmset(from, votee, amount);
     return hret;
   }
-  private async removeVoteeFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    console.log('Yang Jun -- removeVoteeFromVote table');
-    let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
-    let hret = await kvVoteVote.hdelallbyfield(from);
-    return hret;
-  }
 
   private async calcVoteFromMortgage(from: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
     // calculate svt-vote, voteSum

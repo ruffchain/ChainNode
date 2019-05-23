@@ -15,7 +15,7 @@
         "dposVoteMaxProducers": 7,
         "maxBlockIntervalOffset": 1,
         "depositAmount": 3000000,
-        "depositPeriod": 90,
+        "depositPeriod": 40,
         "mortgagePeriod": 30
     }
 }
