@@ -39,7 +39,7 @@ export type DposTransactionContext = {
 export type DposViewContext = {
     getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
-    getTicket: (address: string) => Promise<Map<string, BigNumber>>;
+    getTicket: (address: string) => Promise<any>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
 } & ValueViewContext;
@@ -340,13 +340,13 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         // getticket
-        externalContext.getTicket = async (address: string): Promise<Map<string, BigNumber>> => {
-            let gvr = await dsvt.getTicket(address);
-            if (gvr.err) {
-                throw new Error();
-            }
-            return gvr.value!;
-        };
+        // externalContext.getTicket = async (address: string): Promise<Map<string, BigNumber>> => {
+        //     let gvr = await dsvt.getTicket(address);
+        //     if (gvr.err) {
+        //         throw new Error();
+        //     }
+        //     return gvr.value!;
+        // };
 
         // getstake
         externalContext.getStake = async (address: string): Promise<BigNumber> => {
@@ -363,12 +363,13 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         // getticket
-        externalContext.getTicket = async (): Promise<Map<string, BigNumber>> => {
-            let gvr = await de.getVote();
+        externalContext.getTicket = async (address: string): Promise<any> => {
+            let gvr = await dsvt.getTicket(address);
             if (gvr.err) {
-                throw new Error();
+                // throw new Error();
+                console.log('Error: getticket()', gvr.err);
             }
-            return gvr.vote!;
+            return gvr.value!;
         };
 
         // getcandidates

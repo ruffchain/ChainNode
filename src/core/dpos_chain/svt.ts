@@ -734,20 +734,57 @@ export class SVTViewContext {
 
     return out;
   }
+  private async getVoteLasttime(from: string): Promise<{ err: ErrorCode, value?: string }> {
+    let kvVoteLasttime = (await this.m_voteDatabase.getReadableKeyValue(SVTContext.kvVoteLasttime)).kv! as SqliteStorageKeyValue;
 
-  public async getTicket(address: string): Promise<{ err: ErrorCode, value?: Map<string, BigNumber> }> {
+    let hret = await kvVoteLasttime.hgetallbyname(from);
+    if (hret.err) {
+      // 读取错误，这个是要退出的!
+      return { err: hret.err, value: '' };
+    }
+
+    this.m_logger.info('Yang Jun - checkVoteLasttime');
+    this.m_logger.info(JSON.stringify(hret.value));
+
+    if (hret.value!.length === 0) {
+      let hret1 = await kvVoteLasttime.hset(from, '0', 0);
+      if (hret1.err) {
+        return { err: hret1.err, value: '' };
+      } else {
+        return { err: ErrorCode.RESULT_OK, value: '0' };
+      }
+    }
+    return { err: ErrorCode.RESULT_OK, value: hret.value![0].field };
+
+  }
+  public async getTicket(address: string): Promise<{ err: ErrorCode, value?: any }> {
     this.m_logger.info('Yang Jun -- into getTicket()');
     let kvVoteVote = (await this.m_voteDatabase.getReadableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteVote.hgetallbyname(address);
     if (hret.err) {
-      return { err: hret.err, value: new Map() };
+      console.log('getTicket wrong getallbyname')
+      return { err: hret.err, value: {} };
     }
 
-    let out = new Map();
+    // get last vote time
+    let hret1 = await this.getVoteLasttime(address);
+    if (hret1.err) {
+
+      return { err: hret1.err, value: {} };
+    }
+    const epochtime = this.m_chain.epochTime * 1000;
+    let nowtime: number = this.nGetTimeFromDueBlock(epochtime, parseInt(hret1.value!));
+
+    let out = Object.create(null);
+    out.timestamp = nowtime;
+    out.amount = 0;
+    out.candidates = [];
 
     for (let item of hret.value!) {
-      out.set(item.field, item.value);
+      // out.set(item.field, item.value);
+      out.candidates.push(item.field);
+      out.amount = item.value;
     }
     return { err: ErrorCode.RESULT_OK, value: out };
   }

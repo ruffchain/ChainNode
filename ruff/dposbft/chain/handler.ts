@@ -789,8 +789,8 @@ export function registerHandler(handler: ValueHandler) {
     });
     // Added by Yang Jun 2019-5-22
     handler.addViewMethod('getTicket', async (context: DposViewContext, params: any): Promise<any> => {
-        let v: Map<string, BigNumber> = await context.getTicket(params);
-        return MapToObject(v);
+        let v: any = await context.getTicket(params);
+        return v;
     });
 
     handler.addViewMethod('getStake', async (context: DposViewContext, params: any): Promise<BigNumber> => {
