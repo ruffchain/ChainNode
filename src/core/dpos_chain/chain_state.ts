@@ -34,8 +34,6 @@ export class DposChainTipState {
     private mIRB: number;
     private mProposedIRB: number;
 
-
-
     protected m_producerInfo: {
         // 各生产者确认的候选不可逆区块number
         lastImpliedIRB: Map<string, DposBlockHeader>,

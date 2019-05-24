@@ -93,6 +93,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return hr.err;
         }
         this.m_epochTime = hr.header!.timestamp;
+        console.log('Yang Jun -- epochtime:', this.m_epochTime);
         return ErrorCode.RESULT_OK;
     }
 
@@ -319,6 +320,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             logger: this.m_logger,
             chain: this
         });
+        console.log('Yang Jun -- epochTime', this.epochTime);
 
         ////////////////////////////
 

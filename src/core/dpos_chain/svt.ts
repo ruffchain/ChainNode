@@ -1,7 +1,7 @@
 import { IReadWritableDatabase } from '../chain';
 import { LoggerInstance } from 'winston';
 import { DposChain } from './chain';
-import { BigNumber, ErrorCode, IReadableDatabase } from '..';
+import { BigNumber, ErrorCode, IReadableDatabase, fromStringifiable } from '..';
 import assert = require('assert');
 import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { BanStatus } from './consensus';
@@ -92,15 +92,15 @@ export class SVTContext {
 
     let curBlock = this.nGetCurBlock();
 
-    console.log('Yang Jun -- unmortgage');
-    console.log('curBlock:', curBlock);
+    this.m_logger.info('Yang Jun -- unmortgage');
+    this.m_logger.info('curBlock:', curBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
 
     // check svt-vote table
     let stakeInfo = await kvSvtVote.hgetallbyname(from);
     if (stakeInfo.err) {
-      console.log('Yang Jun -- hgetallbyname failed:', stakeInfo);
+      this.m_logger.info('Yang Jun -- hgetallbyname failed:', stakeInfo);
       return { err: stakeInfo.err };
     }
 
@@ -110,21 +110,21 @@ export class SVTContext {
 
       let effectiveAmount: BigNumber = new BigNumber(0);
       for (let voteItem of items) {
-        console.log('voteItem:');
-        console.log(voteItem);
+        this.m_logger.info('voteItem:');
+        this.m_logger.info(JSON.stringify(voteItem));
         let stake: BigNumber = new BigNumber(voteItem.value!);
         let hisDueBlock: number = parseInt(voteItem.field);
-        console.log('hisDueBlock:', hisDueBlock);
+        this.m_logger.info('hisDueBlock:', hisDueBlock);
 
         if (curBlock > hisDueBlock) {
           effectiveAmount = effectiveAmount.plus(stake);
         }
       }
-      console.log('effectiveAmount:', effectiveAmount.toString());
-      console.log('amount:', amount.toString());
+      this.m_logger.info('effectiveAmount:', effectiveAmount.toString());
+      this.m_logger.info('amount:', amount.toString());
       // 
       if (effectiveAmount.lt(amount)) {
-        console.log('Yang Jun -- effectiveAmount less than amount');
+        this.m_logger.info('Yang Jun -- effectiveAmount less than amount');
         return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_TIME_NOT_DUE };
       }
 
@@ -132,7 +132,7 @@ export class SVTContext {
       for (let voteItem of items) {
         let stake: BigNumber = new BigNumber(voteItem.value!);
         // let hisDueBlock = parseInt(voteItem.field);
-        console.log('Yang Jun -- stake:', stake.toString());
+        this.m_logger.info('Yang Jun -- stake:', stake.toString());
 
         let hret1;
 
@@ -162,7 +162,7 @@ export class SVTContext {
     let hret4 = await this._updatedposvote(from, (new BigNumber(0)).minus
       (amount));
     if (hret4) {
-      console.log('addVoteToDPos fail: ', hret4);
+      this.m_logger.info('addVoteToDPos fail: ', hret4);
       return { err: hret4, returnCode: hret4 };
     }
 
@@ -173,19 +173,19 @@ export class SVTContext {
   async mortgage(from: string, amount: BigNumber): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     assert(amount.gt(0), 'amount must positive');
 
-    console.log('Yang Jun -- mortgage');
-    console.log('curBlock:', this.nGetCurBlock());
+    this.m_logger.info('Yang Jun -- mortgage');
+    this.m_logger.info('curBlock:', this.nGetCurBlock());
 
     let dueBlock = this.nGetCurMortgageDueBlock();
 
-    console.log('dueBlock:', dueBlock);
+    this.m_logger.info('dueBlock:', dueBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv!;
 
     let stakeInfo = await kvSvtVote.hget(from, dueBlock.toString());
 
     if (stakeInfo.err === ErrorCode.RESULT_EXCEPTION) {
-      console.log('error happened');
+      this.m_logger.info('error happened');
       return { err: ErrorCode.RESULT_EXCEPTION, returnCode: ErrorCode.RESULT_EXCEPTION };
     }
 
@@ -220,15 +220,15 @@ export class SVTContext {
     if (voteeInfo.err === ErrorCode.RESULT_OK) {
       let producers = voteeInfo.value!;
       for (let p of producers) {
-        console.log('Yang Jun -- _updatevotee');
-        console.log(p);
+        this.m_logger.info('Yang Jun -- _updatevotee');
+        this.m_logger.info(JSON.stringify(p));
         await kvVote.hdel(p.name, p.field);
       }
     }
     return ErrorCode.RESULT_OK;
   }
   protected async _updatedposvote(voter: string, amount: BigNumber): Promise<ErrorCode> {
-    console.log('_updatedposvote ', voter, ' ', amount);
+    this.m_logger.info('_updatedposvote ', voter, ' ', amount);
 
     let kvDpos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
     let kvVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
@@ -238,8 +238,8 @@ export class SVTContext {
       let producers = voterInfo.value!;
 
       for (let p of producers) {
-        console.log('Yang Jun -- _updatedposvote');
-        console.log(p);
+        this.m_logger.info('Yang Jun -- _updatedposvote');
+        this.m_logger.info(JSON.stringify(p));
 
         let hret = await kvDpos.hexists('vote', p.field);
 
@@ -271,7 +271,7 @@ export class SVTContext {
   }
   protected async _updatevotevote(voter: string, amount: BigNumber): Promise<ErrorCode> {
     // update Vote table
-    console.log('_updatevotevote ', voter, ' ', amount);
+    this.m_logger.info('_updatevotevote ', voter, ' ', amount);
 
     let kvVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
@@ -281,8 +281,8 @@ export class SVTContext {
       let producers = voterInfo.value!;
 
       for (let p of producers) {
-        console.log('Yang Jun -- _updatevotevote');
-        console.log(p);
+        this.m_logger.info('Yang Jun -- _updatevotevote');
+        this.m_logger.info(JSON.stringify(p));
 
         let newvote: BigNumber = p.value.plus(amount);
 
@@ -339,17 +339,17 @@ export class SVTContext {
     await kvDPos.hset('candidate', from, BanStatus.NoBan);
 
     // 在SVT-depoist里面添加, 不再检测是否存在
-    console.log('Yang Jun -- register');
-    console.log('curBlock:', this.nGetCurBlock());
+    this.m_logger.info('Yang Jun -- register');
+    this.m_logger.info('curBlock:', this.nGetCurBlock());
 
     let dueBlock = this.nGetCurDepositDueBlock();
-    console.log('dueBlock:', dueBlock);
+    this.m_logger.info('dueBlock:', dueBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv!;
 
     let hret = await kvSvtVote.hset(from, dueBlock.toString(), this.m_chain.globalOptions.depositAmount);
     if (hret.err) {
-      console.log('hret err:', hret.err);
+      this.m_logger.info('hret err:', hret.err);
       return { err: hret.err, returnCode: hret.err };
     }
 
@@ -359,8 +359,8 @@ export class SVTContext {
     // 查看svt-deposit记录，看时间上是否到期
     let curBlock: number = this.nGetCurBlock();
 
-    console.log('Yang Jun -- unregister');
-    console.log('curBlock:', curBlock);
+    this.m_logger.info('Yang Jun -- unregister');
+    this.m_logger.info('curBlock:', curBlock);
 
     let kvSVTDeposit = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
 
@@ -372,7 +372,7 @@ export class SVTContext {
     if (!her.value) {
       return { err: ErrorCode.RESULT_NOT_FOUND, returnCode: ErrorCode.RESULT_NOT_FOUND };
     }
-    console.log(her.value!);
+    this.m_logger.info(JSON.stringify(her.value!));
 
     let item = her.value[0];
     let dueBlock: number = parseInt(item.field);
@@ -419,16 +419,16 @@ export class SVTContext {
 
     let kvvote = await kvVoteVote.hgetallbyname(from);
     if (kvvote.err) {
-      console.log('getallbyname from voteVote fail ')
+      this.m_logger.info('getallbyname from voteVote fail ')
       return { err: kvvote.err };
     }
-    console.log(kvvote.value!);
+    this.m_logger.info(JSON.stringify(kvvote.value!));
 
     let items = kvvote.value!;
     for (let item of items) {
       // delete every vote from dpos-vote table
-      console.log('item:');
-      console.log(item);
+      this.m_logger.info('item:');
+      this.m_logger.info(JSON.stringify(item));
       let votee = item.field; // address
       let amountVote = item.value;
 
@@ -447,7 +447,7 @@ export class SVTContext {
         amount = hret1.value!;
       }
 
-      console.log('updateVote: old  ', amount.toString());
+      this.m_logger.info('updateVote: old  ', amount.toString());
 
       if (bOperation === true) {
         amount = amount.plus(amountVote);
@@ -455,7 +455,7 @@ export class SVTContext {
         amount = amount.minus(amountVote);
       }
 
-      console.log('updateVote: new  ', amount.toString());
+      this.m_logger.info('updateVote: new  ', amount.toString());
 
       let hret;
       if (amount.eq(0)) {
@@ -472,17 +472,17 @@ export class SVTContext {
     return { err: ErrorCode.RESULT_OK };
   }
   private async checkCandidateToDpos(candidates: string[]): Promise<{ err: ErrorCode, value?: boolean }> {
-    console.log('Yang Jun -- checkCandidateToDpos');
+    this.m_logger.info('Yang Jun -- checkCandidateToDpos');
     let hcand = await this.getCandidates();
     if (hcand.err) {
       return { err: ErrorCode.RESULT_NOT_FOUND };
     }
     let alreadyCandidates = hcand.candidates;
-    console.log('Yang Jun -- alreadycandidates')
-    console.log(alreadyCandidates);
+    this.m_logger.info('Yang Jun -- alreadycandidates');
+    this.m_logger.info(JSON.stringify(alreadyCandidates));
 
     if (!SVTContext.bIncorporate(alreadyCandidates!, candidates)) {
-      console.log('Some candidates are Not within alreadycandidates');
+      this.m_logger.info('Some candidates are Not within alreadycandidates');
       return { err: ErrorCode.RESULT_OK, value: false };
     } else {
       return { err: ErrorCode.RESULT_OK, value: true };
@@ -490,7 +490,7 @@ export class SVTContext {
   }
 
   private async addVoteToDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    console.log('Yang Jun -- addVoteToDpos');
+    this.m_logger.info('Yang Jun -- addVoteToDpos');
     return this.updateVoteToDpos(from, true);
   }
   /// remove from 's vote from the list
@@ -521,7 +521,7 @@ export class SVTContext {
 
   }
   private async removeVoteFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    console.log('Yang Jun -- removeVoteFromVote table');
+    this.m_logger.info('Yang Jun -- removeVoteFromVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hfind = await kvVoteVote.hgetallbyname(from);
@@ -538,7 +538,7 @@ export class SVTContext {
     return hret;
   }
   private async removeVoteeFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    console.log('Yang Jun -- removeVoteeFromVote table');
+    this.m_logger.info('Yang Jun -- removeVoteeFromVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hfind = await kvVoteVote.hgetallbyfield(from);
@@ -575,8 +575,8 @@ export class SVTContext {
       return { err: hret.err, value: '' };
     }
 
-    console.log('Yang Jun - checkVoteLasttime');
-    console.log(hret.value);
+    this.m_logger.info('Yang Jun - checkVoteLasttime');
+    this.m_logger.info(JSON.stringify(hret.value));
 
     if (hret.value!.length === 0) {
       let hret1 = await kvVoteLasttime.hset(from, '0', 0);
@@ -590,7 +590,7 @@ export class SVTContext {
 
   }
   private async addVoteToVote(from: string, votee: string[], amount: BigNumber[]): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    console.log('Yang Jun -- addVoteToVote table');
+    this.m_logger.info('Yang Jun -- addVoteToVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteVote.hmset(from, votee, amount);
@@ -610,10 +610,10 @@ export class SVTContext {
     let items: any[] = kvVote.value!;
     let votSum: BigNumber = new BigNumber(0);
     for (let p of items) {
-      console.log(p);
+      this.m_logger.info(p);
       votSum = votSum.plus(p.value);
     }
-    console.log('votsum:', votSum.toString());
+    this.m_logger.info('votsum:', votSum.toString());
 
     return { err: ErrorCode.RESULT_OK, value: votSum };
   }
@@ -661,7 +661,7 @@ export class SVTContext {
       return { err: hret2.err };
     }
     // svt-vote summary of mortgage
-    console.log('votsum:', hret2.value!.toString());
+    this.m_logger.info('votsum:', hret2.value!.toString());
     let amount: BigNumber = hret2.value!;
 
     if (amount.eq(0)) {
@@ -674,11 +674,11 @@ export class SVTContext {
     });
 
     // update to Vote-vote table, 
-    console.log(candidates);
-    console.log(amountAll);
+    this.m_logger.info(JSON.stringify(candidates));
+    this.m_logger.info(JSON.stringify(amountAll));
     let hret3 = await this.addVoteToVote(from, candidates, amountAll);
     if (hret3.err) {
-      console.log('addvotevote fail', hret3.err);
+      this.m_logger.info('addvotevote fail', hret3.err);
       return hret3;
     }
 
@@ -686,13 +686,13 @@ export class SVTContext {
     // 如何去更新 dpos vote 表格呢？
     let hret4 = await this.addVoteToDpos(from);
     if (hret4.err) {
-      console.log('addVoteToDPos fail: ', hret4.err);
+      this.m_logger.info('addVoteToDPos fail: ', hret4.err);
       return hret4;
     }
 
     let hret5 = await this.setVoteLasttime(from);
     if (hret5.err) {
-      console.log('setVoteLastTime failed', hret5.err);
+      this.m_logger.info('setVoteLastTime failed', hret5.err);
       return hret5;
     }
 
@@ -727,8 +727,16 @@ export class SVTViewContext {
     this.m_systemDatabase = options.systemDatabase;
   }
 
+  // block to epoch time
+  private nGetTimeFromDueBlock(epochTime: number, block: number): number {
+
+    let out: number = epochTime + block * this.m_chain.globalOptions.blockInterval * 1000;
+
+    return out;
+  }
+
   public async getTicket(address: string): Promise<{ err: ErrorCode, value?: Map<string, BigNumber> }> {
-    console.log('Yang Jun -- into getTicket()');
+    this.m_logger.info('Yang Jun -- into getTicket()');
     let kvVoteVote = (await this.m_voteDatabase.getReadableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteVote.hgetallbyname(address);
@@ -744,23 +752,32 @@ export class SVTViewContext {
     return { err: ErrorCode.RESULT_OK, value: out };
   }
   public async getStake(address: string): Promise<{ err: ErrorCode, stake?: any }> {
-    console.log('Yang Jun -- into svt::getStake()');
+    this.m_logger.info('Yang Jun -- into svt::getStake()');
     let curBlock = this.m_chain.tipBlockHeader!.number;
     let out = Object.create(null);
 
     out.curBlock = curBlock;
+
+    // get epoch_time
+
+    const epochtime = this.m_chain.epochTime * 1000;
+    console.log('epochtime:', epochtime);
 
     // get svt-deposit
     let kvSVTDeposit = (await this.m_svtDatabase.getReadableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
 
     let hdps = await kvSVTDeposit.hgetallbyname(address);
     if (hdps.err) {
+      console.log('search svt-deposit failed:', address);
       return { err: hdps.err };
     }
+    console.log(hdps.value!);
 
     out.deposit = [];
     for (let p of hdps.value!) {
-      out.deposit.push({ amount: p.value, dueBlock: p.field });
+      let dueblock = parseInt(p.field);
+      let duetime = this.nGetTimeFromDueBlock(epochtime, dueblock);
+      out.deposit.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 
     // get svt-vote
@@ -768,15 +785,20 @@ export class SVTViewContext {
     // 如果投票者的权益不够，则返回
     let her = await kvSVTVote.hgetallbyname(address);
     if (her.err) {
+      console.log('search svt-vote faile:', address);
       return { err: her.err };
     }
 
+    console.log(her.value!);
+
     out.vote = [];
     for (let p of her.value!) {
-      out.vote.push({ amount: p.value, dueBlock: p.field });
+      let dueblock = parseInt(p.field);
+      let duetime = this.nGetTimeFromDueBlock(epochtime, dueblock);
+      out.vote.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 
-    console.log('Yang Jun -- getStake()');
+    this.m_logger.info('Yang Jun -- getStake()');
     console.log(out);
 
     return { err: ErrorCode.RESULT_OK, stake: out };
