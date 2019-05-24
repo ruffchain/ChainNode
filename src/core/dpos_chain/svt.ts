@@ -554,11 +554,24 @@ export class SVTContext {
     let hret = await kvVoteVote.hdelallbyfield(from);
     return hret;
   }
-  private async checkVoteLasttime(from: string): Promise<{ err: ErrorCode, value?: string }> {
+  private async setVoteLasttime(from: string): Promise<{ err: ErrorCode, value?: string }> {
+    let curBlock = this.nGetCurBlock();
+    let dueInterval: number = this.m_chain.globalOptions.voteInterval;
+    let kvVoteLasttime = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteLasttime)).kv! as SqliteStorageKeyValue;
+    let dueBlock = curBlock + dueInterval;
+
+    let hret = await kvVoteLasttime.hset(from, dueBlock.toString(), 0);
+    if (hret.err) {
+      return { err: hret.err };
+    }
+    return { err: ErrorCode.RESULT_OK, value: dueBlock.toString() };
+  }
+  private async getVoteLasttime(from: string): Promise<{ err: ErrorCode, value?: string }> {
     let kvVoteLasttime = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteLasttime)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteLasttime.hgetallbyname(from);
     if (hret.err) {
+      // 读取错误，这个是要退出的!
       return { err: hret.err, value: '' };
     }
 
@@ -618,7 +631,7 @@ export class SVTContext {
     }
 
     // check Vote-last to find If not voted yet, 
-    let hreturn = await this.checkVoteLasttime(from);
+    let hreturn = await this.getVoteLasttime(from);
     if (hreturn.err) {
       return { err: ErrorCode.RESULT_READ_RECORD_FAILED, returnCode: ErrorCode.RESULT_READ_RECORD_FAILED };
     }
@@ -676,6 +689,13 @@ export class SVTContext {
       console.log('addVoteToDPos fail: ', hret4.err);
       return hret4;
     }
+
+    let hret5 = await this.setVoteLasttime(from);
+    if (hret5.err) {
+      console.log('setVoteLastTime failed', hret5.err);
+      return hret5;
+    }
+
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
   }
 }
