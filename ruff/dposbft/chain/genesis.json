@@ -29,5 +29,20 @@
 		"1Bbruv7E4nP62ZD4cJqxiGrUD43psK5E2J",
 		"159ueJXY2cBK78pjrsJXwhPGsWfJTJeik1"
 	],
+	"candidatesInfo": [{
+			"address": "1Bbruv7E4nP62ZD4cJqxiGrUD43psK5E2J",
+			"name": "John",
+			"ip": "11.11.11.11:18089",
+			"url": "http://x.yz",
+			"location": "Shanghai"
+		},
+		{
+			"address": "159ueJXY2cBK78pjrsJXwhPGsWfJTJeik1",
+			"name": "Mary",
+			"ip": "12.12.12.12:18089",
+			"url": "http://y.xz",
+			"location": "NewYork"
+		}
+	],
 	"coinbase": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r"
 }

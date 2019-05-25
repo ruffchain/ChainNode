@@ -11,7 +11,7 @@ import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from '.
 import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
-import { SqliteReadWritableDatabase, SqliteReadableDatabase } from '../storage_sqlite/storage';
+import { SqliteReadWritableDatabase, SqliteReadableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
 
 export type DposTransactionContext = {
@@ -58,8 +58,12 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     protected m_stateManager: DposChainTipStateManager | undefined;
     protected m_cacheIRB: LRUCache<string, StorageIrbEntry> = new LRUCache(500);
 
+    // Add by Yang Jun 2019-5-25
+    public m_curMiner: string;
+
     constructor(options: ChainContructOptions) {
         super(options);
+        this.m_curMiner = '';
     }
 
     get epochTime(): number {
@@ -374,8 +378,8 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         // getcandidates
-        externalContext.getCandidates = async (): Promise<string[]> => {
-            let gc = await de.getCandidates();
+        externalContext.getCandidates = async (): Promise<any> => {
+            let gc = await dsvt.getCandidatesInfo();
             if (gc.err) {
                 throw Error();
             }
@@ -640,6 +644,28 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (ir.err) {
             return ir.err;
         }
+
+        // Add by Yang Jun 2019-5-25
+        let dbsvt = await storage.getReadWritableDatabase(Chain.dbSVT);
+        if (dbsvt.err) {
+            return dbsvt.err;
+        }
+
+        let svtInfo = (await dbsvt.value!.getReadWritableKeyValue(Chain.kvSVTInfo)).kv! as SqliteStorageKeyValue;
+
+        for (let p of genesisOptions.candidatesInfo) {
+            let address = p.address;
+
+            let hret = await svtInfo.hset(address, 'name', p.name);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'ip', p.ip);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'url', p.url);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'location', p.location);
+            if (hret.err) { return hret.err; }
+        }
+        //////////////////////////////////////////////
 
         return ErrorCode.RESULT_OK;
     }

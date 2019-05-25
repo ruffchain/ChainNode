@@ -797,7 +797,7 @@ export function registerHandler(handler: ValueHandler) {
         return await context.getStake(params.address);
     });
     // api_getcandidates
-    handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<string[]> => {
+    handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<any> => {
         return await context.getCandidates();
     });
 

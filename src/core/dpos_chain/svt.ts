@@ -324,6 +324,22 @@ export class SVTContext {
     // it does not vote yet
     return ErrorCode.RESULT_OK;
   }
+  protected async _setSvtInfo(from: string, option: IfRegisterOption): Promise<{ err: ErrorCode, value?: any }> {
+    let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv! as SqliteStorageKeyValue;
+
+    let objs = option as any;
+
+    for (let key of Object.keys(objs)) {
+      let hret = await kvSvtInfo.hset(from, key, objs[key]);
+      if (hret.err) {
+        this.m_logger.info('set kvSVTInfo hret err:', hret.err);
+        return { err: hret.err };
+      }
+    }
+
+    return { err: ErrorCode.RESULT_OK };
+  }
+
   // register
   public async register(from: string, option: IfRegisterOption): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     // 如果已经是候选人的话，则退出
@@ -356,11 +372,9 @@ export class SVTContext {
     }
 
     // Save option to SVT-info
-    let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv!;
-    hret = await kvSvtInfo.hset(from, JSON.stringify(option), '0');
-    if (hret.err) {
-      this.m_logger.info('set kvSVTInfo hret err:', hret.err);
-      return { err: hret.err, returnCode: hret.err };
+    let hret2 = await this._setSvtInfo(from, option);
+    if (hret2.err) {
+      return { err: hret2.err, returnCode: hret2.err };
     }
 
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
@@ -409,19 +423,7 @@ export class SVTContext {
 
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
   }
-  protected async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
-    let kvDPos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
-    let gr = await kvDPos.hgetallbyname('candidate');
-    if (gr.err) {
-      return { err: gr.err };
-    }
-    let candidates: string[] = [];
-    for (let v of gr.value!) {
-      candidates.push(v.field);
-    }
 
-    return { err: ErrorCode.RESULT_OK, candidates: candidates! };
-  }
   private async updateVoteToDpos(from: string, bOperation: boolean): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
@@ -480,6 +482,19 @@ export class SVTContext {
 
     }
     return { err: ErrorCode.RESULT_OK };
+  }
+  public async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
+    let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
+    let gr = await kvDPos.hgetallbyname('candidate');
+    if (gr.err) {
+      return { err: gr.err };
+    }
+    let candidates: string[] = [];
+    for (let v of gr.value!) {
+      candidates.push(v.field);
+    }
+
+    return { err: ErrorCode.RESULT_OK, candidates: candidates! };
   }
   private async checkCandidateToDpos(candidates: string[]): Promise<{ err: ErrorCode, value?: boolean }> {
     this.m_logger.info('Yang Jun -- checkCandidateToDpos');
@@ -850,19 +865,96 @@ export class SVTViewContext {
 
     return { err: ErrorCode.RESULT_OK, stake: out };
   }
-  public async getCandidates(): Promise<{ err: ErrorCode, candidates?: string[] }> {
-    let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
-    let gr = await kvDPos.hgetallbyname('candidate');
-    if (gr.err) {
-      return { err: gr.err };
+  protected async _getSvtInfo(from: string): Promise<{ err: ErrorCode, value?: any }> {
+    let kvSvtInfo = (await this.m_svtDatabase.getReadableKeyValue(SVTContext.kvSVTInfo)).kv! as SqliteStorageKeyValue;
+
+    let objs: any = Object.create(null);
+
+    let hret = await kvSvtInfo.hgetallbyname(from);
+
+    if (hret.err) {
+      return { err: hret.err };
     }
-    let candidates: string[] = [];
-    for (let v of gr.value!) {
-      candidates.push(v.field);
+    if (hret.value!.length === 0) { return { err: ErrorCode.RESULT_DB_RECORD_EMPTY }; }
+
+    for (let p of hret.value!) {
+      objs[p.field] = p.value;
+    }
+    return { err: ErrorCode.RESULT_OK, value: objs };
+  }
+  public async getCandidatesInfo(): Promise<{ err: ErrorCode, candidates?: any }> {
+
+    let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
+
+
+    console.log('Yang Jun -- getCandidatesInfo');
+
+    let bVotedOrNot = false;
+    let items;
+    // check vote
+    let gr = await kvDPos.hgetallbyname('vote');
+    if (gr.err) {
+      return { err: gr.err, candidates: {} };
+    }
+    let grc = await kvDPos.hgetallbyname('candidate');
+    if (grc.err) {
+      return { err: grc.err, candidates: {} }
     }
 
-    return { err: ErrorCode.RESULT_OK, candidates: candidates! };
+    if (gr.value!.length === 0) {
+      bVotedOrNot = false;
+      items = grc.value!;
+    } else {
+      bVotedOrNot = true;
+      items = gr.value!;
+    }
+
+    let out = Object.create(null);
+    out.curMiner = this.m_chain.m_curMiner;
+
+    let candidates: any[] = [];
+
+
+    for (let v of items) {
+      let address = v.field;
+
+      let hreturn = await this._getSvtInfo(address);
+      if (hreturn.err) {
+        return { err: hreturn.err, candidates: {} };
+      }
+
+      let option = hreturn.value! as IfRegisterOption;
+      let amount1 =
+        bVotedOrNot ?
+          v.value.toString().substr(1) : '0';
+
+      candidates.push({
+        candidate: v.field,
+        amount: amount1,
+        name: option.name,
+        ip: option.ip,
+        url: option.url,
+        location: option.location
+      });
+    }
+
+    candidates = candidates.sort((a: any, b: any) => {
+      let va = parseInt(a.amount);
+      let vb = parseInt(b.amount);
+
+      if (va > vb) {
+        return 1;
+      } else if (va === vb) {
+        return 0;
+      } else {
+        return -1;
+      }
+    });
+    out.candidates = candidates;
+
+    return { err: ErrorCode.RESULT_OK, candidates: out };
   }
+
   public async getVote(): Promise<{ err: ErrorCode, candidates?: any[] }> {
     let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
     let gr = await kvDPos.hgetallbyname('vote');

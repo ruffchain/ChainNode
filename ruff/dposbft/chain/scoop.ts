@@ -17,6 +17,7 @@ export interface IfRegisterOption {
   name: string;
   ip: string;
   url: string;
+  location: string;
 }
 
 function isANumber(args: string) {
@@ -110,7 +111,8 @@ export function bCheckDBName(dbName: string) {
 export function bCheckRegisterOption(option: IfRegisterOption): boolean {
   if (option.name.length > 20
     || option.ip.length > 50
-    || option.url.length > 50) {
+    || option.url.length > 50
+    || option.location.length > 50) {
     return false;
   }
 
