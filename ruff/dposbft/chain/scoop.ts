@@ -13,7 +13,11 @@ const TOKEN_MAX_LEN = 12;
 
 const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g;
 
-
+export interface IfRegisterOption {
+  name: string;
+  ip: string;
+  url: string;
+}
 
 function isANumber(args: string) {
   // only contain numbers
@@ -99,6 +103,17 @@ export function bCheckDBName(dbName: string) {
   if (str.match(DB_REGPAT) === null) {
     return false;
   }
+
+  return true;
+}
+
+export function bCheckRegisterOption(option: IfRegisterOption): boolean {
+  if (option.name.length > 20
+    || option.ip.length > 50
+    || option.url.length > 50) {
+    return false;
+  }
+
 
   return true;
 }

@@ -148,6 +148,7 @@ export class Chain extends EventEmitter implements IConsistency {
     public static kvSVTDeposit: string = 'deposit';
     public static kvSVTVote: string = 'vote';
     public static kvSVTFree: string = 'free';
+    public static kvSVTInfo: string = 'info';
 
 
     ///////////////////////////////////////////////
@@ -1589,6 +1590,11 @@ export class Chain extends EventEmitter implements IConsistency {
         kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTFree);
         if (kvHandle.err) {
             this.m_logger.error(`miner create genensis block failed for create svt#free table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+        kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTInfo);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt#info table to storage failed ${kvHandle.err}`);
             return kvHandle.err;
         }
 

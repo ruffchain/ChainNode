@@ -12,12 +12,13 @@ import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
 import { SqliteReadWritableDatabase, SqliteReadableDatabase } from '../storage_sqlite/storage';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    register: (from: string) => Promise<ErrorCode>;
+    register: (from: string, params: IfRegisterOption) => Promise<ErrorCode>;
     unregister: (from: string) => Promise<ErrorCode>;
     // getVote: () => Promise<Map<string, BigNumber>>;
     // getStake: (address: string) => Promise<BigNumber>;
@@ -225,10 +226,10 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         // register
-        externalContext.register = async (from: string): Promise<ErrorCode> => {
+        externalContext.register = async (from: string, option: IfRegisterOption): Promise<ErrorCode> => {
             // let mr = await de.registerToCandidate(from);
             // Add by Yang Jun 
-            let mr = await dsvt.register(from);
+            let mr = await dsvt.register(from, option);
             if (mr.err) {
                 return mr.err;
             }

@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -1068,7 +1068,16 @@ export function registerHandler(handler: ValueHandler) {
         if (!context.value.eq(bnThreshold)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
-        return await context.register(context.caller);
+        let paramsNew: any;
+        try {
+            paramsNew = JSON.parse(JSON.stringify(params));
+        } catch (e) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        if (!bCheckRegisterOption(paramsNew)) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        return await context.register(context.caller, paramsNew as IfRegisterOption);
     });
     handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);

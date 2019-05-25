@@ -5,6 +5,7 @@ import { BigNumber, ErrorCode, IReadableDatabase, fromStringifiable } from '..';
 import assert = require('assert');
 import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { BanStatus } from './consensus';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
 
 // This is used to query SVT, Vote, Dpos table at once
 // Added by Yang Jun 2019-5-20
@@ -39,6 +40,7 @@ export class SVTContext {
   public static kvSVTVote = 'vote';
   public static kvSVTDeposit = 'deposit';
   public static kvSVTFree = 'free'; // Use it only when it can be transfered
+  public static kvSVTInfo = 'info';
 
   public static kvVoteVote = 'vote';
   public static kvVoteLasttime = 'last';
@@ -323,7 +325,7 @@ export class SVTContext {
     return ErrorCode.RESULT_OK;
   }
   // register
-  public async register(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
+  public async register(from: string, option: IfRegisterOption): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     // 如果已经是候选人的话，则退出
     let kvDPos = (await this.m_systemDatabase.getReadWritableKeyValue(SVTContext.kvDpos)).kv!;
 
@@ -350,6 +352,14 @@ export class SVTContext {
     let hret = await kvSvtVote.hset(from, dueBlock.toString(), this.m_chain.globalOptions.depositAmount);
     if (hret.err) {
       this.m_logger.info('hret err:', hret.err);
+      return { err: hret.err, returnCode: hret.err };
+    }
+
+    // Save option to SVT-info
+    let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv!;
+    hret = await kvSvtInfo.hset(from, JSON.stringify(option), '0');
+    if (hret.err) {
+      this.m_logger.info('set kvSVTInfo hret err:', hret.err);
       return { err: hret.err, returnCode: hret.err };
     }
 
