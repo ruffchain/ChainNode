@@ -148,12 +148,10 @@ export function registerHandler(handler: ValueHandler) {
 
         let code = rawCode.toString();
         const totalValue = context.value;
+        const receiver = params.to;
         let usedValue = new BigNumber(0);
 
         const sandbox = {
-            // bcLog: function (resolve: any, arg0: string, arg1: string) {
-            //     // console.log(arg0, arg1);
-            // },
             bcLog: (resolve: any, arg0: string, arg1: string) => {
                 // console.log(arg0, arg1);
             },
@@ -192,7 +190,7 @@ export function registerHandler(handler: ValueHandler) {
                         return (resolve(false));
                     }
 
-                    const dbName = `${context.caller}-${name}`;
+                    const dbName = `${receiver}-${name}`;
 
                     const kvRet1 = await context
                         .storage
@@ -219,7 +217,7 @@ export function registerHandler(handler: ValueHandler) {
                         return (resolve(false));
                     }
 
-                    let dbName = `${context.caller}-${name}`;
+                    let dbName = `${receiver}-${name}`;
 
                     const kvRet2 = await context
                         .storage
@@ -254,7 +252,7 @@ export function registerHandler(handler: ValueHandler) {
                         return (resolve(ret));
                     }
 
-                    let dbName = `${context.caller}-${name}`;
+                    let dbName = `${receiver}-${name}`;
 
                     const kvRet3 = await context
                         .storage
@@ -274,7 +272,7 @@ export function registerHandler(handler: ValueHandler) {
         };
 
         let actionCode = `
-            var contract = new Contract("${params.to}","${context.caller}");
+            var contract = new Contract("${receiver}","${context.caller}");
             contract.${params.action}("${params.params}");
         `;
         try {
