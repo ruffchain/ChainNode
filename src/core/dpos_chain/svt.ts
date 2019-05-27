@@ -910,10 +910,11 @@ export class SVTViewContext {
     }
 
     let out = Object.create(null);
-    out.curMiner = this.m_chain.m_curMiner;
+    console.log('old curMiner:', this.m_chain.m_curMiner);
+    out.curMiner = (this.m_chain.m_curMiner);
+    console.log('curMiner', out.curMiner);
 
     let candidates: any[] = [];
-
 
     for (let v of items) {
       let address = v.field;
@@ -926,15 +927,15 @@ export class SVTViewContext {
       let option = hreturn.value! as IfRegisterOption;
       let amount1 =
         bVotedOrNot ?
-          v.value.toString().substr(1) : '0';
+          v.value : 's0';
 
       candidates.push({
-        candidate: v.field,
-        amount: amount1,
-        name: option.name,
-        ip: option.ip,
-        url: option.url,
-        location: option.location
+        candidate: (v.field),
+        vote: (amount1),
+        name: (option.name),
+        ip: (option.ip),
+        url: (option.url),
+        location: (option.location)
       });
     }
 

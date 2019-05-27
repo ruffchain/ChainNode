@@ -1085,6 +1085,9 @@ export function registerHandler(handler: ValueHandler) {
         if (params !== context.caller) {
             return ErrorCode.RESULT_WRONG_ARG;
         }
+        const ret = await context
+            .transferTo(context.caller, new BigNumber(configObj.global.depositAmount));
+
         return await context.unregister(context.caller);
     });
 

@@ -6,6 +6,7 @@ export const NORMAL_TOKEN_PRECISION = 9;
 export const BANCOR_TOKEN_PRECISION = 12;
 export const MAX_QUERY_NUM = 21;
 
+
 export const SYS_TOKEN = 'SYS';
 export const SVT_TOKEN = 'SVT';
 const TOKEN_MIN_LEN = 3;
