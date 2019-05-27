@@ -141,12 +141,14 @@ export class Chain extends EventEmitter implements IConsistency {
     // to summarize the vote result
     public static dbVote: string = '__vote';
     public static kvVoteCandidate: string = 'vote';
+    public static kvVoteLasttime: string = 'last';
 
     // to summarize the SVT token result
     public static dbSVT: string = '__svt';
     public static kvSVTDeposit: string = 'deposit';
     public static kvSVTVote: string = 'vote';
     public static kvSVTFree: string = 'free';
+    public static kvSVTInfo: string = 'info';
 
 
     ///////////////////////////////////////////////
@@ -1559,6 +1561,12 @@ export class Chain extends EventEmitter implements IConsistency {
             this.m_logger.error(`miner create genensis block failed for create vote#vote table to storage failed ${kvHandle.err}`);
             return kvHandle.err;
         }
+        // Added by Yang Jun 2019-5-22
+        kvHandle = await dbVote.value!.createKeyValue(Chain.kvVoteLasttime);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create vote#last table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
 
         let dbSVT = await storage.createDatabase(Chain.dbSVT);
         if (dbSVT.err) {
@@ -1582,6 +1590,11 @@ export class Chain extends EventEmitter implements IConsistency {
         kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTFree);
         if (kvHandle.err) {
             this.m_logger.error(`miner create genensis block failed for create svt#free table to storage failed ${kvHandle.err}`);
+            return kvHandle.err;
+        }
+        kvHandle = await dbSVT.value!.createKeyValue(Chain.kvSVTInfo);
+        if (kvHandle.err) {
+            this.m_logger.error(`miner create genensis block failed for create svt#info table to storage failed ${kvHandle.err}`);
             return kvHandle.err;
         }
 

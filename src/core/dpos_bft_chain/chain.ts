@@ -1,13 +1,13 @@
 import { ErrorCode } from '../error_code';
-import { DposTransactionContext, DposEventContext, DposViewContext, DposChain} from '../dpos_chain';
-import {DposBftChainTipStateManager} from './chain_state_manager';
-import {DposBftBlockHeader} from './block';
-import {BlockHeader} from '../block/block';
-import {ChainTypeOptions} from '../value_chain';
-import {Block, Chain, Storage} from '../value_chain';
+import { DposTransactionContext, DposViewContext, DposChain } from '../dpos_chain';
+import { DposBftChainTipStateManager } from './chain_state_manager';
+import { DposBftBlockHeader } from './block';
+import { BlockHeader } from '../block/block';
+import { ChainTypeOptions } from '../value_chain';
+import { Block, Chain, Storage } from '../value_chain';
 
 export type DposBftTransactionContext = {} & DposTransactionContext;
-export type DposBftEventContext = {} & DposEventContext;
+// export type DposBftEventContext = {} & DposEventContext;
 export type DposBftViewContext = {} & DposViewContext;
 
 export class DposBftChain extends DposChain {

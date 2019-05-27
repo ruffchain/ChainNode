@@ -62,11 +62,15 @@ export class ValueChain extends Chain {
         let dbSystem = (await storage.getReadableDataBase(Chain.dbSystem)).value!;
         let kvBalance = (await dbSystem.getReadableKeyValue(ValueChain.kvBalance)).kv!;
         let ve = new ValueContext.ViewContext(kvBalance);
+
         let externContext = Object.create(null);
+
         externContext.getBalance = (address: string): Promise<BigNumber> => {
             return ve.getBalance(address);
         };
+
         let executor = new ViewExecutor({ logger: this.logger, header, storage, method, param, handler: this.m_handler, externContext });
+
         return { err: ErrorCode.RESULT_OK, executor };
     }
 

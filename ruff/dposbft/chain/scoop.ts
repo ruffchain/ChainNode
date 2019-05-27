@@ -1,16 +1,25 @@
 import BigNumber from 'bignumber.js';
 
+export const SYS_MORTGAGE_PRECISION = 0;
 export const SYS_TOKEN_PRECISION = 9;
 export const NORMAL_TOKEN_PRECISION = 9;
 export const BANCOR_TOKEN_PRECISION = 12;
 export const MAX_QUERY_NUM = 21;
+
 
 export const SYS_TOKEN = 'SYS';
 export const SVT_TOKEN = 'SVT';
 const TOKEN_MIN_LEN = 3;
 const TOKEN_MAX_LEN = 12;
 
-const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g
+const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g;
+
+export interface IfRegisterOption {
+  name: string;
+  ip: string;
+  url: string;
+  location: string;
+}
 
 function isANumber(args: string) {
   // only contain numbers
@@ -96,6 +105,18 @@ export function bCheckDBName(dbName: string) {
   if (str.match(DB_REGPAT) === null) {
     return false;
   }
+
+  return true;
+}
+
+export function bCheckRegisterOption(option: IfRegisterOption): boolean {
+  if (option.name.length > 20
+    || option.ip.length > 50
+    || option.url.length > 50
+    || option.location.length > 50) {
+    return false;
+  }
+
 
   return true;
 }

@@ -276,15 +276,12 @@ export class ViewContext {
                 }
                 return vote.get(a)!.gt(vote.get(b)!) ? -1 : 1;
             }
-
             if (!vote.has(a) && !vote.has(b)) {
                 return 0;
             }
-
             if (vote.has(a)) {
                 return -1;
             }
-
             return 1;
         });
 
@@ -409,7 +406,6 @@ export class Context extends ViewContext {
 
     async finishElection(libDatabase: IReadableDatabase, shuffleFactor: string): Promise<{ err: ErrorCode }> {
         let kvCurDPOS = (await this.currDatabase.getReadWritableKeyValue(ViewContext.kvDPOS)).kv!;
-
 
         // let gvr = await this.getVote();
         // Yang Jun

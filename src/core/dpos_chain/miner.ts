@@ -3,14 +3,14 @@ import * as assert from 'assert';
 import { ErrorCode } from '../error_code';
 import { addressFromSecretKey } from '../address';
 
-import {ValueMiner, Chain, Block, Storage, ValueMinerInstanceOptions, NetworkCreator} from '../value_chain';
+import { ValueMiner, Chain, Block, Storage, ValueMinerInstanceOptions, NetworkCreator } from '../value_chain';
 import { DposBlockHeader } from './block';
-import {DposChain} from './chain';
+import { DposChain } from './chain';
 import * as consensus from './consensus';
 import { LoggerOptions } from '../lib/logger_util';
 import * as Address from '../address';
 
-export type DposMinerInstanceOptions = {secret: Buffer} & ValueMinerInstanceOptions;
+export type DposMinerInstanceOptions = { secret: Buffer } & ValueMinerInstanceOptions;
 
 class InnerChain extends DposChain {
     protected get _ignoreVerify() {
@@ -38,21 +38,21 @@ export class DposMiner extends ValueMiner {
     }
 
     public parseInstanceOptions(options: {
-        parsed: any, 
+        parsed: any,
         origin: Map<string, any>
-    }): {err: ErrorCode, value?: any} {
-        let {err, value} = super.parseInstanceOptions(options);
+    }): { err: ErrorCode, value?: any } {
+        let { err, value } = super.parseInstanceOptions(options);
         if (err) {
-            return {err};
+            return { err };
         }
         if (!options.origin.get('minerSecret')) {
             this.m_logger.error(`invalid instance options not minerSecret`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
         value.secret = Buffer.from(options.origin.get('minerSecret'), 'hex');
-        return {err: ErrorCode.RESULT_OK, value};
+        return { err: ErrorCode.RESULT_OK, value };
     }
-    
+
     public async initialize(options: DposMinerInstanceOptions): Promise<ErrorCode> {
         this.m_secret = options.secret;
         this.m_address = addressFromSecretKey(this.m_secret);
@@ -100,9 +100,9 @@ export class DposMiner extends ValueMiner {
 
         if (this.m_timer) {
             clearTimeout(this.m_timer);
-            delete this.m_timer; 
+            delete this.m_timer;
         }
-        
+
         this.m_timer = setTimeout(async () => {
             delete this.m_timer;
             let now = Date.now() / 1000;
@@ -120,13 +120,18 @@ export class DposMiner extends ValueMiner {
             blockHeader.pubkey = (Address.publicKeyFromSecretKey(this.m_secret!) as Buffer);
             let dmr = await blockHeader.getDueMiner(this.m_chain as Chain);
             if (dmr.err) {
-                return ;
+                return;
             }
             this.m_logger.info(`calculated block ${blockHeader.number} creator: ${dmr.miner}`);
             if (!dmr.miner) {
                 assert(false, 'calculated undefined block creator!!');
                 process.exit(1);
             }
+            // Add by Yang Jun 2019-5-25
+            let chan = this.m_chain as DposChain;
+            chan.m_curMiner = dmr.miner!;
+            ////////////////////////////////////////////
+
             if (this.m_address === dmr.miner) {
                 await this._createBlock(blockHeader);
             }
@@ -134,7 +139,7 @@ export class DposMiner extends ValueMiner {
         }, tr.timeout!);
         return ErrorCode.RESULT_OK;
     }
-    
+
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
         // 只需要给block签名
         this.m_logger.info(`create block, sign ${this.m_address}`);
@@ -143,14 +148,14 @@ export class DposMiner extends ValueMiner {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _nextBlockTimeout(): Promise<{err: ErrorCode, timeout?: number}> {
+    protected async _nextBlockTimeout(): Promise<{ err: ErrorCode, timeout?: number }> {
         let blockInterval: number = this.m_chain!.globalOptions.blockInterval;
         do {
             this.m_nowSlot++;
-            let nowSlotBeginTimeOffset: number = (this.m_nowSlot - 1) * blockInterval; 
+            let nowSlotBeginTimeOffset: number = (this.m_nowSlot - 1) * blockInterval;
             let now = Date.now() / 1000;
             if (this.m_epochTime + nowSlotBeginTimeOffset > now) {
-                let ret = {err: ErrorCode.RESULT_OK, timeout: (this.m_epochTime + nowSlotBeginTimeOffset - now) * 1000};
+                let ret = { err: ErrorCode.RESULT_OK, timeout: (this.m_epochTime + nowSlotBeginTimeOffset - now) * 1000 };
                 this.m_logger.debug(`dpos _nextTimeout nowslot=${this.m_nowSlot}, timeout=${ret.timeout}`);
                 return ret;
             }

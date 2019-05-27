@@ -1,9 +1,9 @@
-import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, DposEventContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
+import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
 import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -15,7 +15,6 @@ export interface IfConfigGlobal {
     global: {
         minCreateor: number;
         maxCreateor: number;
-
         reSelectionBlocks: number;
         blockInterval: number;
         timeOffsetToLastBlock: number;
@@ -23,12 +22,14 @@ export interface IfConfigGlobal {
         unbanBlocks: number;
         dposVoteMaxProducers: number;
         maxBlockIntervalOffset: number;
-    }
+        depositAmount: number;
+        depositPeriod: number;
+        mortgagePeriod: number;
+    };
 }
-
 // Added by Yang Jun 2019-3-27
 let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
-let configObj: any;
+let configObj: IfConfigGlobal;
 try {
     configObj = JSON.parse(configBuffer.toString())
 } catch (e) {
@@ -45,8 +46,8 @@ const DB_VALUE_MAX_LEN: number = 512;
 
 export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
-        await context.storage.createKeyValue('bid');
-        await context.storage.createKeyValue('bidInfo');
+        // await context.storage.createKeyValue('bid');
+        // await context.storage.createKeyValue('bidInfo');
         await context.storage.createKeyValue('userCode');
         return ErrorCode.RESULT_OK;
     };
@@ -314,9 +315,6 @@ export function registerHandler(handler: ValueHandler) {
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
                 // 按照address和amount预先初始化钱数
-                // if (typeof params.preBalances[index].amount !== 'number') {
-                //     return ErrorCode.RESULT_INVALID_TYPE;
-                // }
                 let strAmount: string = strAmountPrecision(params.preBalances[index].amount, SYS_TOKEN_PRECISION);
 
                 // check address valid
@@ -369,33 +367,9 @@ export function registerHandler(handler: ValueHandler) {
         return ErrorCode.RESULT_OK;
     });
 
-    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        return await getTokenBalance(balancekv.kv!, params.address);
-    });
-
-    handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        return await context.getBalance(params.address);
-    });
-
-    handler.addViewMethod('getVote', async (context: DposViewContext, params: any): Promise<any> => {
-        let v: Map<string, BigNumber> = await context.getVote();
-        return MapToObject(v);
-    });
-
-    handler.addViewMethod('getStake', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        return await context.getStake(params.address);
-    });
-
-    handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<string[]> => {
-        return await context.getCandidates();
-    });
-
-    handler.addViewMethod('getMiners', async (context: DposViewContext, params: any): Promise<string[]> => {
-        return await context.getMiners();
-    });
 
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
+
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
         // Added by Yang Jun 2019-3-27
@@ -798,6 +772,37 @@ export function registerHandler(handler: ValueHandler) {
         return ErrorCode.RESULT_OK;
     });
 
+    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+        return await getTokenBalance(balancekv.kv!, params.address);
+    });
+
+    handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        return await context.getBalance(params.address);
+    });
+
+    handler.addViewMethod('getVote', async (context: DposViewContext, params: any): Promise<any> => {
+        let v: Map<string, BigNumber> = await context.getVote();
+        return MapToObject(v);
+    });
+    // Added by Yang Jun 2019-5-22
+    handler.addViewMethod('getTicket', async (context: DposViewContext, params: any): Promise<any> => {
+        let v: any = await context.getTicket(params);
+        return v;
+    });
+
+    handler.addViewMethod('getStake', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        return await context.getStake(params.address);
+    });
+    // api_getcandidates
+    handler.addViewMethod('getCandidates', async (context: DposViewContext, params: any): Promise<any> => {
+        return await context.getCandidates();
+    });
+
+    handler.addViewMethod('getMiners', async (context: DposViewContext, params: any): Promise<string[]> => {
+        return await context.getMiners();
+    });
+
     // Added by Yang Jun 2019-2-21
     handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
@@ -1003,163 +1008,212 @@ export function registerHandler(handler: ValueHandler) {
     });
     //////////////////////////////////////////////////////////////
 
-
+    // api_vote
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        // context.cost(SYSTEM_TX_FEE_BN); cost nothing
+        let objJson: any;
+        try {
+            objJson = JSON.parse(JSON.stringify(params));
+        } catch (e) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        if (!objJson.length || objJson.length <= 0 || objJson.length > configObj.global.dposVoteMaxProducers) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
         return await context.vote(context.caller, params);
     });
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
-        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
+        console.log('Yang Jun - mortgage, handler.ts');
 
-        return await context.mortgage(context.caller, new BigNumber(strAmount));
+        // if value is differnt from params
+        if (!context.value.eq(new BigNumber(params))) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+
+        let strAmount = strAmountPrecision(context.value.toString(), SYS_MORTGAGE_PRECISION);
+
+        let bnAmount = new BigNumber(strAmount);
+
+        let balance: BigNumber = await context.getBalance(context.caller);
+        if (balance.lt(bnAmount)) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+
+        return await context.mortgage(context.caller, bnAmount);
     });
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
-        let strAmount = strAmountPrecision(params, SYS_TOKEN_PRECISION);
-        let err = await context.transferTo(context.caller, new BigNumber(strAmount));
-        if (err) {
-            return err;
-        }
-        return await context.unmortgage(context.caller, new BigNumber(strAmount));
-    });
+        // context.cost(context.fee); no Fee needed for mortgage
+        // context.cost(SYSTEM_TX_FEE_BN);
+        console.log('Yang Jun - unmortgage, handler.ts');
+        let strAmount = strAmountPrecision(params, SYS_MORTGAGE_PRECISION);
 
+        console.log('amount:', strAmount);
+        let bnAmount = new BigNumber(strAmount);
+        let hret = await context.unmortgage(context.caller, bnAmount);
+        if (hret) {
+            return hret;
+        }
+        return context.transferTo(context.caller, bnAmount);
+    });
+    // api_register
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
-        return await context.register(context.caller);
+        // context.cost(SYSTEM_TX_FEE_BN);
+        let bnThreshold = new BigNumber(configObj.global.depositAmount);
+        if (!context.value.eq(bnThreshold)) {
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+        let paramsNew: any;
+        try {
+            paramsNew = JSON.parse(JSON.stringify(params));
+        } catch (e) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        if (!bCheckRegisterOption(paramsNew)) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        return await context.register(context.caller, paramsNew as IfRegisterOption);
+    });
+    handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        // context.cost(context.fee);
+        // context.cost(SYSTEM_TX_FEE_BN);
+        if (params !== context.caller) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+        const ret = await context
+            .transferTo(context.caller, new BigNumber(configObj.global.depositAmount));
+
+        return await context.unregister(context.caller);
     });
 
     // 拍卖
-    handler.addTX('publish', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        // params.name: 发布的name, name不能相同
-        // context.value: 最低出价, BigNumber
-        // params.duation: 持续时间，单位是block
+    // handler.addTX('publish', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+    //     context.cost(context.fee);
+    //     // params.name: 发布的name, name不能相同
+    //     // context.value: 最低出价, BigNumber
+    //     // params.duation: 持续时间，单位是block
 
-        // 暂时没有对发布方有value的要求，可以加上发布方要扣除一定数量币的功能
-        if (isNullOrUndefined(params.name) || !params.duation || params.duation <= 0 || !(params.lowest instanceof BigNumber)) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
+    //     // 暂时没有对发布方有value的要求，可以加上发布方要扣除一定数量币的功能
+    //     if (isNullOrUndefined(params.name) || !params.duation || params.duation <= 0 || !(params.lowest instanceof BigNumber)) {
+    //         return ErrorCode.RESULT_INVALID_PARAM;
+    //     }
 
-        let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-        let ret = await bidKV.get(params.name);
-        if (ret.err === ErrorCode.RESULT_OK) {
-            return ErrorCode.RESULT_ALREADY_EXIST;
-        }
-        let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
-        await bidInfoKV.hset('biding', params.name, { publisher: context.caller, finish: context.height + params.duation });
-        await bidKV.set(params.name, { caller: context.caller, value: context.value });
-        await bidKV.rpush((context.height + params.duation).toString(), params.name);
-        return ErrorCode.RESULT_OK;
-    });
+    //     let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
+    //     let ret = await bidKV.get(params.name);
+    //     if (ret.err === ErrorCode.RESULT_OK) {
+    //         return ErrorCode.RESULT_ALREADY_EXIST;
+    //     }
+    //     let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
+    //     await bidInfoKV.hset('biding', params.name, { publisher: context.caller, finish: context.height + params.duation });
+    //     await bidKV.set(params.name, { caller: context.caller, value: context.value });
+    //     await bidKV.rpush((context.height + params.duation).toString(), params.name);
+    //     return ErrorCode.RESULT_OK;
+    // });
 
     // 出价
-    handler.addTX('bid', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        // params.name: 发布的name, name不能相同
-        // context.value: 最低出价, BigNumber
-        let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-        let ret = await bidKV.get(params.name);
-        if (ret.err !== ErrorCode.RESULT_OK) {
-            return ret.err;
-        }
-        // 如果本次出价不高于上次，则无效
-        if ((ret.value!.value as BigNumber).gte(new BigNumber(context.value))) {
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-        // 把上一次的出价还给出价者
-        await context.transferTo(ret.value!.caller, ret.value!.value);
-        // 更新新的出价
-        await bidKV.set(params.name, { caller: context.caller, value: context.value });
-        return ErrorCode.RESULT_OK;
-    });
+    // handler.addTX('bid', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+    //     context.cost(context.fee);
+    //     // params.name: 发布的name, name不能相同
+    //     // context.value: 最低出价, BigNumber
+    //     let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
+    //     let ret = await bidKV.get(params.name);
+    //     if (ret.err !== ErrorCode.RESULT_OK) {
+    //         return ret.err;
+    //     }
+    //     // 如果本次出价不高于上次，则无效
+    //     if ((ret.value!.value as BigNumber).gte(new BigNumber(context.value))) {
+    //         return ErrorCode.RESULT_NOT_ENOUGH;
+    //     }
+    //     // 把上一次的出价还给出价者
+    //     await context.transferTo(ret.value!.caller, ret.value!.value);
+    //     // 更新新的出价
+    //     await bidKV.set(params.name, { caller: context.caller, value: context.value });
+    //     return ErrorCode.RESULT_OK;
+    // });
 
     // 在块后事件中处理拍卖结果
-    handler.addPostBlockListener(async (height: number): Promise<boolean> => true,
-        async (context: DposEventContext): Promise<ErrorCode> => {
-            context.logger.info(`on BlockHeight ${context.height}`);
-            let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-            let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
-            do {
-                let ret = await bidKV.rpop(context.height.toString());
-                if (ret.err === ErrorCode.RESULT_OK) {
-                    const name = ret.value;
-                    let info = (await bidInfoKV.hget('biding', name)).value!;
-                    const lastBid = (await bidKV.get(name)).value;
-                    if (lastBid.caller !== info.publisher) {    //  否则流标
-                        await context.transferTo(info.publisher, lastBid.value);
-                        // 存储本次拍卖的结果
-                        info.owner = lastBid.caller;
-                        info.value = lastBid.value;
-                    }
-                    await bidInfoKV.hdel('biding', name);
-                    await bidInfoKV.hset('finish', name, info);
-                    // 清理掉不需要的数据
-                    await bidKV.hclean(name);
-                } else {
-                    break;
-                }
-            } while (true);
-            return ErrorCode.RESULT_OK;
-        });
+    // handler.addPostBlockListener(async (height: number): Promise<boolean> => true,
+    //     async (context: DposEventContext): Promise<ErrorCode> => {
+    //         context.logger.info(`on BlockHeight ${context.height}`);
+    //         let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
+    //         let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
+    //         do {
+    //             let ret = await bidKV.rpop(context.height.toString());
+    //             if (ret.err === ErrorCode.RESULT_OK) {
+    //                 const name = ret.value;
+    //                 let info = (await bidInfoKV.hget('biding', name)).value!;
+    //                 const lastBid = (await bidKV.get(name)).value;
+    //                 if (lastBid.caller !== info.publisher) {    //  否则流标
+    //                     await context.transferTo(info.publisher, lastBid.value);
+    //                     // 存储本次拍卖的结果
+    //                     info.owner = lastBid.caller;
+    //                     info.value = lastBid.value;
+    //                 }
+    //                 await bidInfoKV.hdel('biding', name);
+    //                 await bidInfoKV.hset('finish', name, info);
+    //                 // 清理掉不需要的数据
+    //                 await bidKV.hclean(name);
+    //             } else {
+    //                 break;
+    //             }
+    //         } while (true);
+    //         return ErrorCode.RESULT_OK;
+    //     });
 
     // 查询指定name的拍卖信息
-    handler.addViewMethod('GetBidInfo', async (context: DposViewContext, params: any): Promise<any> => {
-        let value: any = {};
-        let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-        let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
-        let bid = await bidKV.get(params.name);
-        let bidInfo = await bidInfoKV.hget(bid.err === ErrorCode.RESULT_NOT_FOUND ? 'finish' : 'biding', params.name);
-        if (bidInfo.err !== ErrorCode.RESULT_OK) {
-            return;
-        }
-        value = bidInfo.value!;
-        value.name = params.name;
-        if (!bidInfo.value!.owner) {
-            value.bidder = bid.value!.caller;
-            value.bidvalue = bid.value!.value;
-        }
+    // handler.addViewMethod('GetBidInfo', async (context: DposViewContext, params: any): Promise<any> => {
+    //     let value: any = {};
+    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
+    //     let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
+    //     let bid = await bidKV.get(params.name);
+    //     let bidInfo = await bidInfoKV.hget(bid.err === ErrorCode.RESULT_NOT_FOUND ? 'finish' : 'biding', params.name);
+    //     if (bidInfo.err !== ErrorCode.RESULT_OK) {
+    //         return;
+    //     }
+    //     value = bidInfo.value!;
+    //     value.name = params.name;
+    //     if (!bidInfo.value!.owner) {
+    //         value.bidder = bid.value!.caller;
+    //         value.bidvalue = bid.value!.value;
+    //     }
 
-        return value;
-    });
+    //     return value;
+    // });
 
     // 查询所有正在拍卖的name的信息
-    handler.addViewMethod('GetAllBiding', async (context: DposViewContext, params: any): Promise<any[]> => {
-        let ret: any[] = [];
-        let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-        let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
-        let rets = await bidInfoKV.hgetall('biding');
-        if (rets.err === ErrorCode.RESULT_OK) {
-            for (const { key, value } of rets.value!) {
-                let i = value;
-                i.name = key;
-                let bid = await bidKV.get(key);
-                i.bidder = bid.value!.caller;
-                i.bidvalue = bid.value!.value;
-                ret.push(i);
-            }
-        }
-        return ret;
-    });
+    // handler.addViewMethod('GetAllBiding', async (context: DposViewContext, params: any): Promise<any[]> => {
+    //     let ret: any[] = [];
+    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
+    //     let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
+    //     let rets = await bidInfoKV.hgetall('biding');
+    //     if (rets.err === ErrorCode.RESULT_OK) {
+    //         for (const { key, value } of rets.value!) {
+    //             let i = value;
+    //             i.name = key;
+    //             let bid = await bidKV.get(key);
+    //             i.bidder = bid.value!.caller;
+    //             i.bidvalue = bid.value!.value;
+    //             ret.push(i);
+    //         }
+    //     }
+    //     return ret;
+    // });
 
     // 查询所有拍卖完成name的信息
-    handler.addViewMethod('GetAllFinished', async (context: DposViewContext, params: any): Promise<any[]> => {
-        let ret: any[] = [];
-        let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-        let rets = await bidInfoKV.hgetall('finish');
-        if (rets.err === ErrorCode.RESULT_OK) {
-            for (const { key, value } of rets.value!) {
-                let i = value;
-                i.name = key;
-                ret.push(i);
-            }
-        }
-        return ret;
-    });
+    // handler.addViewMethod('GetAllFinished', async (context: DposViewContext, params: any): Promise<any[]> => {
+    //     let ret: any[] = [];
+    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
+    //     let rets = await bidInfoKV.hgetall('finish');
+    //     if (rets.err === ErrorCode.RESULT_OK) {
+    //         for (const { key, value } of rets.value!) {
+    //             let i = value;
+    //             i.name = key;
+    //             ret.push(i);
+    //         }
+    //     }
+    //     return ret;
+    // });
 }

@@ -11,33 +11,36 @@ import { DposChainTipStateManager, IChainStateStorage, StorageIrbEntry } from '.
 import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
-import { SqliteReadWritableDatabase, SqliteReadableDatabase } from '../storage_sqlite/storage';
+import { SqliteReadWritableDatabase, SqliteReadableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    register: (from: string) => Promise<ErrorCode>;
-    getVote: () => Promise<Map<string, BigNumber>>;
-    getStake: (address: string) => Promise<BigNumber>;
-    getCandidates: () => Promise<string[]>;
-    getMiners(): Promise<string[]>;
+    register: (from: string, params: IfRegisterOption) => Promise<ErrorCode>;
+    unregister: (from: string) => Promise<ErrorCode>;
+    // getVote: () => Promise<Map<string, BigNumber>>;
+    // getStake: (address: string) => Promise<BigNumber>;
+    // getCandidates: () => Promise<string[]>;
+    // getMiners(): Promise<string[]>;
 } & ValueTransactionContext;
 
-export type DposEventContext = {
-    vote: (from: string, candiates: string) => Promise<ErrorCode>;
-    mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
-    register: (from: string) => Promise<ErrorCode>;
-    getVote: () => Promise<Map<string, BigNumber>>;
-    getStake: (address: string) => Promise<BigNumber>;
-    getCandidates: () => Promise<string[]>;
-    getMiners(): Promise<string[]>;
-} & ValueEventContext;
+// export type DposEventContext = {
+//     vote: (from: string, candiates: string) => Promise<ErrorCode>;
+//     mortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
+//     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
+//     register: (from: string) => Promise<ErrorCode>;
+//     getVote: () => Promise<Map<string, BigNumber>>;
+//     getStake: (address: string) => Promise<BigNumber>;
+//     getCandidates: () => Promise<string[]>;
+//     getMiners(): Promise<string[]>;
+// } & ValueEventContext;
 
 export type DposViewContext = {
     getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
+    getTicket: (address: string) => Promise<any>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
 } & ValueViewContext;
@@ -55,8 +58,12 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     protected m_stateManager: DposChainTipStateManager | undefined;
     protected m_cacheIRB: LRUCache<string, StorageIrbEntry> = new LRUCache(500);
 
+    // Add by Yang Jun 2019-5-25
+    public m_curMiner: string;
+
     constructor(options: ChainContructOptions) {
         super(options);
+        this.m_curMiner = '';
     }
 
     get epochTime(): number {
@@ -91,6 +98,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return hr.err;
         }
         this.m_epochTime = hr.header!.timestamp;
+        console.log('Yang Jun -- epochtime:', this.m_epochTime);
         return ErrorCode.RESULT_OK;
     }
 
@@ -147,10 +155,16 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         let kvBalance = (await storage.getKeyValue(Chain.dbSystem, ValueChain.kvBalance)).kv!;
 
         let ve = new ValueContext.Context(kvBalance);
+
+        // Create context hooks
         let externalContext = Object.create(null);
+
+        // getbalance
         externalContext.getBalance = async (address: string): Promise<BigNumber> => {
             return await ve.getBalance(address);
         };
+
+        // transferTo
         externalContext.transferTo = async (address: string, amount: BigNumber): Promise<ErrorCode> => {
             return await ve.transferTo(ValueChain.sysAddress, address, amount);
         };
@@ -179,11 +193,11 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             chain: this
         });
 
-        ////////////////////////////
-
+        /////////////////////////////////////////////////////////////
 
         let de = new consensus.Context({ currDatabase: dbr.value!, globalOptions: this.globalOptions, logger: this.m_logger! });
 
+        // vote
         externalContext.vote = async (from: string, candiates: string[]): Promise<ErrorCode> => {
             // let vr = await de.vote(from, candiates);
             let vr = await dsvt.vote(from, candiates);
@@ -192,49 +206,59 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             }
             return vr.returnCode!;
         };
+
+        // mortgage
         externalContext.mortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
             // let mr = await de.mortgage(from, amount);
             let mr = await dsvt.mortgage(from, amount);
             if (mr.err) {
-                throw new Error();
+                return mr.err;
             }
-
             return mr.returnCode!;
         };
+
+        // unmortgage
         externalContext.unmortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
             // let mr = await de.unmortgage(from, amount);
             console.log('Yang Jun -- unmortgage dsvt');
             let mr = await dsvt.unmortgage(from, amount);
             if (mr.err) {
-                throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;
         };
-        externalContext.register = async (from: string): Promise<ErrorCode> => {
-            let mr = await de.registerToCandidate(from);
+
+        // register
+        externalContext.register = async (from: string, option: IfRegisterOption): Promise<ErrorCode> => {
+            // let mr = await de.registerToCandidate(from);
+            // Add by Yang Jun 
+            let mr = await dsvt.register(from, option);
             if (mr.err) {
-                throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;
         };
         // Add by Yang Jun 2019-5-21
+
+        // unregister
         externalContext.unregister = async (from: string): Promise<ErrorCode> => {
             let mr = await dsvt.unregister(from);
             if (mr.err) {
-                throw new Error();
+                // throw new Error();
+                return mr.err;
             }
 
             return mr.returnCode!;
         };
-        externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
-            let gvr = await de.getVote();
-            if (gvr.err) {
-                throw new Error();
-            }
-            return gvr.vote!;
-        };
+        // externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
+        //     let gvr = await de.getVote();
+        //     if (gvr.err) {
+        //         throw new Error();
+        //     }
+        //     return gvr.vote!;
+        // };
         // externalContext.getStake = async (address: string): Promise<BigNumber> => {
         //     let gsr = await de.getStake(address);
         //     // Add by Yang Jun 2019-5-21
@@ -247,24 +271,22 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         //     }
         //     return gsr.stake!;
         // };
-        externalContext.getCandidates = async (): Promise<string[]> => {
-            let gc = await de.getCandidates();
-            if (gc.err) {
-                throw Error();
-            }
-            return gc.candidates!;
-        };
+        // externalContext.getCandidates = async (): Promise<string[]> => {
+        //     let gc = await de.getCandidates();
+        //     if (gc.err) {
+        //         throw Error();
+        //     }
+        //     return gc.candidates!;
+        // };
 
+        // externalContext.getMiners = async (): Promise<string[]> => {
+        //     let gm = await de.getNextMiners();
+        //     if (gm.err) {
+        //         throw Error();
+        //     }
 
-
-        externalContext.getMiners = async (): Promise<string[]> => {
-            let gm = await de.getNextMiners();
-            if (gm.err) {
-                throw Error();
-            }
-
-            return gm.creators!;
-        };
+        //     return gm.creators!;
+        // };
 
         let options: DposBlockExecutorOptions = {
             logger: this.logger,
@@ -303,6 +325,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             logger: this.m_logger,
             chain: this
         });
+        console.log('Yang Jun -- epochTime', this.epochTime);
 
         ////////////////////////////
 
@@ -312,6 +335,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
         let de = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger });
 
+        // getvote
         externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
             let gvr = await de.getVote();
             if (gvr.err) {
@@ -319,6 +343,17 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             }
             return gvr.vote!;
         };
+
+        // getticket
+        // externalContext.getTicket = async (address: string): Promise<Map<string, BigNumber>> => {
+        //     let gvr = await dsvt.getTicket(address);
+        //     if (gvr.err) {
+        //         throw new Error();
+        //     }
+        //     return gvr.value!;
+        // };
+
+        // getstake
         externalContext.getStake = async (address: string): Promise<BigNumber> => {
             // let gsr = await de.getStake(address);
             // Add by Yang Jun 2019-5-21
@@ -331,8 +366,20 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             }
             return gsr.stake!;
         };
-        externalContext.getCandidates = async (): Promise<string[]> => {
-            let gc = await de.getCandidates();
+
+        // getticket
+        externalContext.getTicket = async (address: string): Promise<any> => {
+            let gvr = await dsvt.getTicket(address);
+            if (gvr.err) {
+                // throw new Error();
+                console.log('Error: getticket()', gvr.err);
+            }
+            return gvr.value!;
+        };
+
+        // getcandidates
+        externalContext.getCandidates = async (): Promise<any> => {
+            let gc = await dsvt.getCandidatesInfo();
             if (gc.err) {
                 throw Error();
             }
@@ -340,16 +387,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return gc.candidates!;
         };
 
-        // Yang Jun
-        // Add a new API for candidates information with 
-        externalContext.getCandidatesInfo = async (): Promise<{ address: string, value: string }[]> => {
-            let gc = await de.getCandidatesInfo();
-            if (gc.err) {
-                throw Error();
-            }
-            return gc.candidates!;
-        };
-
+        // getminers
         externalContext.getMiners = async (): Promise<string[]> => {
             let gm = await de.getNextMiners();
             if (gm.err) {
@@ -606,6 +644,28 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (ir.err) {
             return ir.err;
         }
+
+        // Add by Yang Jun 2019-5-25
+        let dbsvt = await storage.getReadWritableDatabase(Chain.dbSVT);
+        if (dbsvt.err) {
+            return dbsvt.err;
+        }
+
+        let svtInfo = (await dbsvt.value!.getReadWritableKeyValue(Chain.kvSVTInfo)).kv! as SqliteStorageKeyValue;
+
+        for (let p of genesisOptions.candidatesInfo) {
+            let address = p.address;
+
+            let hret = await svtInfo.hset(address, 'name', p.name);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'ip', p.ip);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'url', p.url);
+            if (hret.err) { return hret.err; }
+            hret = await svtInfo.hset(address, 'location', p.location);
+            if (hret.err) { return hret.err; }
+        }
+        //////////////////////////////////////////////
 
         return ErrorCode.RESULT_OK;
     }

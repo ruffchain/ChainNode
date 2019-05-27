@@ -250,6 +250,16 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
         }
     }
 
+    public async hdelallbyfield(name: string): Promise<{ err: ErrorCode }> {
+        try {
+            await this.db.run(`DELETE FROM '${this.fullName}' WHERE field=?`, name);
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`hdelallbyfield ${name} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+
     /////////////////////
 
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
