@@ -3,7 +3,7 @@ import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption } from './scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption, isANumber, IfBancorTokenItem } from './scoop';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -439,17 +439,49 @@ export function registerHandler(handler: ValueHandler) {
         let amountAll = new BigNumber(0);
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
+                let item: IfBancorTokenItem = params.preBalances[index] as IfBancorTokenItem;
                 // 按照address和amount预先初始化钱数
-                let strAmount: string = strAmountPrecision(params.preBalances[index].amount, BANCOR_TOKEN_PRECISION);
+                if (item.amount === undefined
+                    || item.address === undefined
+                    || item.lock_amount === undefined
+                    || item.lock_expiration === undefined) {
+                    return ErrorCode.RESULT_WRONG_ARG;
+                }
+                if (!isANumber(item.amount)
+                    || !isANumber(item.lock_amount)
+                    || !isANumber(item.lock_expiration)) {
+                    return ErrorCode.RESULT_WRONG_ARG;
+                }
+                let strAmount: string = strAmountPrecision(item.amount, BANCOR_TOKEN_PRECISION);
 
                 // check address
-                if (!isValidAddress(params.preBalances[index].address)) {
+                if (!isValidAddress(item.address)) {
                     return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
                 }
+                let bnAmount = new BigNumber(strAmount);
+                let hret = await kvRet.kv!.hset(item.address, '0', bnAmount);
 
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
+                if (hret.err) {
+                    return hret.err;
+                }
 
-                amountAll = amountAll.plus(new BigNumber(strAmount));
+                // 
+                let strLockAmount: string = strAmountPrecision(item.lock_amount, BANCOR_TOKEN_PRECISION);
+
+                // 
+                let bnLockAmount = new BigNumber(strLockAmount);
+                let curBlock = await context.getCurBlock();
+                if (curBlock.eq(0)) {
+                    return ErrorCode.RESULT_DB_RECORD_EMPTY;
+                }
+                let dueBlock: number = curBlock.toNumber() + parseInt(item.lock_expiration) * 60 / configObj.global.blockInterval;
+
+                hret = await kvRet.kv!.hset(item.address, dueBlock.toString(), bnLockAmount);
+
+                if (hret.err) {
+                    return hret.err;
+                }
+                amountAll = amountAll.plus(bnAmount).plus(bnLockAmount);
             }
         }
 
