@@ -45,4 +45,8 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 2018.09.28 - Verify Ledger and P2P transfer
 2018.07.6  - Node networking testing
 2018.01.12 - Publish WhitePaper
+
+...
+
+2019-5-26  -  Image version 1.12.3, merge test branch
 ```
