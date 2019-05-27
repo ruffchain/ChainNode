@@ -18,7 +18,7 @@ export interface IfBancorTokenItem {
   amount: string;
   address: string;
   lock_amount: string;
-  lock_expiration: string;
+  time_expiration: string;
 }
 export interface IfRegisterOption {
   name: string;
@@ -34,7 +34,7 @@ export function isANumber(amount: string) {
     return false;
   }
   let num = JSON.parse(amount);
-  return num > 0;
+  return num >= 0;
 }
 
 function numNumbers(str: string) {

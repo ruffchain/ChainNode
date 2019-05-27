@@ -20,7 +20,7 @@ export type DposTransactionContext = {
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     register: (from: string, params: IfRegisterOption) => Promise<ErrorCode>;
     unregister: (from: string) => Promise<ErrorCode>;
-    getCurBlock: () => Promise<BigNumber>;
+    getCurBlock: () => BigNumber;
     // getVote: () => Promise<Map<string, BigNumber>>;
     // getStake: (address: string) => Promise<BigNumber>;
     // getCandidates: () => Promise<string[]>;
@@ -44,6 +44,7 @@ export type DposViewContext = {
     getTicket: (address: string) => Promise<any>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
+    getCurBlock: () => BigNumber;
 } & ValueViewContext;
 
 const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';
@@ -255,7 +256,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         };
 
         // Add by Yang Jun 2019-5-27
-        externalContext.getCurBlock = async (): Promise<BigNumber> => {
+        externalContext.getCurBlock = (): BigNumber => {
             return new BigNumber(this.tipBlockHeader!.number);
         }
 
@@ -346,7 +347,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         let de = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger });
 
         // Add by Yang Jun 2019-5-27
-        externalContext.getCurBlock = async (): Promise<BigNumber> => {
+        externalContext.getCurBlock = (): BigNumber => {
             return new BigNumber(this.tipBlockHeader!.number);
         }
 

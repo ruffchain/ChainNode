@@ -4,6 +4,7 @@ import { isNullOrUndefined } from 'util';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
 import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption, isANumber, IfBancorTokenItem } from './scoop';
+import { SqliteReadWritableDatabase } from '../../../src/core/storage_sqlite/storage';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -439,29 +440,149 @@ export function registerHandler(handler: ValueHandler) {
         let amountAll = new BigNumber(0);
         if (params.preBalances) {
             for (let index = 0; index < params.preBalances.length; index++) {
+                // 按照address和amount预先初始化钱数
+                let strAmount: string = strAmountPrecision(params.preBalances[index].amount, BANCOR_TOKEN_PRECISION);
+
+                // check address
+                if (!isValidAddress(params.preBalances[index].address)) {
+                    return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+                }
+
+                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
+
+                amountAll = amountAll.plus(new BigNumber(strAmount));
+            }
+        }
+
+        // Setting bancor parameters
+        // set Factor
+        let tokenIdUpperCase = params.tokenid.toUpperCase();
+
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.factor)); // number type
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Reserve
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, context.value);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Supply
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+        kvRet = await kvRet.kv!.set(tokenIdUpperCase, amountAll);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // set Nonliquidity
+        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        // Consider to use nonliquidity or not
+        // nonliquidity == 0; no limit for supply
+        // nonliquidity !== 0, supply < nonliquidity!!
+        if (!params.nonliquidity) {
+            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(0));
+        } else {
+            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.nonliquidity).plus(amountAll));
+        }
+
+        if (kvRet.err) {
+            return kvRet.err;
+        }
+
+        return ErrorCode.RESULT_OK;
+
+    });
+
+    handler.addTX('createLockBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        // context.cost(context.fee);
+        context.cost(SYSTEM_TX_FEE_BN);
+
+        // console.log('Yang-- received createBancorToken');
+        console.log(params);
+
+        // 参数检查
+        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
+            console.log('Yang-- quit becasue tokenid')
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+        if (!params.preBalances) {
+            console.log('Yang-- quit becasue preBalances')
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // supply has been incorporated into preBalances
+        if (!params.factor) {
+            console.log('Yang-- quit becasue factor')
+            return ErrorCode.RESULT_INVALID_PARAM;
+        }
+
+        // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
+        // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
+
+        // put tokenid to uppercase
+        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+        if (kvRet.err) {
+            console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
+            return kvRet.err;
+        }
+
+        let kvCreator = await kvRet.kv!.set('creator', context.caller);
+
+        if (kvCreator.err) {
+            return kvCreator.err;
+        }
+        await kvRet.kv!.set('type', 'lock_bancor_token');
+
+        let amountAll = new BigNumber(0);
+        if (params.preBalances) {
+            for (let index = 0; index < params.preBalances.length; index++) {
                 let item: IfBancorTokenItem = params.preBalances[index] as IfBancorTokenItem;
+                console.log('------ :', item);
                 // 按照address和amount预先初始化钱数
                 if (item.amount === undefined
                     || item.address === undefined
                     || item.lock_amount === undefined
-                    || item.lock_expiration === undefined) {
+                    || item.time_expiration === undefined) {
+                    console.log('undefined found!');
                     return ErrorCode.RESULT_WRONG_ARG;
                 }
                 if (!isANumber(item.amount)
                     || !isANumber(item.lock_amount)
-                    || !isANumber(item.lock_expiration)) {
+                    || !isANumber(item.time_expiration)) {
+                    console.log('Not a valid number');
                     return ErrorCode.RESULT_WRONG_ARG;
                 }
                 let strAmount: string = strAmountPrecision(item.amount, BANCOR_TOKEN_PRECISION);
 
                 // check address
                 if (!isValidAddress(item.address)) {
+                    console.log('Invalid address:', item.address);
                     return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
                 }
+
                 let bnAmount = new BigNumber(strAmount);
+                console.log('bnAmount:', bnAmount);
                 let hret = await kvRet.kv!.hset(item.address, '0', bnAmount);
 
                 if (hret.err) {
+                    console.log('set bnAmount fail');
                     return hret.err;
                 }
 
@@ -470,11 +591,20 @@ export function registerHandler(handler: ValueHandler) {
 
                 // 
                 let bnLockAmount = new BigNumber(strLockAmount);
-                let curBlock = await context.getCurBlock();
+                console.log('bnLockAmoutn: ', bnLockAmount);
+
+                if (bnLockAmount.eq(0)) {
+                    continue;
+                }
+
+                let curBlock = context.getCurBlock();
+                console.log('curBlock:', curBlock);
                 if (curBlock.eq(0)) {
                     return ErrorCode.RESULT_DB_RECORD_EMPTY;
                 }
-                let dueBlock: number = curBlock.toNumber() + parseInt(item.lock_expiration) * 60 / configObj.global.blockInterval;
+                let dueBlock: number = curBlock.toNumber() + parseInt(item.time_expiration) * 60 / configObj.global.blockInterval;
+
+                console.log('dueblock: ', dueBlock);
 
                 hret = await kvRet.kv!.hset(item.address, dueBlock.toString(), bnLockAmount);
 
@@ -484,6 +614,8 @@ export function registerHandler(handler: ValueHandler) {
                 amountAll = amountAll.plus(bnAmount).plus(bnLockAmount);
             }
         }
+
+        console.log('amountAll:', amountAll);
 
         // Setting bancor parameters
         // set Factor
@@ -573,8 +705,92 @@ export function registerHandler(handler: ValueHandler) {
             return ErrorCode.RESULT_NOT_ENOUGH;
         }
 
-        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
-        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
+        let hret = await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
+        if (hret.err) { return hret.err; }
+        hret = await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
+        if (hret.err) { return hret.err; }
+
+        return ErrorCode.RESULT_OK;
+    });
+
+
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('transferLockBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(SYSTEM_TX_FEE_BN);
+
+        console.log('Yang-- ', params)
+
+        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+
+        if (tokenkv.err) {
+            return tokenkv.err;
+        }
+
+        // check token type
+        let rtnType = await tokenkv.kv!.get('type');
+
+        console.log(rtnType);
+
+        if (rtnType.err || rtnType.value !== 'lock_bancor_token') {
+            console.log('wrong type');
+            return ErrorCode.RESULT_NOT_SUPPORT;
+        }
+
+        let hret = await tokenkv.kv!.hgetall(context.caller);
+        if (hret.err || hret.value!.length === 0) {
+            console.log('It is empty');
+            return ErrorCode.RESULT_DB_TABLE_FAILED;
+        }
+        let hret2 = context.getCurBlock();
+        if (hret2.eq(0)) {
+            return ErrorCode.RESULT_FAILED;
+        }
+        let curBlock = hret2.toNumber();
+
+        let fromTotal = new BigNumber(0);
+        for (let p of hret.value!) {
+            console.log('item:')
+            console.log(p);
+            let dueBlock = p.key;
+            let value = p.value;
+
+            if (dueBlock === '0') {
+                fromTotal = fromTotal.plus(value);
+            } else if (curBlock > parseInt(dueBlock)) {
+                fromTotal = fromTotal.plus(value);
+                let hret3 = await tokenkv.kv!.hdel(context.caller, dueBlock);
+                if (hret3.err) { return hret3.err; }
+            }
+        }
+
+        // Added by Yang Jun 2019-3-29
+        let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
+        let amount = new BigNumber(strAmount);
+
+        if (!isValidAddress(params.to)) {
+            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        }
+
+        if (fromTotal.lt(amount)) {
+            console.log('Yang-- less than amount', amount);
+            return ErrorCode.RESULT_NOT_ENOUGH;
+        }
+
+        let hret4 = await (tokenkv.kv!.hset(context.caller, '0', fromTotal.minus(amount)));
+        if (hret4.err) { return hret4.err; }
+
+        let hretTo = await tokenkv.kv!.hget(params.to, '0');
+        if (hretTo.err === ErrorCode.RESULT_EXCEPTION) { return hretTo.err; }
+
+        let hretTransfer;
+        if (hretTo.err === ErrorCode.RESULT_NOT_FOUND) {
+            hretTransfer = await tokenkv.kv!.hset(params.to, '0', amount);
+        } else {
+            hretTransfer = await tokenkv.kv!.hset(params.to, '0', hretTo.value!.plus(amount));
+        }
+
+        if (hretTransfer.err) { return hretTransfer.err; }
+
         return ErrorCode.RESULT_OK;
     });
 
@@ -834,11 +1050,55 @@ export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getMiners', async (context: DposViewContext, params: any): Promise<string[]> => {
         return await context.getMiners();
     });
-
     // Added by Yang Jun 2019-2-21
     handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
         return await getTokenBalance(balancekv.kv!, params.address);
+    });
+    // Added by Yang Jun 2019-2-21
+    handler.addViewMethod('getLockBancorTokenBalance', async (context: DposViewContext, params: any): Promise<any> => {
+        let balancekv = (await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase()));
+
+        if (balancekv.err) {
+            return {};
+        }
+
+        // check token type
+        let rtnType = await balancekv.kv!.get('type');
+
+        console.log(rtnType);
+
+        if (rtnType.err || rtnType.value !== 'lock_bancor_token') {
+            console.log('wrong type');
+            return {};
+        }
+
+        // let dbToken = (await context.storage.getReadableDatabase(Chain.dbToken))
+        let hret = await balancekv.kv!.hgetall(params.address);
+        if (hret.err || hret.value!.length === 0) {
+            console.log('It is empty');
+            return {};
+        }
+
+        // return await getTokenBalance(balancekv.kv!, params.address);
+        let out = Object.create(null);
+        let curBlock = context.getCurBlock();
+
+        for (let p of hret.value!) {
+            let dueBlock = p.key;
+            let value = p.value;
+
+            if (dueBlock === '0') {
+                out.amount = value;
+            } else {
+                out.amountLock = value;
+                out.dueBlock = dueBlock;
+                out.curBlock = curBlock;
+                out.dueTime = 1;
+            }
+        }
+
+        return out;
     });
 
 
