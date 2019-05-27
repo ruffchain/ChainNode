@@ -5,6 +5,8 @@ import {BigNumber} from 'bignumber.js';
 import {ValueChain} from './chain';
 import {ValueBlockHeader} from './block';
 
+const MinFee = new BigNumber(0.001);
+
 export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();
 
@@ -18,8 +20,12 @@ export class ValuePendingTransactions extends PendingTransactions {
         if (br.err) {
             return br.err;
         }
+
         let balance = br.value!;
         let txValue: ValueTransaction = txTime.tx as ValueTransaction;
+        if (txValue.fee.isLessThan(MinFee)) {
+            return ErrorCode.RESULT_FEE_TOO_SMALL;
+        }
         let totalUse: BigNumber = txValue.value.plus(txValue.fee);
         if (txOld) {
             let txOldValue: ValueTransaction = txOld.tx as ValueTransaction;
@@ -40,7 +46,7 @@ export class ValuePendingTransactions extends PendingTransactions {
         let txValue: ValueTransaction = txTime.tx as ValueTransaction;
         if (txOld) {
             let txOldValue: ValueTransaction = txOld.tx as ValueTransaction;
-            balance = balance.plus(txOldValue.fee).plus(txOldValue.value).minus(txValue.fee).minus(txValue.value); 
+            balance = balance.plus(txOldValue.fee).plus(txOldValue.value).minus(txValue.fee).minus(txValue.value);
         } else {
             balance = balance.minus(txValue.fee).minus(txValue.value);
         }
@@ -72,7 +78,7 @@ export class ValuePendingTransactions extends PendingTransactions {
             } else {
                 return {err: ret.err};
             }
-            
+
         } catch (error) {
             this.m_logger.error(`getStorageBalance error=${error}`);
             return { err: ErrorCode.RESULT_EXCEPTION };
