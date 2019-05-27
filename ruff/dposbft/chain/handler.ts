@@ -1061,7 +1061,7 @@ export function registerHandler(handler: ValueHandler) {
     // api_register
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        // context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(SYSTEM_TX_FEE_BN);
         let bnThreshold = new BigNumber(configObj.global.depositAmount);
         if (!context.value.eq(bnThreshold)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
@@ -1079,12 +1079,17 @@ export function registerHandler(handler: ValueHandler) {
     });
     handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        // context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(SYSTEM_TX_FEE_BN);
         if (params !== context.caller) {
             return ErrorCode.RESULT_WRONG_ARG;
         }
         const ret = await context
             .transferTo(context.caller, new BigNumber(configObj.global.depositAmount));
+
+        if (ret) {
+            console.log('unregister , transferTo failed');
+            return ret;
+        }
 
         return await context.unregister(context.caller);
     });
