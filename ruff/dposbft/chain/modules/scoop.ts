@@ -1,5 +1,7 @@
 import BigNumber from 'bignumber.js';
 import { IReadableKeyValue, ErrorCode } from '../../../../src/core';
+import { IfConfigGlobal } from '../handler';
+import * as fs from 'fs';
 
 export const SYS_MORTGAGE_PRECISION = 0;
 export const SYS_TOKEN_PRECISION = 9;
@@ -126,4 +128,16 @@ export function bCheckRegisterOption(option: IfRegisterOption): boolean {
 export async function getTokenBalance(balanceKv: IReadableKeyValue, address: string): Promise<BigNumber> {
   let retInfo = await balanceKv.get(address);
   return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
+}
+
+export let configObj: IfConfigGlobal;
+
+export function readConfigFile() {
+  // Added by Yang Jun 2019-3-27
+  let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
+  try {
+    configObj = JSON.parse(configBuffer.toString())
+  } catch (e) {
+    throw new Error('handler.ts read ./config.json')
+  }
 }
