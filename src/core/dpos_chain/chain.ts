@@ -12,7 +12,7 @@ import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
 import { SqliteReadWritableDatabase, SqliteReadableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
-import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;

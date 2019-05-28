@@ -5,7 +5,7 @@ import { BigNumber, ErrorCode, IReadableDatabase, fromStringifiable } from '..';
 import assert = require('assert');
 import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { BanStatus } from './consensus';
-import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
 
 // This is used to query SVT, Vote, Dpos table at once
 // Added by Yang Jun 2019-5-20

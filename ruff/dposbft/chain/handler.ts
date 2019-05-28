@@ -1,10 +1,9 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
-import { isNullOrUndefined } from 'util';
 // import { retarget } from '../../../src/core/pow_chain/consensus';
 import { createScript, Script } from 'ruff-vm';
 import * as fs from 'fs';
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption, isANumber, IfBancorTokenItem } from './scoop';
-import { SqliteReadWritableDatabase } from '../../../src/core/storage_sqlite/storage';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption, isANumber, IfBancorTokenItem } from './modules/scoop';
+
 
 export interface IfConfigGlobal {
     handler: string;
@@ -588,29 +587,27 @@ export function registerHandler(handler: ValueHandler) {
 
                 // 
                 let strLockAmount: string = strAmountPrecision(item.lock_amount, BANCOR_TOKEN_PRECISION);
-
                 // 
                 let bnLockAmount = new BigNumber(strLockAmount);
                 console.log('bnLockAmoutn: ', bnLockAmount);
 
-                if (bnLockAmount.eq(0)) {
-                    continue;
+                if (!bnLockAmount.eq(0)) {
+                    let curBlock = context.getCurBlock();
+                    console.log('curBlock:', curBlock);
+                    if (curBlock.eq(0)) {
+                        return ErrorCode.RESULT_DB_RECORD_EMPTY;
+                    }
+                    let dueBlock: number = curBlock.toNumber() + parseInt(item.time_expiration) * 60 / configObj.global.blockInterval;
+
+                    console.log('dueblock: ', dueBlock);
+
+                    hret = await kvRet.kv!.hset(item.address, dueBlock.toString(), bnLockAmount);
+
+                    if (hret.err) {
+                        return hret.err;
+                    }
                 }
 
-                let curBlock = context.getCurBlock();
-                console.log('curBlock:', curBlock);
-                if (curBlock.eq(0)) {
-                    return ErrorCode.RESULT_DB_RECORD_EMPTY;
-                }
-                let dueBlock: number = curBlock.toNumber() + parseInt(item.time_expiration) * 60 / configObj.global.blockInterval;
-
-                console.log('dueblock: ', dueBlock);
-
-                hret = await kvRet.kv!.hset(item.address, dueBlock.toString(), bnLockAmount);
-
-                if (hret.err) {
-                    return hret.err;
-                }
                 amountAll = amountAll.plus(bnAmount).plus(bnLockAmount);
             }
         }
