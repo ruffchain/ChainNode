@@ -45,6 +45,7 @@ export type DposViewContext = {
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
     getCurBlock: () => BigNumber;
+    getTimeFromBlock: (block: number) => number;
 } & ValueViewContext;
 
 const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';
@@ -349,6 +350,10 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         // Add by Yang Jun 2019-5-27
         externalContext.getCurBlock = (): BigNumber => {
             return new BigNumber(this.tipBlockHeader!.number);
+        }
+        // Add by Yang Jun 2019-5-28
+        externalContext.getTimeFromBlock = (block: number): number => {
+            return this.epochTime * 1000 + block * this.globalOptions.blockInterval * 1000;
         }
 
         // getvote

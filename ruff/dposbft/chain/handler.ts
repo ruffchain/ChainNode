@@ -1091,7 +1091,7 @@ export function registerHandler(handler: ValueHandler) {
                 out.amountLock = value;
                 out.dueBlock = dueBlock;
                 out.curBlock = curBlock;
-                out.dueTime = 1;
+                out.dueTime = context.getTimeFromBlock(curBlock.toNumber());
             }
         }
 
