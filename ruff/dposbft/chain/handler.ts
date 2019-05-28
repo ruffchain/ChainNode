@@ -290,8 +290,7 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('createToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
 
@@ -328,9 +327,7 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('transferTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        // Added by Yang Jun 2019-3-27
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
@@ -371,9 +368,7 @@ export function registerHandler(handler: ValueHandler) {
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
 
     handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        // Added by Yang Jun 2019-3-27
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         // Added by Yang Jun 2019-3-28
         let val: number = context.value.toNumber();
@@ -397,8 +392,7 @@ export function registerHandler(handler: ValueHandler) {
      * context's storage is storage_sqlite/storage.ts SqliteReadWritableDatabase
      */
     handler.addTX('createBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         // console.log('Yang-- received createBancorToken');
         console.log(params);
@@ -511,7 +505,7 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         console.log('Yang-- ', params)
 
@@ -548,8 +542,7 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         console.log('Yang-- buyBancorToken:', params);
 
@@ -674,8 +667,7 @@ export function registerHandler(handler: ValueHandler) {
 
     // Added by Yang Jun 2019-2-21
     handler.addTX('sellBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
 
         console.log('Yang-- params:', params);
 
@@ -1011,7 +1003,6 @@ export function registerHandler(handler: ValueHandler) {
     // api_vote
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        // context.cost(SYSTEM_TX_FEE_BN); cost nothing
         let objJson: any;
         try {
             objJson = JSON.parse(JSON.stringify(params));
@@ -1060,8 +1051,7 @@ export function registerHandler(handler: ValueHandler) {
     });
     // api_register
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
         let bnThreshold = new BigNumber(configObj.global.depositAmount);
         if (!context.value.eq(bnThreshold)) {
             return ErrorCode.RESULT_NOT_ENOUGH;
@@ -1078,8 +1068,7 @@ export function registerHandler(handler: ValueHandler) {
         return await context.register(context.caller, paramsNew as IfRegisterOption);
     });
     handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        // context.cost(context.fee);
-        context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(context.fee);
         if (params !== context.caller) {
             return ErrorCode.RESULT_WRONG_ARG;
         }
