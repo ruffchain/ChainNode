@@ -23,9 +23,9 @@ export class ValuePendingTransactions extends PendingTransactions {
 
         let balance = br.value!;
         let txValue: ValueTransaction = txTime.tx as ValueTransaction;
-        if (txValue.fee.isLessThan(MinFee)) {
-            return ErrorCode.RESULT_FEE_TOO_SMALL;
-        }
+        //if (txValue.fee.isLessThan(MinFee)) {
+        //    return ErrorCode.RESULT_FEE_TOO_SMALL;
+        //}
         let totalUse: BigNumber = txValue.value.plus(txValue.fee);
         if (txOld) {
             let txOldValue: ValueTransaction = txOld.tx as ValueTransaction;
