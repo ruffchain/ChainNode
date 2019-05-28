@@ -1,4 +1,5 @@
 import BigNumber from 'bignumber.js';
+import { IReadableKeyValue, ErrorCode } from '../../../../src/core';
 
 export const SYS_MORTGAGE_PRECISION = 0;
 export const SYS_TOKEN_PRECISION = 9;
@@ -122,3 +123,7 @@ export function bCheckRegisterOption(option: IfRegisterOption): boolean {
   return true;
 }
 
+export async function getTokenBalance(balanceKv: IReadableKeyValue, address: string): Promise<BigNumber> {
+  let retInfo = await balanceKv.get(address);
+  return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
+}
