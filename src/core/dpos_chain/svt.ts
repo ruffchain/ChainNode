@@ -5,7 +5,7 @@ import { BigNumber, ErrorCode, IReadableDatabase, fromStringifiable } from '..';
 import assert = require('assert');
 import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { BanStatus } from './consensus';
-import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
 
 // This is used to query SVT, Vote, Dpos table at once
 // Added by Yang Jun 2019-5-20
@@ -753,9 +753,9 @@ export class SVTViewContext {
   }
 
   // block to epoch time
-  private nGetTimeFromDueBlock(epochTime: number, block: number): number {
+  private nGetTimeFromDueBlock(block: number): number {
 
-    let out: number = epochTime + block * this.m_chain.globalOptions.blockInterval * 1000;
+    let out: number = this.m_chain.epochTime * 1000 + block * this.m_chain.globalOptions.blockInterval * 1000;
 
     return out;
   }
@@ -798,8 +798,8 @@ export class SVTViewContext {
 
       return { err: hret1.err, value: {} };
     }
-    const epochtime = this.m_chain.epochTime * 1000;
-    let nowtime: number = this.nGetTimeFromDueBlock(epochtime, parseInt(hret1.value!));
+    // const epochtime = this.m_chain.epochTime * 1000;
+    let nowtime: number = this.nGetTimeFromDueBlock(parseInt(hret1.value!));
 
     let out = Object.create(null);
     out.timestamp = nowtime;
@@ -838,7 +838,7 @@ export class SVTViewContext {
     out.deposit = [];
     for (let p of hdps.value!) {
       let dueblock = parseInt(p.field);
-      let duetime = this.nGetTimeFromDueBlock(epochtime, dueblock);
+      let duetime = this.nGetTimeFromDueBlock(dueblock);
       out.deposit.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 
@@ -856,7 +856,7 @@ export class SVTViewContext {
     out.vote = [];
     for (let p of her.value!) {
       let dueblock = parseInt(p.field);
-      let duetime = this.nGetTimeFromDueBlock(epochtime, dueblock);
+      let duetime = this.nGetTimeFromDueBlock(dueblock);
       out.vote.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 

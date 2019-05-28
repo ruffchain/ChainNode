@@ -12,7 +12,7 @@ import { LRUCache } from '../lib/LRUCache';
 import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
 import { SqliteReadWritableDatabase, SqliteReadableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
-import { IfRegisterOption } from '../../../ruff/dposbft/chain/scoop';
+import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -20,6 +20,7 @@ export type DposTransactionContext = {
     unmortgage: (from: string, amount: BigNumber) => Promise<ErrorCode>;
     register: (from: string, params: IfRegisterOption) => Promise<ErrorCode>;
     unregister: (from: string) => Promise<ErrorCode>;
+    getCurBlock: () => BigNumber;
     // getVote: () => Promise<Map<string, BigNumber>>;
     // getStake: (address: string) => Promise<BigNumber>;
     // getCandidates: () => Promise<string[]>;
@@ -43,6 +44,8 @@ export type DposViewContext = {
     getTicket: (address: string) => Promise<any>;
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
+    getCurBlock: () => BigNumber;
+    getTimeFromBlock: (block: number) => number;
 } & ValueViewContext;
 
 const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';
@@ -252,6 +255,15 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
             return mr.returnCode!;
         };
+
+        // Add by Yang Jun 2019-5-27
+        externalContext.getCurBlock = (): BigNumber => {
+            return new BigNumber(this.tipBlockHeader!.number);
+        }
+
+
+        /////////////////////////////////////////////
+
         // externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
         //     let gvr = await de.getVote();
         //     if (gvr.err) {
@@ -334,6 +346,15 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         let externalContext = nvex.executor!.externContext;
 
         let de = new consensus.ViewContext({ currDatabase: dbr.value!, globalOptions: this.m_globalOptions, logger: this.logger });
+
+        // Add by Yang Jun 2019-5-27
+        externalContext.getCurBlock = (): BigNumber => {
+            return new BigNumber(this.tipBlockHeader!.number);
+        }
+        // Add by Yang Jun 2019-5-28
+        externalContext.getTimeFromBlock = (block: number): number => {
+            return this.epochTime * 1000 + block * this.globalOptions.blockInterval * 1000;
+        }
 
         // getvote
         externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {

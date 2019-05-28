@@ -14,6 +14,12 @@ const TOKEN_MAX_LEN = 12;
 
 const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g;
 
+export interface IfBancorTokenItem {
+  amount: string;
+  address: string;
+  lock_amount: string;
+  time_expiration: string;
+}
 export interface IfRegisterOption {
   name: string;
   ip: string;
@@ -21,19 +27,14 @@ export interface IfRegisterOption {
   location: string;
 }
 
-function isANumber(args: string) {
-  // only contain numbers
-  let lst = args.split('');
+export function isANumber(amount: string) {
+  let bn = new BigNumber(amount);
 
-  for (let i = 0; i < lst.length; i++) {
-    // this.logger.info('test:', lst[i])
-    console.log(parseInt(lst[i]))
-
-    if (isNaN(parseInt(lst[i]))) {
-      return false;
-    }
+  if (bn.isNaN() === true) {
+    return false;
   }
-  return true;
+  let num = JSON.parse(amount);
+  return num >= 0;
 }
 
 function numNumbers(str: string) {
@@ -120,3 +121,4 @@ export function bCheckRegisterOption(option: IfRegisterOption): boolean {
 
   return true;
 }
+
