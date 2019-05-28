@@ -927,7 +927,7 @@ export class SVTViewContext {
       let option = hreturn.value! as IfRegisterOption;
       let amount1 =
         bVotedOrNot ?
-          v.value : 's0';
+          v.value : new BigNumber(0);
 
       candidates.push({
         candidate: (v.field),

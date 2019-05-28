@@ -129,9 +129,7 @@ export class ValueChain extends Chain {
         // get amount value 
         let DEPOSIT_AMOUNT = this.globalOptions.depositAmount;
 
-        ///////////////////////////////
-
-
+        /////////////////////////////// 
         let rpr = await gkvr.kv!.rpush('features', 'value');
         if (rpr.err) {
             return rpr.err;
