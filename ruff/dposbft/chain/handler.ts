@@ -1300,7 +1300,7 @@ export function registerHandler(handler: ValueHandler) {
     // api_vote
     handler.addTX('vote', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee);
-        // context.cost(SYSTEM_TX_FEE_BN); cost nothing
+        context.cost(SYSTEM_TX_FEE_BN);
         let objJson: any;
         try {
             objJson = JSON.parse(JSON.stringify(params));
@@ -1314,6 +1314,8 @@ export function registerHandler(handler: ValueHandler) {
     });
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
+        context.cost(SYSTEM_TX_FEE_BN);
+
         console.log('Yang Jun - mortgage, handler.ts');
 
         // if value is differnt from params
@@ -1335,7 +1337,7 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         // context.cost(context.fee); no Fee needed for mortgage
-        // context.cost(SYSTEM_TX_FEE_BN);
+        context.cost(SYSTEM_TX_FEE_BN);
         console.log('Yang Jun - unmortgage, handler.ts');
         let strAmount = strAmountPrecision(params, SYS_MORTGAGE_PRECISION);
 
