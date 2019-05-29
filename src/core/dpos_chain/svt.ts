@@ -741,6 +741,7 @@ export class SVTViewContext {
   protected m_svtDatabase: IReadableDatabase;
   protected m_voteDatabase: IReadableDatabase;
   protected m_systemDatabase: IReadableDatabase;
+  protected m_epochOneTime: number;
 
   // passin database handler
   constructor(options: SVTViewContextOptions) {
@@ -750,12 +751,17 @@ export class SVTViewContext {
     this.m_svtDatabase = options.svtDatabase;
     this.m_voteDatabase = options.voteDatabase;
     this.m_systemDatabase = options.systemDatabase;
+    this.m_epochOneTime = 0;
   }
 
   // block to epoch time
-  private nGetTimeFromDueBlock(block: number): number {
-
-    let out: number = this.m_chain.epochTime * 1000 + block * this.m_chain.globalOptions.blockInterval * 1000;
+  private async nGetTimeFromDueBlock(block: number): Promise<number> {
+    let hr = await this.m_chain!.getHeader(1);
+    if (hr.err) {
+      return -1;
+    }
+    let epochTime = hr.header!.timestamp;
+    let out: number = epochTime * 1000 + (block - 1) * this.m_chain.globalOptions.blockInterval * 1000;
 
     return out;
   }
@@ -799,8 +805,11 @@ export class SVTViewContext {
       return { err: hret1.err, value: {} };
     }
     // const epochtime = this.m_chain.epochTime * 1000;
-    let nowtime: number = this.nGetTimeFromDueBlock(parseInt(hret1.value!));
-
+    let hrettime = await this.nGetTimeFromDueBlock(parseInt(hret1.value!));
+    if (hrettime < 0) {
+      return { err: ErrorCode.RESULT_ERROR_STATE };
+    }
+    let nowtime: number = hrettime;
     let out = Object.create(null);
     out.timestamp = nowtime;
     out.amount = 0;
@@ -838,7 +847,10 @@ export class SVTViewContext {
     out.deposit = [];
     for (let p of hdps.value!) {
       let dueblock = parseInt(p.field);
-      let duetime = this.nGetTimeFromDueBlock(dueblock);
+      let duetime = await this.nGetTimeFromDueBlock(dueblock);
+      if (duetime < 0) {
+        return { err: ErrorCode.RESULT_ERROR_STATE };
+      }
       out.deposit.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 
@@ -856,7 +868,9 @@ export class SVTViewContext {
     out.vote = [];
     for (let p of her.value!) {
       let dueblock = parseInt(p.field);
-      let duetime = this.nGetTimeFromDueBlock(dueblock);
+      let duetime = await this.nGetTimeFromDueBlock(dueblock);
+      if (duetime < 0) { return { err: ErrorCode.RESULT_ERROR_STATE }; }
+
       out.vote.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 

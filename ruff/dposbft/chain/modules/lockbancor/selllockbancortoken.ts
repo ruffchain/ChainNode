@@ -90,8 +90,9 @@ export async function funcSellLockBancorToken(context: DposTransactionContext, p
   }
 
   let fromTotal = await fetchLockBancorTokenBalance(kvToken.kv!, context.caller);
+
   if (fromTotal.lt(new BigNumber(params.amount))) {
-    console.log('Yang- less than token account');
+    console.log('Yang- less than token account', fromTotal.toNumber());
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 

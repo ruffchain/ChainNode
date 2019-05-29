@@ -26,7 +26,7 @@ export async function fetchLockBancorTokenBalance(kv: IReadWritableKeyValue, add
     let value = p.value;
 
     if (dueBlock === '0') {
-      amountAll.plus(value);
+      amountAll = amountAll.plus(value);
     }
   }
   return amountAll;

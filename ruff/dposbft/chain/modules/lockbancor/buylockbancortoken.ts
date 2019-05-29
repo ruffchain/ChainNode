@@ -75,6 +75,7 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   if (retNonliquidity.err) { return retNonliquidity.err; }
 
   let N = new BigNumber(retNonliquidity.value);
+  console.log('N:', N.toNumber());
 
   // do computation
   let e = new BigNumber(context.value);
@@ -101,6 +102,7 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
 
   // Yang Jun 2019-3-15, Nonliquiidty is not zero, S > N
   if ((!N.isZero()) && S.gt(N)) {
+    console.log('N is abnormal:', N.toNumber());
     return ErrorCode.BANCOR_TOTAL_SUPPLY_LIMIT;
   }
 
@@ -126,12 +128,17 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   // If it's LockBancor
   let testrtn = await bLockBancorToken(kvToken.kv!);
   if (testrtn === false) {
+    console.log('not a lockBancorToken');
     return ErrorCode.RESULT_DB_TABLE_GET_FAILED;
   }
 
   let fromTotal = await fetchLockBancorTokenBalance(kvToken.kv!, context.caller);
-  let retToken = await kvToken.kv!.set(context.caller, fromTotal.plus(out));
-  if (retToken.err) { return retToken.err; }
+  let retToken = await kvToken.kv!.hset(context.caller, '0', fromTotal.plus(out));
+  if (retToken.err) {
+    console.log('set token back failed')
+    return retToken.err;
+  }
+
 
   return ErrorCode.RESULT_OK;
 }

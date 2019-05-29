@@ -45,7 +45,7 @@ export type DposViewContext = {
     getCandidates: () => Promise<string[]>;
     getMiners(): Promise<string[]>;
     getCurBlock: () => BigNumber;
-    getTimeFromBlock: (block: number) => number;
+    getTimeFromBlock: (block: number) => Promise<number>;
 } & ValueViewContext;
 
 const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';

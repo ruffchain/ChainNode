@@ -1,8 +1,11 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
+import { createScript } from 'ruff-vm';
 
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
+import {
+    SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
     bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, bCheckMethodName, SYS_MORTGAGE_PRECISION, IfRegisterOption,
-    bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile } from './modules/scoop';
+    bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile
+} from './modules/scoop';
 import { funcCreateToken } from './modules/token/token';
 import { funcTransferLockBancorTokenTo } from './modules/lockbancor/transferlockbancortokento';
 import { funcBuyLockBancorToken } from './modules/lockbancor/buylockbancortoken';
