@@ -1,13 +1,15 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
-import { createScript } from 'ruff-vm';
 
-import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION, bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, SYS_MORTGAGE_PRECISION, IfRegisterOption, bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile } from './modules/scoop';
+import { SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
+    bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, bCheckMethodName, SYS_MORTGAGE_PRECISION, IfRegisterOption,
+    bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile } from './modules/scoop';
 import { funcCreateToken } from './modules/token/token';
 import { funcTransferLockBancorTokenTo } from './modules/lockbancor/transferlockbancortokento';
 import { funcBuyLockBancorToken } from './modules/lockbancor/buylockbancortoken';
 import { funcSellLockBancorToken } from './modules/lockbancor/selllockbancortoken';
 import { funcCreateLockBancorToken } from './modules/lockbancor/createlockbancortoken';
 import { funcGetLockBancorTokenBalance } from './modules/lockbancor/getlockbancortokenbalance';
+import { getUserCode, getUserTableValue, setUserCode, runUserMethod } from './modules/usercode';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -32,15 +34,6 @@ export interface IfConfigGlobal {
     };
 }
 
-// Fixed cost for : transferTo, createToken, createBancorToken, transferTokenTo
-
-const DB_NAME_MAX_LEN: number = 12;
-const DB_KEY_MAX_LEN: number = 256;
-const DB_VALUE_MAX_LEN: number = 512;
-
-////////////////
-
-// Add by Yang Jun 2019-5-28
 readConfigFile();
 
 export function registerHandler(handler: ValueHandler) {
@@ -56,237 +49,13 @@ export function registerHandler(handler: ValueHandler) {
         return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
     }
 
-    async function getAddressCode(codeKv: IReadableKeyValue, address: string): Promise<Buffer | undefined> {
-        let retInfo = await codeKv.get(address);
-        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value.code : undefined;
-    }
+    handler.addTX('setUserCode', setUserCode);
 
-    async function getTableValue(tableKv: IReadableKeyValue, keyName: string): Promise<string | undefined> {
-        let retInfo = await tableKv.get(keyName);
-        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
-    }
-    handler.addTX('setUserCode', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        if (!params.userCode) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
+    handler.addViewMethod('getUserCode', getUserCode);
 
-        let kvRet = await context.storage.getReadWritableKeyValue('userCode');
-        if (kvRet.err) {
-            return kvRet.err;
-        }
+    handler.addViewMethod('getUserTableValue', getUserTableValue);
 
-        kvRet = await kvRet.kv!.set(context.caller, { code: params.userCode });
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        return ErrorCode.RESULT_OK;
-    });
-
-    handler.addViewMethod('getUserCode', async (context: DposViewContext, params: any): Promise<Buffer | undefined> => {
-        let kvRet = await context.storage.getReadableKeyValue('userCode');
-
-        if (kvRet.err) {
-            return undefined;
-        }
-
-        if (!isValidAddress(params.address)) {
-            return undefined;
-        }
-
-        return await getAddressCode(kvRet.kv!, params.address);
-    });
-
-    handler.addViewMethod('getUserTableValue', async (context: DposViewContext, params: any): Promise<string | undefined> => {
-        let contractAddr = params.contractAddr;
-        let tableName = params.tableName;
-        let keyName = params.keyName;
-
-        if (!isValidAddress(contractAddr)) {
-            return undefined;
-        }
-
-        if (!bCheckDBName(tableName)) {
-            return undefined;
-        }
-
-        if (keyName.length > DB_KEY_MAX_LEN) {
-            return undefined;
-        }
-
-        const dbName = `${contractAddr}-${tableName}`;
-        const kvRet = await context
-            .storage
-            .getReadableKeyValue(dbName);
-
-        if (kvRet.err) {
-            return undefined;
-        }
-
-        let retInfo = await kvRet.kv!.get(keyName);
-
-        return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : undefined;
-
-    });
-
-    handler.addTX('runUserMethod', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-        let kvRet = await context.storage.getReadableKeyValue('userCode');
-
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-        // Added by Yang Jun 2019-3-29
-        if (!isValidAddress(params.to)) {
-            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
-        }
-        let rawCode = await getAddressCode(kvRet.kv!, params.to);
-        if (!rawCode) {
-            return ErrorCode.RESULT_NOT_FOUND;
-        }
-
-        let code = rawCode.toString();
-        const totalValue = context.value;
-        const receiver = params.to;
-        let usedValue = new BigNumber(0);
-
-        const sandbox = {
-            bcLog: (resolve: any, arg0: string, arg1: string) => {
-                // console.log(arg0, arg1);
-            },
-
-            bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
-                console.log('in bcTransfer to:', to, ' amount:', amount);
-                try {
-                    let toValue = new BigNumber(amount);
-
-                    if (toValue.isNaN() || !isValidAddress(to)) {
-                        return (resolve(false));
-                    }
-                    if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
-                        console.log('exceed the amount');
-                        return (resolve(false));
-                    }
-
-                    const ret = await context
-                        .transferTo(to, toValue);
-                    if (ret === ErrorCode.RESULT_OK) {
-                        usedValue = usedValue.plus(toValue);
-                        return (resolve(true));
-                    } else {
-                        console.log('ret is', ret);
-                        return (resolve(false));
-                    }
-                } catch (err) {
-                    console.log('err when transfer', err);
-                    resolve(false);
-                }
-            },
-            bcDBCreate: async (resolve: any, name: string): Promise<any> => {
-                try {
-
-                    if (!bCheckDBName(name)) {
-                        return (resolve(false));
-                    }
-
-                    const dbName = `${receiver}-${name}`;
-
-                    const kvRet1 = await context
-                        .storage
-                        .createKeyValue(dbName);
-                    if (kvRet1.err) {
-                        return (resolve(false));
-                    } else {
-                        return (resolve(true));
-                    }
-                } catch (err) {
-                    console.log('error when DB create', err);
-                    resolve(false);
-                }
-            },
-            bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
-
-                try {
-                    if (!bCheckDBName(name)) {
-                        return (resolve(false));
-                    }
-
-                    if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
-                        console.log('Invalid input for bcDBSet');
-                        return (resolve(false));
-                    }
-
-                    let dbName = `${receiver}-${name}`;
-
-                    const kvRet2 = await context
-                        .storage
-                        .getReadWritableKeyValue(dbName);
-
-                    if (kvRet2.err) {
-                        return (resolve(false));
-                    } else {
-                        let ret = await kvRet2.kv!.set(key, value);
-                        if (ret.err) {
-                            return (resolve(false));
-                        } else {
-                            return (resolve(true));
-                        }
-                    }
-                } catch (err) {
-                    console.log('error when DB Set', err);
-                    resolve(false);
-                }
-            },
-            bcDBGet: async (resolve: any, name: string, key: string): Promise<any> => {
-                let ret;
-
-                try {
-
-                    if (!bCheckDBName(name)) {
-                        return (resolve(ret));
-                    }
-
-                    if (key.length > DB_KEY_MAX_LEN) {
-                        console.log('Invalid input for bcDBSet');
-                        return (resolve(ret));
-                    }
-
-                    let dbName = `${receiver}-${name}`;
-
-                    const kvRet3 = await context
-                        .storage
-                        .getReadWritableKeyValue(dbName);
-
-                    if (kvRet3.err) {
-                        return (resolve(ret));
-                    } else {
-                        ret = await getTableValue(kvRet3.kv!, key);
-                        return (resolve(ret));
-                    }
-                } catch (err) {
-                    console.log('error when DB Set', err);
-                    resolve(ret);
-                }
-            },
-        };
-
-        let actionCode = `
-            var contract = new Contract("${receiver}","${context.caller}");
-            contract.${params.action}("${params.params}");
-        `;
-        try {
-            await createScript(code)
-                .setUserCode(actionCode)
-                .setSandbox(sandbox)
-                .setOption({ cpuCount: 640, memSizeKB: 200 })
-                .runAsync();
-            return ErrorCode.RESULT_OK;
-        } catch (err) {
-            console.log('err is', err);
-            return ErrorCode.RESULT_FAILED;
-        }
-    });
+    handler.addTX('runUserMethod', runUserMethod);
 
     handler.addTX('createToken', funcCreateToken);
 

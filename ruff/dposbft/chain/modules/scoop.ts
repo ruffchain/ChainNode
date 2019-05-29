@@ -100,6 +100,9 @@ const DB_NAME_MAX_LEN = 12;
 export function bCheckDBName(dbName: string) {
   let str = dbName.toUpperCase();
 
+  if (!dbName) {
+    return false;
+  }
   // 3~12位
   if (str.length < DB_NAME_MIN_LEN || str.length > DB_NAME_MAX_LEN) {
     return false;
@@ -111,6 +114,10 @@ export function bCheckDBName(dbName: string) {
   }
 
   return true;
+}
+
+export function bCheckMethodName(dbName: string) {
+    return bCheckDBName(dbName);
 }
 
 export function bCheckRegisterOption(option: IfRegisterOption): boolean {
