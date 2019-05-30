@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 import * as http from 'http';
 
+const MAX_CONTENTY_LENGTH = 5 * 1024 * 1024;
+
 export class RPCServer extends EventEmitter {
     private m_addr: string;
     private m_port: number;
@@ -37,13 +39,18 @@ export class RPCServer extends EventEmitter {
         }
         this.m_server = http.createServer();
         this.m_server.on('request', (req, resp) => {
-            if (req.url !== '/rpc' || req.method !== 'POST') {
-                resp.writeHead(404);
-                resp.end();
-            } else {
+            var contentType = req.headers['content-type'] || '';
+            if (req.url === '/rpc' &&
+                req.method === 'POST' &&
+                contentType.indexOf('application/json') >= 0
+            )  {
                 let jsonData = '';
                 req.on('data', (chunk: any) => {
                     jsonData += chunk;
+                    if (jsonData.length >= MAX_CONTENTY_LENGTH) {
+                        resp.writeHead(404);
+                        resp.end();
+                    }
                 });
                 req.on('end', () => {
 
@@ -66,6 +73,9 @@ export class RPCServer extends EventEmitter {
                     }
 
                 });
+            } else {
+                resp.writeHead(404);
+                resp.end();
             }
         });
 
