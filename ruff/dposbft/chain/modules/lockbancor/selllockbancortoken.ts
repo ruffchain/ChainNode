@@ -5,10 +5,11 @@ import { bLockBancorToken, fetchLockBancorTokenBalance } from "./common";
 export async function funcSellLockBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  console.log('Yang-- params:', params);
+  context.logger.info('Yang-- params:', params);
 
   // 参数检查
   if (!params.tokenid) {
+    context.logger.error('funcselllockbancortoken dont have tokenid');
     return ErrorCode.RESULT_INVALID_PARAM;
   }
 

@@ -31,6 +31,7 @@
     "sqlite": "3.0.3",
     "sqlite3": "^4.0.6",
     "sqlite3-transactions": "0.0.5",
+    "tslint": "^5.16.0",
     "winston": "^2.4.2",
     "winston-daily-rotate-file": "^3.8.0",
     "xmlhttprequest": "^1.8.0"
