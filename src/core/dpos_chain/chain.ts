@@ -42,7 +42,7 @@ export type DposViewContext = {
     getVote: () => Promise<Map<string, BigNumber>>;
     getStake: (address: string) => Promise<BigNumber>;
     getTicket: (address: string) => Promise<any>;
-    getCandidates: () => Promise<string[]>;
+    getCandidates: () => Promise<any[]>;
     getMiners(): Promise<string[]>;
     getCurBlock: () => BigNumber;
     getTimeFromBlock: (block: number) => Promise<number>;

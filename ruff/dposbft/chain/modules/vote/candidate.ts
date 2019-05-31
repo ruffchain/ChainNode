@@ -1,7 +1,9 @@
 import { DposViewContext, isValidAddress } from "../../../../../src/core";
 
 export async function funcGetCandidateInfo(context: DposViewContext, params: any): Promise<any> {
-  let hret: any[] = await context.getCandidates();
+  context.logger.info('funcGetCandidateInfo');
+
+  let hret: any = await context.getCandidates();
   if (!hret) {
     context.logger.error('Empty candidates list');
     return {};
@@ -12,9 +14,13 @@ export async function funcGetCandidateInfo(context: DposViewContext, params: any
     return {};
   }
 
-  for (let i = 0; i < hret.length; i++) {
-    if (hret[i].candidate.substr(1) === params.address) {
-      return hret[i];
+  context.logger.info(hret);
+
+  for (let i = 0; i < hret.candidates.length; i++) {
+    context.logger.info("candidate:" + hret.candidates[i].candidate);
+    context.logger.info("address:" + params.address);
+    if (hret.candidates[i].candidate === params.address) {
+      return hret.candidates[i];
     }
   }
   context.logger.error('Cannot find ', params);
