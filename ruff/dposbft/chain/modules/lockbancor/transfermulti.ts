@@ -4,7 +4,7 @@ import { strAmountPrecision, BANCOR_TOKEN_PRECISION, MAX_TO_MULTI_NUM } from "..
 export async function funcTransferLockBancorTokenToMulti(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  console.log('Yang-- ', params)
+  context.logger.info('Yang-- ', params);
 
   let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
@@ -15,16 +15,30 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   // check token type
   let rtnType = await tokenkv.kv!.get('type');
 
-  console.log(rtnType);
+  context.logger.info(JSON.stringify(rtnType));
 
   if (rtnType.err || rtnType.value !== 'lock_bancor_token') {
-    console.log('wrong type');
+    context.logger.info('wrong type');
     return ErrorCode.RESULT_NOT_SUPPORT;
   }
 
+  // check caller is the creator?
+  let rtnCreator = await tokenkv.kv!.get('creator');
+
+  if (rtnCreator.err) {
+    context.logger.error('Can not find creator in lockbancor token');
+    return rtnCreator.err;
+  }
+
+  if (rtnCreator.value! !== context.caller) {
+    context.logger.error('Wrong creator');
+    return ErrorCode.RESULT_DB_TABLE_GET_FAILED;
+  }
+  ///////////////////////////////
+
   let hret = await tokenkv.kv!.hgetall(context.caller);
   if (hret.err || hret.value!.length === 0) {
-    console.log('It is empty');
+    context.logger.info('It is empty');
     return ErrorCode.RESULT_DB_TABLE_FAILED;
   }
   let hret2 = context.getCurBlock();
@@ -35,8 +49,8 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
 
   let fromTotal = new BigNumber(0);
   for (let p of hret.value!) {
-    console.log('item:')
-    console.log(p);
+    context.logger.info('item:')
+    context.logger.info(JSON.stringify(p));
     let dueBlock = p.key;
     let value = p.value;
 
@@ -69,7 +83,7 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   }
 
   if (fromTotal.lt(neededAmount)) {
-    console.log('Yang-- less than amount', neededAmount);
+    context.logger.info('Yang-- less than amount', neededAmount);
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 
