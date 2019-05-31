@@ -6,13 +6,24 @@ import {
     bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, bCheckMethodName, SYS_MORTGAGE_PRECISION, IfRegisterOption,
     bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile
 } from './modules/scoop';
-import { funcCreateToken } from './modules/token/token';
+import { funcCreateToken } from './modules/token/create';
 import { funcTransferLockBancorTokenTo } from './modules/lockbancor/transferlockbancortokento';
 import { funcBuyLockBancorToken } from './modules/lockbancor/buylockbancortoken';
 import { funcSellLockBancorToken } from './modules/lockbancor/selllockbancortoken';
 import { funcCreateLockBancorToken } from './modules/lockbancor/createlockbancortoken';
 import { funcGetLockBancorTokenBalance } from './modules/lockbancor/getlockbancortokenbalance';
 import { getUserCode, getUserTableValue, setUserCode, runUserMethod } from './modules/usercode';
+import { funcTransferTokenTo } from './modules/token/transfer';
+import { funcCreateBancorToken } from './modules/bancor/create';
+import { funcTransferBancorTokenTo } from './modules/bancor/transfer';
+import { funcBuyBancorToken } from './modules/bancor/buy';
+import { funcSellBancorToken } from './modules/bancor/sell';
+import { funcGetBancorTokenParams } from './modules/bancor/params';
+import { funcGetBalances } from './modules/sys/balances';
+import { funcGetTokenBalances } from './modules/token/balances';
+import { funcGetBancorTokenBalances } from './modules/bancor/balances';
+import { funcTransferTo } from './modules/sys/transfer';
+import { funcGetCandidateInfo } from './modules/vote/candidate';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -51,7 +62,9 @@ export function registerHandler(handler: ValueHandler) {
         let retInfo = await balanceKv.get(address);
         return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
     }
-
+    //////////////////
+    // smart contract
+    //////////////////
     handler.addTX('setUserCode', setUserCode);
 
     handler.addViewMethod('getUserCode', getUserCode);
@@ -60,223 +73,105 @@ export function registerHandler(handler: ValueHandler) {
 
     handler.addTX('runUserMethod', runUserMethod);
 
+    ////////////////
+    // token about
+    ////////////////
     handler.addTX('createToken', funcCreateToken);
 
-    handler.addTX('transferTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+    handler.addTX('transferTokenTo', funcTransferTokenTo);
 
-        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-
-        if (tokenkv.err) {
-            return tokenkv.err;
-        }
-
-        let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
-
-        // Added by Yang Jun 2019-3-28
-        // if (typeof params.amount !== 'number') {
-        //     return ErrorCode.RESULT_INVALID_TYPE;
-        // }
-        let precision = await tokenkv.kv!.get('precision');
-
-        if (precision.err) {
-            context.logger.error('precision not found , transferTokenTo');
-
-            return precision.err;
-        }
-
-        let strAmount: string = strAmountPrecision(params.amount, parseInt(precision.value.replace('s', '')));
-        let amount = new BigNumber(strAmount);
-
-        if (!isValidAddress(params.to)) {
-            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
-        }
-
-        if (fromTotal.lt(amount)) {
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
-        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
-        return ErrorCode.RESULT_OK;
+    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+        return await getTokenBalance(balancekv.kv!, params.address);
     });
 
+    handler.addViewMethod('getTokenBalances', funcGetTokenBalances);
 
+    //////////////
+    // sys about
+    /////////////
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
+    handler.addTX('transferTo', funcTransferTo);
 
-    handler.addTX('transferTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-
-        // Added by Yang Jun 2019-3-28
-        let val: number = context.value.toNumber();
-        let val2: string = val.toFixed(SYS_TOKEN_PRECISION);
-
-        if (!isValidAddress(params.to)) {
-            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
-        }
-
-        const err = await context.transferTo(params.to, new BigNumber(val2));
-
-        if (!err) {
-            context.emit('transfer', { from: context.caller, to: params.to, value: new BigNumber(val2) });
-        }
-        return err;
+    handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        return await context.getBalance(params.address);
     });
+    handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        return await context.getBalance('0');
+    });
+    // feed back is never an object
+    handler.addViewMethod('getBalances', funcGetBalances);
 
     // Added by Yang Jun 2019-2-21
     // Added by Yang Jun 2019-2-20
     /**
      * context's storage is storage_sqlite/storage.ts SqliteReadWritableDatabase
      */
-    handler.addTX('createBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+    // token
 
-        // console.log('Yang-- received createBancorToken');
-        console.log(params);
-
-        // 参数检查
-        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-            // console.log('Yang-- quit becasue tokenid')
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-        if (!params.preBalances) {
-            // console.log('Yang-- quit becasue preBalances')
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-
-        // supply has been incorporated into preBalances
-        if (!params.factor) {
-            // console.log('Yang-- quit becasue factor')
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-
-        // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
-        // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
-
-        // put tokenid to uppercase
-        let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        if (kvRet.err) {
-            console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
-            return kvRet.err;
-        }
-
-        let kvCreator = await kvRet.kv!.set('creator', context.caller);
-
-        if (kvCreator.err) {
-            return kvCreator.err;
-        }
-        await kvRet.kv!.set('type', 'bancor_token');
-
-        let amountAll = new BigNumber(0);
-        if (params.preBalances) {
-            for (let index = 0; index < params.preBalances.length; index++) {
-                // 按照address和amount预先初始化钱数
-                let strAmount: string = strAmountPrecision(params.preBalances[index].amount, BANCOR_TOKEN_PRECISION);
-
-                // check address
-                if (!isValidAddress(params.preBalances[index].address)) {
-                    return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
-                }
-
-                await kvRet.kv!.set(params.preBalances[index].address, new BigNumber(strAmount));
-
-                amountAll = amountAll.plus(new BigNumber(strAmount));
-            }
-        }
-
-        // Setting bancor parameters
-        // set Factor
-        let tokenIdUpperCase = params.tokenid.toUpperCase();
-
-        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-        kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.factor)); // number type
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        // set Reserve
-        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-        kvRet = await kvRet.kv!.set(tokenIdUpperCase, context.value);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        // set Supply
-        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-        kvRet = await kvRet.kv!.set(tokenIdUpperCase, amountAll);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        // set Nonliquidity
-        kvRet = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        // Consider to use nonliquidity or not
-        // nonliquidity == 0; no limit for supply
-        // nonliquidity !== 0, supply < nonliquidity!!
-        if (!params.nonliquidity) {
-            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(0));
-        } else {
-            kvRet = await kvRet.kv!.set(tokenIdUpperCase, new BigNumber(params.nonliquidity).plus(amountAll));
-        }
-
-        if (kvRet.err) {
-            return kvRet.err;
-        }
-
-        return ErrorCode.RESULT_OK;
-
-    });
-    handler.addTX('createLockBancorToken', funcCreateLockBancorToken);
-
+    /////////////////////
+    // bancor token
+    /////////////////////
+    handler.addTX('createBancorToken', funcCreateBancorToken);
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferBancorTokenTo', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+    handler.addTX('transferBancorTokenTo', funcTransferBancorTokenTo);
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('buyBancorToken', funcBuyBancorToken);
+    // Added by Yang Jun 2019-2-21
+    handler.addTX('sellBancorToken', funcSellBancorToken);
+    // Added by Yang Jun 2019-2-21
+    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+        return await getTokenBalance(balancekv.kv!, params.address);
+    });
+    handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
-        console.log('Yang-- ', params)
-
-        let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-
-        if (tokenkv.err) {
-            return tokenkv.err;
+        if (!params.tokenid) {
+            return new BigNumber(0);
         }
 
-        let fromTotal = await getTokenBalance(tokenkv.kv!, context.caller);
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
+    });
+    handler.addViewMethod('getBancorTokenReserve', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
-        // Added by Yang Jun 2019-3-28
-        // if (typeof params.amount !== 'number') {
-        //     return ErrorCode.RESULT_INVALID_TYPE;
-        // }
-
-        // Added by Yang Jun 2019-3-29
-        let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
-        let amount = new BigNumber(strAmount);
-
-        if (!isValidAddress(params.to)) {
-            return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
+        if (!params.tokenid) {
+            return new BigNumber(0);
         }
 
-        if (fromTotal.lt(amount)) {
-            console.log('Yang-- less than amount', amount);
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-
-        await (tokenkv.kv!.set(context.caller, fromTotal.minus(amount)));
-        await (tokenkv.kv!.set(params.to, (await getTokenBalance(tokenkv.kv!, params.to)).plus(amount)));
-        return ErrorCode.RESULT_OK;
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
 
+    handler.addViewMethod('getBancorTokenSupply', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        if (!params.tokenid) {
+            return new BigNumber(0);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
+    });
+    // Add getBancorTokenNonliquidity,
+    handler.addViewMethod('getBancorTokenNonliquidity', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+
+        if (!params.tokenid) {
+            return new BigNumber(0);
+        }
+
+        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
+        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
+    });
+    // Yang Jun 2019-4-10
+    handler.addViewMethod('getBancorTokenParams', funcGetBancorTokenParams);
+
+    handler.addViewMethod('getBancorTokenBalances', funcGetBancorTokenBalances);
+
+    //////////////////////
+    // lock bancor token
+    //////////////////////
+    handler.addTX('createLockBancorToken', funcCreateLockBancorToken);
     // Added by Yang Jun 2019-2-21
     handler.addTX('transferLockBancorTokenTo', funcTransferLockBancorTokenTo);
 
@@ -285,238 +180,11 @@ export function registerHandler(handler: ValueHandler) {
     handler.addTX('sellLockBancorToken', funcSellLockBancorToken);
 
     // Added by Yang Jun 2019-2-21
-    handler.addTX('buyBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
+    handler.addViewMethod('getLockBancorTokenBalance', funcGetLockBancorTokenBalance);
 
-        console.log('Yang-- buyBancorToken:', params);
-
-        // context.value has the money
-        // 参数检查
-        if (!params.tokenid) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-
-        let tokenIdUpperCase = params.tokenid.toUpperCase();
-
-        // If context.value lt sys value
-        let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
-        if (syskv.err) {
-            console.log('Yang-- not exist balance');
-            return syskv.err;
-        }
-        let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
-
-        let strAmount = context.value.toFixed(SYS_TOKEN_PRECISION);
-        let amount = new BigNumber(strAmount);
-
-        if (fromTotalSys.lt(amount)) {
-            console.log('Yang-- not enough balance');
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-
-        // get F
-        let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        if (kvFactor.err) {
-            return kvFactor.err;
-        }
-        let retFactor = await kvFactor.kv!.get(tokenIdUpperCase);
-        if (retFactor.err) {
-            return retFactor.err;
-        }
-        console.log('Yang-- factor:', retFactor.value.toString());
-        let F = new BigNumber(retFactor.value);
-
-        // get S
-        let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        if (kvSupply.err) { return kvSupply.err; }
-
-        let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
-        if (retSupply.err) { return retSupply.err; }
-
-        console.log('Yang-- supply:', retSupply.value.toString());
-        let S = new BigNumber(retSupply.value);
-
-        // get R
-        let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        if (kvReserve.err) { return kvReserve.err; }
-
-        let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
-        if (retReserve.err) { return retReserve.err; }
-
-        console.log('Yang-- reserve:', retReserve.value.toString());
-        let R = new BigNumber(retReserve.value);
-
-        // get nonliquidity
-        let kvNonliquidity = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        if (kvNonliquidity.err) { return kvNonliquidity.err; }
-
-        let retNonliquidity = await kvNonliquidity.kv!.get(tokenIdUpperCase);
-        if (retNonliquidity.err) { return retNonliquidity.err; }
-
-        let N = new BigNumber(retNonliquidity.value);
-
-        // do computation
-        let e = new BigNumber(context.value);
-        let out: BigNumber;
-
-        out = e.dividedBy(R);
-        out = out.plus(new BigNumber(1.0));
-        let temp1 = out.toNumber();
-        console.log('temp1:', temp1);
-        console.log('F:', F.toNumber());
-        console.log('math.pow:', Math.pow(temp1, F.toNumber()));
-
-        out = new BigNumber(Math.pow(temp1, F.toNumber()));
-
-        out = out.minus(new BigNumber(1));
-        out = out.multipliedBy(S);
-
-        console.log('Yang-- supply plus:', out.toString());
-        console.log('Yang-- reserve plus:', e.toString());
-
-        // Update system R,S; Update User account
-        R = R.plus(e);
-        S = S.plus(out);
-
-        // Yang Jun 2019-3-15, Nonliquiidty is not zero, S > N
-        if ((!N.isZero()) && S.gt(N)) {
-            return ErrorCode.BANCOR_TOTAL_SUPPLY_LIMIT;
-        }
-
-        let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
-        if (kvRet.err) {
-            console.log('Yang-- update reserve failed')
-            return kvRet.err;
-        }
-
-        kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
-        if (kvRet.err) {
-            console.log('Yang-- update supply failed')
-            return kvRet.err;
-        }
-
-        // Update User account
-        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
-        if (kvToken.err) {
-            console.log('Yang-- update user account failed')
-            return kvToken.err;
-        }
-
-        let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
-        let retToken = await kvToken.kv!.set(context.caller, fromTotal.plus(out));
-        if (retToken.err) { return retToken.err; }
-
-        return ErrorCode.RESULT_OK;
-    });
-
-    // Added by Yang Jun 2019-2-21
-    handler.addTX('sellBancorToken', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-        context.cost(context.fee);
-
-        console.log('Yang-- params:', params);
-
-        // 参数检查
-        if (!params.tokenid) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        }
-
-        let tokenIdUpperCase = params.tokenid.toUpperCase();
-
-        // get F
-        let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        if (kvFactor.err) {
-            return kvFactor.err;
-        }
-        let retFactor = await kvFactor.kv!.get(tokenIdUpperCase);
-        if (retFactor.err) {
-            return retFactor.err;
-        }
-        let F = new BigNumber(retFactor.value);
-        console.log('F: ', F.toString());
-
-        // get S
-        let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        if (kvSupply.err) { return kvSupply.err; }
-
-        let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
-        if (retSupply.err) { return retSupply.err; }
-
-        let S = new BigNumber(retSupply.value);
-        console.log('S:', S.toString());
-
-        // get R
-        let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        if (kvReserve.err) { return kvReserve.err; }
-
-        let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
-        if (retReserve.err) { return retReserve.err; }
-
-        let R = new BigNumber(retReserve.value);
-        console.log('Yang-- R:', R.toString());
-
-        // do computation
-        let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
-        let e = new BigNumber(strAmount);
-        let out: BigNumber;
-
-        // Dont know if it will happen ever
-        if (S.lt(e)) {
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-
-        out = e.dividedBy(S);
-        out = new BigNumber(1).minus(out);
-        let temp1 = out.toNumber();
-        out = new BigNumber(Math.pow(temp1, 1 / F.toNumber()));
-        out = new BigNumber(1).minus(out);
-        out = out.multipliedBy(R);
-
-        // Update system R,S;
-        R = R.minus(out);
-        S = S.minus(e);
-
-        console.log('Yang-- reserve minus:', out.toString());
-        console.log('Yang-- supply minus:', e.toString());
-
-        let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
-        if (kvRet.err) { return kvRet.err; }
-
-        kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
-        if (kvRet.err) { return kvRet.err; }
-
-        // Update User account
-        let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
-        if (kvToken.err) { return kvToken.err; }
-
-        let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
-        if (fromTotal.lt(new BigNumber(params.amount))) {
-            console.log('Yang- less than token account');
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
-
-        let retToken = await kvToken.kv!.set(context.caller, fromTotal.minus(new BigNumber(params.amount)));
-        if (retToken.err) { return retToken.err; }
-
-        // Update User's SYS account, directly change account?
-        const err = await context.transferTo(context.caller, out);
-        if (!err) {
-            context.emit('transfer', { from: '0', to: context.caller, value: out });
-        } else {
-            return err;
-        }
-
-        return ErrorCode.RESULT_OK;
-    });
-
-    handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        return await getTokenBalance(balancekv.kv!, params.address);
-    });
-
-    handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        return await context.getBalance(params.address);
-    });
-
+    /////////////////////
+    //  vote
+    ////////////////////
     handler.addViewMethod('getVote', async (context: DposViewContext, params: any): Promise<any> => {
         let v: Map<string, BigNumber> = await context.getVote();
         return MapToObject(v);
@@ -538,213 +206,10 @@ export function registerHandler(handler: ValueHandler) {
     handler.addViewMethod('getMiners', async (context: DposViewContext, params: any): Promise<string[]> => {
         return await context.getMiners();
     });
-
-    // Added by Yang Jun 2019-2-21
-    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        return await getTokenBalance(balancekv.kv!, params.address);
-    });
-
-    // Added by Yang Jun 2019-2-21
-    handler.addViewMethod('getLockBancorTokenBalance', funcGetLockBancorTokenBalance);
-
-
-    handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        if (!params.tokenid) {
-            return new BigNumber(0);
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
-    });
-
-    handler.addViewMethod('getBancorTokenReserve', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        if (!params.tokenid) {
-            return new BigNumber(0);
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
-    });
-
-    handler.addViewMethod('getBancorTokenSupply', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        if (!params.tokenid) {
-            return new BigNumber(0);
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
-    });
-
-    // Add getBancorTokenNonliquidity,
-    handler.addViewMethod('getBancorTokenNonliquidity', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        if (!params.tokenid) {
-            return new BigNumber(0);
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
-    });
-
-    // Yang Jun 2019-4-10
-    handler.addViewMethod('getBancorTokenParams', async (context: DposViewContext, params: any): Promise<{ F: BigNumber, S: BigNumber, R: BigNumber, N: BigNumber } | number> => {
-
-        // let outputError = { F: new BigNumber(0), S: new BigNumber(0), R: new BigNumber(0) };
-        if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-            return ErrorCode.RESULT_WRONG_ARG;
-        }
-        let tokenIdUpperCase = params.tokenid.toUpperCase();
-
-        // get F
-        let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
-        if (kvFactor.err) {
-            context.logger.error('getbancortokenparams() fail open kvFactor');
-            return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
-        }
-        let retFactor = await kvFactor.kv!.get(tokenIdUpperCase);
-        if (retFactor.err) {
-            return ErrorCode.RESULT_DB_RECORD_EMPTY;
-        }
-        let Factor = new BigNumber(retFactor.value);
-
-        // get S
-        let kvSupply = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
-        if (kvSupply.err) {
-            context.logger.error('getbancortokenparams() fail open kvSupply');
-            return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
-        }
-
-        let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
-        if (retSupply.err) { return ErrorCode.RESULT_DB_RECORD_EMPTY; }
-
-        let Supply = new BigNumber(retSupply.value);
-
-        // get R
-        let kvReserve = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
-        if (kvReserve.err) {
-            context.logger.error('getbancortokenparams() fail open kvReserve'); return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
-        }
-
-        let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
-        if (retReserve.err) { return ErrorCode.RESULT_DB_RECORD_EMPTY; }
-
-        let Reserve = new BigNumber(retReserve.value);
-        // console.log('Yang-- R:', R.toString());
-
-        // get N
-        let kvNonliquidity = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
-        if (kvNonliquidity.err) {
-            context.logger.error('getbancortokenparams() fail open kvNonliquidity'); return ErrorCode.RESULT_DB_TABLE_OPEN_FAILED;
-        }
-
-        let retNonliquidity = await kvNonliquidity.kv!.get(tokenIdUpperCase);
-        if (retNonliquidity.err) { return ErrorCode.RESULT_DB_RECORD_EMPTY; }
-
-        let Nonliquidity = new BigNumber(retNonliquidity.value);
-
-        return { F: Factor, S: Supply, R: Reserve, N: Nonliquidity };
-    });
-
-    handler.addViewMethod('getZeroBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-
-        return await context.getBalance('0');
-    });
+    // Yang Jun 2019-5-31
+    handler.addViewMethod('getCandidateInfo', funcGetCandidateInfo);
 
     // Yang Jun 2019-4-9
-    // feed back is never an object
-    handler.addViewMethod('getBalances', async (context: DposViewContext, params: any): Promise<{ address: string, balance: BigNumber }[]> => {
-
-        if (!params.addresses) {
-            return [];
-        }
-
-        let obj: any;
-        try {
-            // context.logger.error('getbalances');
-            // console.log(params.addresses);
-            // console.log(typeof params.addresses)
-            obj = JSON.parse(JSON.stringify(params.addresses));
-        } catch (e) {
-            context.logger.error('getBalances parsing addresses error', params.addresses);
-            return [];
-        }
-        let resultLst: { address: string, balance: BigNumber }[] = [];
-
-        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
-            if (!isValidAddress(obj[i])) {
-                return [];
-            }
-
-            let result = await context.getBalance(obj[i]);
-            resultLst.push({ address: obj[i], balance: result });
-        }
-
-        return resultLst;
-    });
-
-    handler.addViewMethod('getTokenBalances', async (context: DposViewContext, params: any): Promise<{ address: string, balance: BigNumber }[]> => {
-
-        if (!params.addresses) {
-            return [];
-        }
-
-        let obj: any;
-        try {
-            obj = JSON.parse(JSON.stringify(params.addresses));
-        } catch (e) {
-            context.logger.error('getTokenBalances parsing addresses error', params.addresses);
-            return [];
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        // return await ;
-        let resultLst: { address: string, balance: BigNumber }[] = [];
-
-        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
-            if (!isValidAddress(obj[i])) {
-                return [];
-            }
-            let result = await getTokenBalance(balancekv.kv!, obj[i]);
-            resultLst.push({ address: obj[i], balance: result });
-        }
-
-        return resultLst;
-    });
-    handler.addViewMethod('getBancorTokenBalances', async (context: DposViewContext, params: any): Promise<{ address: string, balance: BigNumber }[]> => {
-
-        if (!params.addresses) {
-            return [];
-        }
-
-        let obj: any;
-        try {
-            obj = JSON.parse(JSON.stringify(params.addresses));
-        } catch (e) {
-            context.logger.error('getBancorTokenBalances parsing addresses error', params.addresses);
-            return [];
-        }
-
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        // return await ;
-        let resultLst: { address: string, balance: BigNumber }[] = [];
-
-        for (let i = 0; i < obj.length && i <= MAX_QUERY_NUM; i++) {
-            if (!isValidAddress(obj[i])) {
-                return [];
-            }
-
-            let result = await getTokenBalance(balancekv.kv!, obj[i]);
-            let strAmount = strAmountPrecision(result.toNumber().toString(), BANCOR_TOKEN_PRECISION);
-            let e: BigNumber = new BigNumber(strAmount);
-            resultLst.push({ address: obj[i], balance: e });
-        }
-
-        return resultLst;
-    });
     //////////////////////////////////////////////////////////////
 
     // api_vote

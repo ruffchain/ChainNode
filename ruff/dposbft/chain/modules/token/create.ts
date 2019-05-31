@@ -1,9 +1,7 @@
-import { DposTransactionContext, ErrorCode, Chain, isValidAddress, BigNumber } from "../../../../../src/core";
-import { bCheckTokenid, bCheckTokenPrecision, strAmountPrecision, SYS_TOKEN_PRECISION } from "../scoop";
+import { DposTransactionContext, ErrorCode, Chain, isValidAddress, BigNumber } from '../../../../../src/core';
+import { bCheckTokenid, bCheckTokenPrecision, strAmountPrecision, SYS_TOKEN_PRECISION } from '../scoop';
 
-
-
-export async function funcCreateToken(context: DposTransactionContext, params: any): Promise < ErrorCode > {
+export async function funcCreateToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
   // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
