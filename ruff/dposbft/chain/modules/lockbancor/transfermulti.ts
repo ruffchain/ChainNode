@@ -49,7 +49,7 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
 
   let fromTotal = new BigNumber(0);
   for (let p of hret.value!) {
-    context.logger.info('item:')
+    context.logger.info('item:');
     context.logger.info(JSON.stringify(p));
     let dueBlock = p.key;
     let value = p.value;
@@ -64,19 +64,19 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   }
 
   // get all toAccounts
-  if (params.length === undefined || params.length > MAX_TO_MULTI_NUM) {
+  if (params.to.length === undefined || params.to.length > MAX_TO_MULTI_NUM || params.to.length <= 0) {
     return ErrorCode.RESULT_WRONG_ARG;
   }
   let newParams = [];
   let neededAmount = new BigNumber(0);
-  for (let i = 0; i < params.length; i++) {
-    let address = params[i].address;
+  for (let i = 0; i < params.to.length; i++) {
+    let address = params.to[i].address;
 
     if (!isValidAddress(address)) {
       return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
     }
     // Added by Yang Jun 2019-3-29
-    let strAmount = strAmountPrecision(params[i].amount, BANCOR_TOKEN_PRECISION);
+    let strAmount = strAmountPrecision(params.to[i].amount, BANCOR_TOKEN_PRECISION);
     let bnAmount = new BigNumber(strAmount);
     neededAmount = neededAmount.plus(bnAmount);
     newParams.push({ address, amount: bnAmount });
@@ -91,14 +91,14 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   if (hret4.err) { return hret4.err; }
 
   for (let i = 0; i < newParams.length; i++) {
-    let hretTo = await tokenkv.kv!.hget(params[i].address, '0');
+    let hretTo = await tokenkv.kv!.hget(newParams[i].address, '0');
     if (hretTo.err === ErrorCode.RESULT_EXCEPTION) { return hretTo.err; }
 
     let hretTransfer;
     if (hretTo.err === ErrorCode.RESULT_NOT_FOUND) {
-      hretTransfer = await tokenkv.kv!.hset(params.to, '0', params[i].amount);
+      hretTransfer = await tokenkv.kv!.hset(newParams[i].address, '0', newParams[i].amount);
     } else {
-      hretTransfer = await tokenkv.kv!.hset(params.to, '0', hretTo.value!.plus(params[i].amount));
+      hretTransfer = await tokenkv.kv!.hset(newParams[i].address, '0', hretTo.value!.plus(newParams[i].amount));
     }
 
     if (hretTransfer.err) { return hretTransfer.err; }
