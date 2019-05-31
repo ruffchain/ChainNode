@@ -15,6 +15,9 @@ export const SVT_TOKEN = 'SVT';
 const TOKEN_MIN_LEN = 3;
 const TOKEN_MAX_LEN = 12;
 
+// transferLockBancorTokenToMulti
+export const MAX_TO_MULTI_NUM = 200;
+
 const REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g;
 
 export interface IfBancorTokenItem {
@@ -117,7 +120,7 @@ export function bCheckDBName(dbName: string) {
 }
 
 export function bCheckMethodName(dbName: string) {
-    return bCheckDBName(dbName);
+  return bCheckDBName(dbName);
 }
 
 export function bCheckRegisterOption(option: IfRegisterOption): boolean {

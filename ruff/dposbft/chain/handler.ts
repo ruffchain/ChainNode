@@ -24,6 +24,7 @@ import { funcGetTokenBalances } from './modules/token/balances';
 import { funcGetBancorTokenBalances } from './modules/bancor/balances';
 import { funcTransferTo } from './modules/sys/transfer';
 import { funcGetCandidateInfo } from './modules/vote/candidate';
+import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -174,6 +175,9 @@ export function registerHandler(handler: ValueHandler) {
     handler.addTX('createLockBancorToken', funcCreateLockBancorToken);
     // Added by Yang Jun 2019-2-21
     handler.addTX('transferLockBancorTokenTo', funcTransferLockBancorTokenTo);
+
+    // Added by Yang Jun 2019-5-31
+    handler.addTX('transferLockBancorTokenToMulti', funcTransferLockBancorTokenToMulti);
 
     handler.addTX('buyLockBancorToken', funcBuyLockBancorToken);
 
