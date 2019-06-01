@@ -13,7 +13,7 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   }
   let paramsObj: any;
   try {
-    paramsObj = JSON.parse(params.to);
+    paramsObj = JSON.parse(JSON.stringify(params.to));
   } catch (e) {
     context.logger.error('wrong params.to json parsing');
     return ErrorCode.RESULT_WRONG_ARG;
