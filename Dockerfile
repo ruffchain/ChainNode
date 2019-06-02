@@ -1,6 +1,6 @@
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 MAINTAINER yang o3
-RUN apt-get update && \
+RUN apt-get update && apt search linux-headers-$(uname -r) &&\
     apt-get install -y build-essential \
     libssl-dev \
     python \
@@ -8,7 +8,8 @@ RUN apt-get update && \
     openssh-server \
     git \
     curl \
-    sudo
+    sudo 
+
 
 RUN useradd -m ruff -g root && echo "ruff:123456" | chpasswd && adduser ruff sudo
 
@@ -28,6 +29,7 @@ ENV PATH      $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
 COPY ./chainsdk /home/ruff/chainsdk
 RUN node --version
+# 
 RUN cd /home/ruff/chainsdk && npm install --registry=https://registry.npm.taobao.org --verbose
 
 WORKDIR /home/ruff/chainsdk
