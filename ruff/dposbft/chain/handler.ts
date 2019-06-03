@@ -25,6 +25,7 @@ import { funcGetBancorTokenBalances } from './modules/bancor/balances';
 import { funcTransferTo } from './modules/sys/transfer';
 import { funcGetCandidateInfo } from './modules/vote/candidate';
 import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
+import { funcGetLockBancorTokenBalances } from './modules/lockbancor/balances';
 
 export interface IfConfigGlobal {
     handler: string;
@@ -114,18 +115,18 @@ export function registerHandler(handler: ValueHandler) {
     /////////////////////
     // bancor token
     /////////////////////
-    handler.addTX('createBancorToken', funcCreateBancorToken);
+    // handler.addTX('createBancorToken', funcCreateBancorToken);
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferBancorTokenTo', funcTransferBancorTokenTo);
+    // handler.addTX('transferBancorTokenTo', funcTransferBancorTokenTo);
     // Added by Yang Jun 2019-2-21
-    handler.addTX('buyBancorToken', funcBuyBancorToken);
+    // handler.addTX('buyBancorToken', funcBuyBancorToken);
     // Added by Yang Jun 2019-2-21
-    handler.addTX('sellBancorToken', funcSellBancorToken);
+    // handler.addTX('sellBancorToken', funcSellBancorToken);
     // Added by Yang Jun 2019-2-21
-    handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-        let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-        return await getTokenBalance(balancekv.kv!, params.address);
-    });
+    //handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
+    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
+    //     return await getTokenBalance(balancekv.kv!, params.address);
+    // });
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
         if (!params.tokenid) {
@@ -167,24 +168,26 @@ export function registerHandler(handler: ValueHandler) {
     // Yang Jun 2019-4-10
     handler.addViewMethod('getBancorTokenParams', funcGetBancorTokenParams);
 
-    handler.addViewMethod('getBancorTokenBalances', funcGetBancorTokenBalances);
 
     //////////////////////
     // lock bancor token
     //////////////////////
-    handler.addTX('createLockBancorToken', funcCreateLockBancorToken);
+    handler.addTX('createBancorToken', funcCreateLockBancorToken);
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferLockBancorTokenTo', funcTransferLockBancorTokenTo);
+    handler.addTX('transferBancorTokenTo', funcTransferLockBancorTokenTo);
 
     // Added by Yang Jun 2019-5-31
-    handler.addTX('transferLockBancorTokenToMulti', funcTransferLockBancorTokenToMulti);
+    handler.addTX('transferBancorTokenToMulti', funcTransferLockBancorTokenToMulti);
 
-    handler.addTX('buyLockBancorToken', funcBuyLockBancorToken);
+    handler.addTX('buyBancorToken', funcBuyLockBancorToken);
 
-    handler.addTX('sellLockBancorToken', funcSellLockBancorToken);
+    handler.addTX('sellBancorToken', funcSellLockBancorToken);
 
     // Added by Yang Jun 2019-2-21
-    handler.addViewMethod('getLockBancorTokenBalance', funcGetLockBancorTokenBalance);
+    handler.addViewMethod('getBancorTokenBalance', funcGetLockBancorTokenBalance);
+
+    // Added by Yang Jun 2019-6-3
+    handler.addViewMethod('getBancorTokenBalances', funcGetLockBancorTokenBalances);
 
     /////////////////////
     //  vote
