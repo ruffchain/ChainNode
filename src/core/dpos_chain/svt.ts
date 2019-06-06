@@ -583,6 +583,13 @@ export class SVTContext {
     let curBlock = this.nGetCurBlock();
     let dueInterval: number = this.m_chain.globalOptions.voteInterval;
     let kvVoteLasttime = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteLasttime)).kv! as SqliteStorageKeyValue;
+
+    // delete all old records
+    let retDel = await kvVoteLasttime.hdelallbyname(from);
+    if (retDel.err) {
+      return { err: retDel.err, value: '' };
+    }
+
     let dueBlock = curBlock + dueInterval;
 
     let hret = await kvVoteLasttime.hset(from, dueBlock.toString(), 0);

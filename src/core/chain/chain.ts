@@ -287,12 +287,14 @@ export class Chain extends EventEmitter implements IConsistency {
         if (genesis.err) {
             return genesis.err;
         }
+        // 生成一个 snapshot view
         let gsv = await this.m_storageManager!.getSnapshotView(genesis.header!.hash);
         if (gsv.err) {
             this.m_logger.error(`chain initialize failed for load genesis snapshot failed ${gsv.err}`);
             return gsv.err;
         }
         this.m_constSnapshots.push(genesis.header!.hash);
+
         let dbr = await gsv.storage!.getReadableDataBase(Chain.dbSystem);
         if (dbr.err) {
             this.m_logger.error(`chain initialize failed for load system database failed ${dbr.err}`);
@@ -1020,7 +1022,7 @@ export class Chain extends EventEmitter implements IConsistency {
                         this._banConnection(from, BAN_LEVEL.forever);
                         return ErrorCode.RESULT_OK;
                     }
-                    this.m_logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${from} at syncing`);
+                    this.m_logger.info(`syncing get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${from} at syncing`);
                     let vsh = await this._verifyAndSaveHeaders(headers);
                     // 找不到的header， 或者验证header出错， 都干掉
                     if (vsh.err === ErrorCode.RESULT_NOT_FOUND || vsh.err === ErrorCode.RESULT_INVALID_BLOCK) {
@@ -1066,7 +1068,7 @@ export class Chain extends EventEmitter implements IConsistency {
             }
         } else if (connSync.state === ChainState.synced) {
             if (!request) {
-                this.m_logger.info(`get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${from} at synced`);
+                this.m_logger.info(`synced get headers [${headers[0].hash}, ${headers[headers.length - 1].hash}] from ${from} at synced`);
                 let vsh = await this._verifyAndSaveHeaders(headers);
                 // 验证header出错干掉
                 if (vsh.err === ErrorCode.RESULT_INVALID_BLOCK) {
