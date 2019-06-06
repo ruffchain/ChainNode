@@ -55,7 +55,7 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
                 datePattern: 'YYYY-MM-DD',
                 zippedArchive: true,
                 maxSize: '100m',
-                maxFiles: '15'
+                maxFiles: '60'
             }));
         }
 

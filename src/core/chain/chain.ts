@@ -721,6 +721,7 @@ export class Chain extends EventEmitter implements IConsistency {
         const doMork = async () => {
             const morking = this.m_storageMorkRequests.morking!;
             this.m_logger.debug(`begin to mork storage `, morking);
+
             let toMork: string[] = [];
             for (const blockHash of morking) {
                 if (!this.m_refSnapshots.has(blockHash)) {
@@ -750,11 +751,12 @@ export class Chain extends EventEmitter implements IConsistency {
                 this.m_refSnapshots.delete(hash);
             }
             this.m_logger.debug(`morking add ref snapshots `, morked);
+
             for (const hash of morked) {
                 this.m_refSnapshots.add(hash);
             }
 
-            this.m_logger.debug(`recyclde snapshots`);
+            this.m_logger.debug(`recycle snapshots`);
             this.m_storageManager!.recycleSnapshot();
         };
 
