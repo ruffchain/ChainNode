@@ -734,6 +734,7 @@ export class Chain extends EventEmitter implements IConsistency {
                     toRelease.push(blockHash);
                 }
             }
+            this.m_logger.debug(`morking toMork snapshots `, toMork);
             let morked: string[] = [];
             for (const blockHash of toMork) {
                 this.logger.debug(`=============_updateTip get 2, hash=${blockHash}`);
@@ -745,7 +746,7 @@ export class Chain extends EventEmitter implements IConsistency {
                 }
                 morked.push(blockHash);
             }
-            this.m_logger.debug(`morking release snapshots `, toRelease);
+            this.m_logger.debug(`morking toRelease snapshots `, toRelease);
             for (const hash of toRelease) {
                 this.m_storageManager!.releaseSnapshotView(hash);
                 this.m_refSnapshots.delete(hash);
@@ -763,11 +764,15 @@ export class Chain extends EventEmitter implements IConsistency {
         while (this.m_storageMorkRequests.morking) {
             await doMork();
             delete this.m_storageMorkRequests.morking;
-            this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
+            this.m_logger.debug('In morking loop, .pending ->');
+            console.log(this.m_storageMorkRequests.pending);
+
+            // Yang Jun , 2019-6-10, --forceClean removal test
+            // this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
         }
     }
 
-    protected async _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
+    protected async  _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
         this.m_tip = tip;
         let toMork = new Set([tip.hash]);
         const msr = await this._onMorkSnapshot({ tip, toMork });
@@ -810,6 +815,7 @@ export class Chain extends EventEmitter implements IConsistency {
     protected async _addPendingHeaders(params: HeadersEventParams) {
         // TODO: 这里可以和pending block一样优化，去重已经有的
         this.m_pendingHeaders.push(params);
+
         if (this.m_pendingHeaders.length === 1) {
             while (this.m_pendingHeaders.length) {
                 let _params = this.m_pendingHeaders[0];
@@ -998,6 +1004,7 @@ export class Chain extends EventEmitter implements IConsistency {
     protected async _addHeaders(params: HeadersEventParams): Promise<ErrorCode> {
         let { from, headers, request, error } = params;
         let connSync = this.m_connSyncMap.get(from);
+
         if (request && !connSync) {
             // 非广播的headers一定请求过
             return ErrorCode.RESULT_NOT_FOUND;
@@ -1011,6 +1018,7 @@ export class Chain extends EventEmitter implements IConsistency {
             }
             connSync = cr.connSync!;
         }
+
         if (connSync.state === ChainState.syncing) {
             if (request && request.from) {
                 if (request.from !== connSync.lastRequestHeader!) {
@@ -1124,6 +1132,7 @@ export class Chain extends EventEmitter implements IConsistency {
                     break;
                 }
                 assert(headerResult.header && headerResult.verified !== undefined);
+
                 if (headerResult.verified === VERIFY_STATE.verified
                     || headerResult.verified === VERIFY_STATE.invalid) {
                     this.m_logger.info(`ignore block for block has been verified as ${headerResult.verified}`);
@@ -1169,6 +1178,7 @@ export class Chain extends EventEmitter implements IConsistency {
             }
             const routine = rr.routine!;
             const vbr = await rr.next!();
+
             if (vbr.valid === ErrorCode.RESULT_OK) {
                 this.m_logger.info(`${routine.name} block verified`);
                 assert(routine.storage, `${routine.name} verified ok but storage missed`);
@@ -1246,6 +1256,7 @@ export class Chain extends EventEmitter implements IConsistency {
         }
 
         assert(nextResult.results && nextResult.results.length);
+
         for (let result of nextResult.results!) {
             let _block = this.m_blockStorage!.get(result.header.hash);
             if (_block) {
@@ -1313,6 +1324,7 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_logger.info(`begin add verified block to chain`);
         assert(this.m_headerStorage);
         assert(this.m_tip);
+
         let cr = await this._compareWork(block.header, this.m_tip!);
         if (cr.err) {
             return cr.err;

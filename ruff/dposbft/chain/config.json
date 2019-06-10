@@ -6,7 +6,7 @@
     },
     "global": {
         "minCreateor": 2,
-        "maxCreateor": 4,
+        "maxCreateor": 3,
         "reSelectionBlocks": 20,
         "blockInterval": 10,
         "timeOffsetToLastBlock": 240,
