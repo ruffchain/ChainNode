@@ -18,6 +18,12 @@ export type SVTContextOptions = {
   chain: DposChain
 };
 
+interface IfDbItem {
+  name: string;
+  field: string;
+  value: BigNumber;
+}
+
 export class SVTContext {
   protected m_logger: LoggerInstance;
   protected m_chain: DposChain;
@@ -920,40 +926,55 @@ export class SVTViewContext {
     }
     return { err: ErrorCode.RESULT_OK, value: objs };
   }
+
   public async getCandidatesInfo(): Promise<{ err: ErrorCode, candidates?: any }> {
+
+    function findInVoters(address: string, voters1: IfDbItem[]) {
+      for (let v of voters1) {
+        if (v.field === address) {
+          return v;
+        }
+      }
+      return null;
+    }
 
     let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
 
 
-    console.log('Yang Jun -- getCandidatesInfo');
+    this.m_logger.info('Yang Jun -- getCandidatesInfo');
 
-    let bVotedOrNot = false;
-    let items;
     // check vote
     let gr = await kvDPos.hgetallbyname('vote');
     if (gr.err) {
       return { err: gr.err, candidates: {} };
     }
+    let voters = gr.value!;
+
     let grc = await kvDPos.hgetallbyname('candidate');
     if (grc.err) {
       return { err: grc.err, candidates: {} }
     }
-
-    if (gr.value!.length === 0) {
-      bVotedOrNot = false;
-      items = grc.value!;
-    } else {
-      bVotedOrNot = true;
-      items = gr.value!;
+    if (grc.value!.length === 0) {
+      return { err: ErrorCode.RESULT_NOT_FOUND, candidates: {} };
     }
+    let items = grc.value!; // candidates
+
+    // if (gr.value!.length === 0) {
+    //   bVotedOrNot = false;
+    //   items = grc.value!;
+    // } else {
+    //   bVotedOrNot = true;
+    //   items = gr.value!;
+    // }
 
     let out = Object.create(null);
-    console.log('old curMiner:', this.m_chain.m_curMiner);
+    this.m_logger.info('old curMiner:', this.m_chain.m_curMiner);
     out.curMiner = (this.m_chain.m_curMiner);
-    console.log('curMiner', out.curMiner);
+    this.m_logger.info('curMiner', out.curMiner);
 
     let candidates: any[] = [];
 
+    // Loop candidates
     for (let v of items) {
       let address = v.field;
 
@@ -963,9 +984,16 @@ export class SVTViewContext {
       }
 
       let option = hreturn.value! as IfRegisterOption;
-      let amount1 =
-        bVotedOrNot ?
-          v.value : new BigNumber(0);
+
+      // check if it's in the vote list
+      let amount1 = new BigNumber(0);
+      let voteFound = findInVoters(address, voters);
+      // let amount1 =
+      //   bVotedOrNot ?
+      //     v.value : new BigNumber(0);
+      if (voteFound) {
+        amount1 = voteFound.value;
+      }
 
       candidates.push({
         candidate: (v.field),
@@ -978,15 +1006,15 @@ export class SVTViewContext {
     }
 
     candidates = candidates.sort((a: any, b: any) => {
-      let va = parseInt(a.amount);
-      let vb = parseInt(b.amount);
+      let va = parseInt(a.vote.toString());
+      let vb = parseInt(b.vote.toString());
 
       if (va > vb) {
-        return 1;
+        return -1;
       } else if (va === vb) {
         return 0;
       } else {
-        return -1;
+        return 1;
       }
     });
     out.candidates = candidates;
