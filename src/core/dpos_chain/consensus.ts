@@ -716,10 +716,10 @@ export class Context extends ViewContext {
                 return;
             }
 
-            this.m_logger.info(`Yang Jun ${m} ban ->  ${timestamp} value: ${candidateInfo.value}`)
+            this.m_logger.info(`Yang Jun ${m} ban ->  ${timestamp} value: ${candidateInfo.value}`);
 
             if ((candidateInfo.value as number) === BanStatus.Delay) {
-                this.m_logger.info(`Yang Jun , banProducer()  ${timestamp} , set it to ${timestamp + this.m_globalOptions.timeBan}`)
+                this.m_logger.info(`Yang Jun , banProducer()  ${timestamp} , set it to ${timestamp + this.m_globalOptions.timeBan}`);
 
                 await kvDPos.hset(ViewContext.keyCandidate, m, timestamp + this.m_globalOptions.timeBan);
             }
