@@ -285,6 +285,7 @@ export function registerHandler(handler: ValueHandler) {
         if (!bCheckRegisterOption(paramsNew)) {
             return ErrorCode.RESULT_WRONG_ARG;
         }
+        // Check if name already exists
         return await context.register(context.caller, paramsNew as IfRegisterOption);
     });
     handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {

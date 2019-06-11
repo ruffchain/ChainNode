@@ -327,6 +327,23 @@ export class SVTContext {
   protected async _setSvtInfo(from: string, option: IfRegisterOption): Promise<{ err: ErrorCode, value?: any }> {
     let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv! as SqliteStorageKeyValue;
 
+    // if option name is the same, return error
+    let retn = await kvSvtInfo.hgetallbyfield('name');
+    if (retn.err) {
+      return { err: retn.err, value: '' };
+    }
+    // Add by Yang Jun 2019-6-11
+    this.m_logger.info('Yang Jun --- _setSVTInfo()');
+    for (let item of retn.value!) {
+      this.m_logger.info('Item:', item.name);
+      this.m_logger.info('Field:', item.field);
+      this.m_logger.info('Value:', item.value);
+      if (item.value === option.name) {
+        this.m_logger.info('Found it!');
+        return { err: ErrorCode.RESULT_ALREADY_EXIST, value: item.value };
+      }
+    }
+
     let objs = option as any;
 
     for (let key of Object.keys(objs)) {

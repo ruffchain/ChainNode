@@ -131,6 +131,10 @@ export function bCheckRegisterOption(option: IfRegisterOption): boolean {
     return false;
   }
 
+  // check if name is used already
+  // 2019-6-11
+  
+
 
   return true;
 }
