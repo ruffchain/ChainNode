@@ -31,3 +31,5 @@ export async function fetchLockBancorTokenBalance(kv: IReadWritableKeyValue, add
   }
   return amountAll;
 }
+
+

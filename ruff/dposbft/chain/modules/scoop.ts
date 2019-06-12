@@ -133,7 +133,7 @@ export function bCheckRegisterOption(option: IfRegisterOption): boolean {
 
   // check if name is used already
   // 2019-6-11
-  
+
 
 
   return true;
@@ -154,4 +154,13 @@ export function readConfigFile() {
   } catch (e) {
     throw new Error('handler.ts read ./config.json')
   }
+}
+
+export async function bCheckBancorTokenFactor(factor: string) {
+  let bn = new BigNumber(factor);
+
+  if (bn.isNaN() === true) {
+    return false;
+  }
+  return bn.isLessThanOrEqualTo(1) && bn.isGreaterThan(0);
 }
