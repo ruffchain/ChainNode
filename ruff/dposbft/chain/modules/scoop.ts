@@ -156,7 +156,7 @@ export function readConfigFile() {
   }
 }
 
-export async function bCheckBancorTokenFactor(factor: string) {
+export function bCheckBancorTokenFactor(factor: string): boolean {
   let bn = new BigNumber(factor);
 
   if (bn.isNaN() === true) {
