@@ -141,7 +141,7 @@ export class SVTContext {
         let stake: BigNumber = new BigNumber(voteItem.value!);
         let hisDueBlock: number = parseInt(voteItem.field);
 
-        if (curBlock > hisDueBlock) {
+        if (curBlock < hisDueBlock) {
           continue;
         }
 
@@ -758,14 +758,9 @@ export class SVTContext {
       return { err: hret2.err };
     }
 
-    // calculate svt-deposit, voteDepo
-    let hretAmount = await this.calcVoteFromDeposit(from);
-
     // svt-vote summary of mortgage
     this.m_logger.info('votsum:', hret2.value!.toString());
     let amount: BigNumber = hret2.value!;
-
-    amount = amount.plus(hretAmount); // add with deposit
 
     if (amount.eq(0)) {
       return { err: ErrorCode.RESULT_UNKNOWN_VALUE };
