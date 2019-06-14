@@ -5,7 +5,7 @@ import { BigNumber, ErrorCode, IReadableDatabase, fromStringifiable } from '..';
 import assert = require('assert');
 import { SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { BanStatus } from './consensus';
-import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
+import { IfRegisterOption, VOTE_FROM_DEPOSIT } from '../../../ruff/dposbft/chain/modules/scoop';
 
 // This is used to query SVT, Vote, Dpos table at once
 // Added by Yang Jun 2019-5-20
@@ -651,7 +651,23 @@ export class SVTContext {
     let hret = await kvVoteVote.hmset(from, votee, amount);
     return hret;
   }
+  // Add 2019-6-14
+  private async calcVoteFromDeposit(from: string): Promise<BigNumber> {
+    let kvSVTDeposit = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
 
+    let kvDeposit = await kvSVTDeposit.hgetallbyname(from);
+    if (kvDeposit.err) {
+      this.m_logger.error('calcVoteFromDeposit wrong hgetallbyname');
+      return new BigNumber(0);
+    }
+
+    if (kvDeposit.value!.length !== 0) {
+      // let bnDeposit: BigNumber = kvDeposit.value![0].value;
+      return new BigNumber(VOTE_FROM_DEPOSIT);
+    }
+
+    return new BigNumber(0);
+  }
 
   private async calcVoteFromMortgage(from: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
     // calculate svt-vote, voteSum
@@ -669,6 +685,10 @@ export class SVTContext {
       votSum = votSum.plus(p.value);
     }
     this.m_logger.info('votsum:', votSum.toString());
+
+    // Yang Jun , add SVT-deposit 
+    let voteFromDeposit = await this.calcVoteFromDeposit(from);
+    votSum = votSum.plus(voteFromDeposit);
 
     return { err: ErrorCode.RESULT_OK, value: votSum };
   }
@@ -698,6 +718,7 @@ export class SVTContext {
     if (curBlock < dueBlock) {
       return { err: ErrorCode.RESULT_TIME_NOT_DUE, returnCode: ErrorCode.RESULT_TIME_NOT_DUE };
     }
+    ///////////////////////////////////
 
     // remove vote from dpos
     let hret = await this.removeVoteFromDpos(from);
@@ -715,9 +736,15 @@ export class SVTContext {
     if (hret2.err) {
       return { err: hret2.err };
     }
+
+    // calculate svt-deposit, voteDepo
+    let hretAmount = await this.calcVoteFromDeposit(from);
+
     // svt-vote summary of mortgage
     this.m_logger.info('votsum:', hret2.value!.toString());
     let amount: BigNumber = hret2.value!;
+
+    amount = amount.plus(hretAmount); // add with deposit
 
     if (amount.eq(0)) {
       return { err: ErrorCode.RESULT_UNKNOWN_VALUE };
@@ -824,14 +851,13 @@ export class SVTViewContext {
 
     let hret = await kvVoteVote.hgetallbyname(address);
     if (hret.err) {
-      console.log('getTicket wrong getallbyname')
+      console.log('getTicket wrong getallbyname');
       return { err: hret.err, value: {} };
     }
 
     // get last vote time
     let hret1 = await this.getVoteLasttime(address);
     if (hret1.err) {
-
       return { err: hret1.err, value: {} };
     }
     // const epochtime = this.m_chain.epochTime * 1000;

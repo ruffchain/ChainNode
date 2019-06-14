@@ -1,16 +1,16 @@
 import * as assert from 'assert';
-import {EventEmitter} from 'events';
-import {isString, isNullOrUndefined} from 'util';
-import {ErrorCode} from '../error_code';
-import {LoggerInstance, } from '../lib/logger_util';
+import { EventEmitter } from 'events';
+import { isString, isNullOrUndefined } from 'util';
+import { ErrorCode } from '../error_code';
+import { LoggerInstance, } from '../lib/logger_util';
 import { StorageManager, StorageLogger, StorageDumpSnapshot, JStorageLogger } from '../storage';
 
-import {Transaction, BlockHeader, Block, BlockStorage, Network, BAN_LEVEL, NetworkBroadcastStrategy} from '../block';
+import { Transaction, BlockHeader, Block, BlockStorage, Network, BAN_LEVEL, NetworkBroadcastStrategy } from '../block';
 
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
 
-import {INode, NodeConnection, PackageStreamWriter, Package, CMD_TYPE} from '../net';
+import { INode, NodeConnection, PackageStreamWriter, Package, CMD_TYPE } from '../net';
 
 export enum SYNC_CMD_TYPE {
     getHeader = CMD_TYPE.userCmd + 0,
@@ -33,14 +33,14 @@ export type ChainNodeOptions = {
 };
 
 type RequestingBlockConnection = {
-    hashes: Set<string>, 
-    wnd: number, 
+    hashes: Set<string>,
+    wnd: number,
     conn: NodeConnection
 };
 
 export type HeadersEventParams = {
     from: string;
-    headers: BlockHeader[]; 
+    headers: BlockHeader[];
     request: any;
     error: ErrorCode;
 };
@@ -63,7 +63,7 @@ export class ChainNode extends EventEmitter {
         this.m_blockWithLog = options.blockWithLog;
 
         this.m_initBlockWnd = options.initBlockWnd ? options.initBlockWnd : 10;
-        
+
         this.m_blockTimeout = options.blockTimeout ? options.blockTimeout : 10000;
         this.m_headersTimeout = options.headersTimeout ? options.headersTimeout : 30000;
         this.m_reqTimeoutTimer = setInterval(() => {
@@ -75,7 +75,7 @@ export class ChainNode extends EventEmitter {
     private m_networks: Network[];
     private m_blockStorage: BlockStorage;
     private m_storageManager: StorageManager;
-    private m_blockWithLog: boolean; 
+    private m_blockWithLog: boolean;
 
     on(event: 'blocks', listener: (params: BlocksEventParams) => any): this;
     on(event: 'headers', listener: (params: HeadersEventParams) => any): this;
@@ -97,7 +97,7 @@ export class ChainNode extends EventEmitter {
     once(event: 'inbound', listener: (conn: NodeConnection) => any): this;
     once(event: string, listener: any): this {
         return super.once(event, listener);
-    }   
+    }
 
     public async init(): Promise<ErrorCode> {
         let inits = [];
@@ -121,7 +121,7 @@ export class ChainNode extends EventEmitter {
                 this._onRemoveConnection(fullRemote);
                 this.emit('ban', fullRemote);
             });
-            
+
             inits.push(network.init());
         }
         let results = await Promise.all(inits);
@@ -167,7 +167,7 @@ export class ChainNode extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
-    public getNetwork(_network?: string): Network|undefined {
+    public getNetwork(_network?: string): Network | undefined {
         if (_network) {
             for (const network of this.m_networks) {
                 if (network.name === _network) {
@@ -180,11 +180,11 @@ export class ChainNode extends EventEmitter {
         }
     }
 
-    public getConnection(fullremote: string): NodeConnection|undefined {
-        const {network, peerid} = INode.splitFullPeerid(fullremote)!;
+    public getConnection(fullremote: string): NodeConnection | undefined {
+        const { network, peerid } = INode.splitFullPeerid(fullremote)!;
         const node = this.getNetwork(network);
         if (!node) {
-            return ;
+            return;
         }
         return node.node.getConnection(peerid);
     }
@@ -197,14 +197,14 @@ export class ChainNode extends EventEmitter {
         return arr;
     }
 
-    public broadcast(content: BlockHeader[]|Transaction[], options?: {
-        count?: number, 
+    public broadcast(content: BlockHeader[] | Transaction[], options?: {
+        count?: number,
         filter?: (conn: NodeConnection) => boolean
     }): ErrorCode {
         if (!content.length) {
             return ErrorCode.RESULT_OK;
         }
-        let pwriter: PackageStreamWriter|undefined;
+        let pwriter: PackageStreamWriter | undefined;
         let strategy;
         if (content[0] instanceof BlockHeader) {
             let hwriter = new BufferWriter();
@@ -216,7 +216,7 @@ export class ChainNode extends EventEmitter {
                 }
             }
             let raw = hwriter.render();
-            pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, {count: content.length}, raw.length);
+            pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, { count: content.length }, raw.length);
             pwriter.writeData(raw);
             strategy = NetworkBroadcastStrategy.headers;
         } else if (content[0] instanceof Transaction) {
@@ -229,7 +229,7 @@ export class ChainNode extends EventEmitter {
                 }
             }
             let raw = hwriter.render();
-            pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.tx, {count: content.length}, raw.length);
+            pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.tx, { count: content.length }, raw.length);
             pwriter.writeData(raw);
             strategy = NetworkBroadcastStrategy.transaction;
         }
@@ -284,7 +284,7 @@ export class ChainNode extends EventEmitter {
                 this.logger.debug(`receive headers from ${conn.fullRemote} err ${pkg.body.error} request `, pkg.body.request);
                 if (!pkg.body.error) {
                     let err = ErrorCode.RESULT_OK;
-                    let preHeader: BlockHeader|undefined;
+                    let preHeader: BlockHeader | undefined;
                     for (let ix = 0; ix < pkg.body.count; ++ix) {
                         let header = network.newBlockHeader();
                         if (header.decode(headerReader) !== ErrorCode.RESULT_OK) {
@@ -303,7 +303,7 @@ export class ChainNode extends EventEmitter {
                             }
                             preHeader = header;
                         }
-                        headers.push(header); 
+                        headers.push(header);
                     }
                     if (err) {
                         // 发错的header的peer怎么处理
@@ -333,14 +333,14 @@ export class ChainNode extends EventEmitter {
                     if (pkg.body.request && pkg.body.request.from === ghr.header!.hash) {
                         this.logger.warn(`receive can't get genesis header ${pkg.body.request.from} from ${conn.fullRemote}`);
                         network.banConnection(conn.remote!, BAN_LEVEL.forever);
-                        return ;
+                        return;
                     }
                 }
 
                 if (!this._onRecvHeaders(conn.fullRemote, time, pkg.body.request)) {
-                    return ;
+                    return;
                 }
-                this.emit('headers', {from: conn.fullRemote , headers, request: pkg.body.request, error: pkg.body.error});
+                this.emit('headers', { from: conn.fullRemote, headers, request: pkg.body.request, error: pkg.body.error });
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.getHeader) {
                 this._responseHeaders(conn, pkg.body);
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.block) {
@@ -350,12 +350,12 @@ export class ChainNode extends EventEmitter {
             }
         });
     }
-    
+
     // 处理通过网络请求获取的block package
     // 然后emit到chain层
     // @param conn 网络连接
     // @param pgk  block 数据包
-    private _handlerBlockPackage(network: Network, conn: NodeConnection, pkg: Package) { 
+    private _handlerBlockPackage(network: Network, conn: NodeConnection, pkg: Package) {
         let buffer = pkg.copyData();
         let blockReader;
         let redoLogReader;
@@ -363,7 +363,7 @@ export class ChainNode extends EventEmitter {
 
         // check body buffer 中是否包含了redoLog
         // 如果包含了redoLog 需要切割buffer
-        if ( pkg.body.redoLog) {
+        if (pkg.body.redoLog) {
             // 由于在传输时, redolog和block都放在package的data属性里（以合并buffer形式）
             // 所以需要根据body中的length 分配redo和block的buffer
             let blockBuffer = buffer.slice(0, pkg.body.blockLength);
@@ -385,7 +385,7 @@ export class ChainNode extends EventEmitter {
         if (pkg.body.err === ErrorCode.RESULT_NOT_FOUND) {
             // 请求的block肯定已经从header里面确定remote有，直接禁掉
             network.banConnection(conn.remote!, BAN_LEVEL.forever);
-            return ;
+            return;
         }
 
         // 构造block对象
@@ -395,22 +395,22 @@ export class ChainNode extends EventEmitter {
             network.banConnection(conn.remote!, BAN_LEVEL.forever);
             return;
         }
-        
+
         if (!block.verify()) {
             this.logger.warn(`receive block not match header ${block.header.hash} from ${conn.fullRemote}`);
             network.banConnection(conn.remote!, BAN_LEVEL.day); // 可能分叉？
             return;
         }
-        const eventParams = {from: conn.fullRemote, block, redoLog};
+        const eventParams = { from: conn.fullRemote, block, redoLog };
         let err = this._onRecvBlock(eventParams);
         if (err) {
-            return ;
+            return;
         }
         // 数据emit 到chain层
         this.emit('blocks', eventParams);
     }
 
-    public requestHeaders(from: NodeConnection, options: {from?: string, limit?: number}): ErrorCode {
+    public requestHeaders(from: NodeConnection, options: { from?: string, limit?: number }): ErrorCode {
         this.logger.debug(`request headers from  with options ${from.fullRemote}`, options);
         if (this.m_requestingHeaders.get(from.fullRemote)) {
             this.logger.warn(`request headers ${options} from ${from.fullRemote} skipped for former headers request existing`);
@@ -426,7 +426,7 @@ export class ChainNode extends EventEmitter {
     }
 
     // 这里必须实现成同步的
-    public requestBlocks(from: string, options: {headers?: BlockHeader[], redoLog?: number}): ErrorCode {
+    public requestBlocks(from: string, options: { headers?: BlockHeader[], redoLog?: number }): ErrorCode {
         this.logger.debug(`request blocks from ${from} with options `, options);
         let connRequesting = this._getConnRequesting(from);
         if (!connRequesting) {
@@ -444,21 +444,21 @@ export class ChainNode extends EventEmitter {
                             let redoLog = this.m_storageManager.getRedoLog(header.hash);
                             if (redoLog) {
                                 setImmediate(() => {
-                                    this.emit('blocks', {block, redoLog});
+                                    this.emit('blocks', { block, redoLog });
                                 });
                             } else {
                                 setImmediate(() => {
-                                    this.emit('blocks', {block});
+                                    this.emit('blocks', { block });
                                 });
                             }
                         } else {
                             setImmediate(() => {
-                                this.emit('blocks', {block});
+                                this.emit('blocks', { block });
                             });
                         }
                     } else {
                         setImmediate(() => {
-                            this.emit('blocks', {block});
+                            this.emit('blocks', { block });
                         });
                     }
                     return false;
@@ -468,7 +468,7 @@ export class ChainNode extends EventEmitter {
             if (!sources) {
                 sources = new Set();
                 this.m_blockFromMap.set(header.hash, sources);
-            } 
+            }
             if (sources.has(from)) {
                 return false;
             }
@@ -479,7 +479,7 @@ export class ChainNode extends EventEmitter {
             requests.push(header.hash);
             return true;
         };
-        
+
         if (options.headers) {
             for (let header of options.headers) {
                 addRequesting(header);
@@ -488,7 +488,7 @@ export class ChainNode extends EventEmitter {
             assert(false, `invalid block request ${options}`);
             return ErrorCode.RESULT_INVALID_PARAM;
         }
-        
+
         for (let hash of requests) {
             this._addToPendingBlocks(hash);
         }
@@ -522,17 +522,17 @@ export class ChainNode extends EventEmitter {
             this.m_pendingBlock.sequence.splice(this.m_pendingBlock.sequence.indexOf(hash), 1);
         }
     }
-  
+
     protected m_initBlockWnd: number;
     protected m_requestingBlock: {
         connMap: Map<string, RequestingBlockConnection>,
-        hashMap: Map<string, {remote: string, time: number}>
-     } = {
-         connMap: new Map(),
-         hashMap: new Map()
-     };
-    protected m_pendingBlock: {hashes: Set<string>, sequence: Array<string>} = {hashes: new Set(), sequence: new Array()};
-    protected m_blockFromMap: Map<string, Set<string>> = new Map(); 
+        hashMap: Map<string, { remote: string, time: number }>
+    } = {
+            connMap: new Map(),
+            hashMap: new Map()
+        };
+    protected m_pendingBlock: { hashes: Set<string>, sequence: Array<string> } = { hashes: new Set(), sequence: new Array() };
+    protected m_blockFromMap: Map<string, Set<string>> = new Map();
     protected m_requestingHeaders: Map<string, {
         time: number;
         req: any;
@@ -543,7 +543,7 @@ export class ChainNode extends EventEmitter {
 
     protected m_cc = {
         onRecvBlock(node: ChainNode, block: Block, from: RequestingBlockConnection) {
-            from.wnd += 1; 
+            from.wnd += 1;
             from.wnd = from.wnd > 3 * node.m_initBlockWnd ? 3 * node.m_initBlockWnd : from.wnd;
         },
         onBlockTimeout(node: ChainNode, hash: string, from: RequestingBlockConnection) {
@@ -551,22 +551,22 @@ export class ChainNode extends EventEmitter {
         }
     };
 
-    protected _getConnRequesting(fpid: string): RequestingBlockConnection|undefined  {
+    protected _getConnRequesting(fpid: string): RequestingBlockConnection | undefined {
         let connRequesting = this.m_requestingBlock.connMap.get(fpid);
         if (!connRequesting) {
-            const {network, peerid} = INode.splitFullPeerid(fpid)!;
+            const { network, peerid } = INode.splitFullPeerid(fpid)!;
             const node = this.getNetwork(network);
             if (!node) {
-                return ;
+                return;
             }
             let conn = node.node.getConnection(peerid);
             // TODO: 取不到这个conn的时候要处理
             // assert(conn, `no connection to ${remote}`);
             this.logger.error(`non connection to ${fpid}`);
             if (!conn) {
-                return ;
+                return;
             }
-            connRequesting =  {hashes: new Set(), wnd: this.m_initBlockWnd, conn: conn!};
+            connRequesting = { hashes: new Set(), wnd: this.m_initBlockWnd, conn: conn! };
             this.m_requestingBlock.connMap.set(fpid, connRequesting);
         }
         return connRequesting;
@@ -577,7 +577,7 @@ export class ChainNode extends EventEmitter {
         let writer = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.getBlock, { hash, redoLog: this.m_blockWithLog ? 1 : 0 });
         connRequesting.conn.addPendingWriter(writer);
         connRequesting.hashes.add(hash);
-        this.m_requestingBlock.hashMap.set(hash, {remote: connRequesting.conn.fullRemote, time: Date.now() / 1000});
+        this.m_requestingBlock.hashMap.set(hash, { remote: connRequesting.conn.fullRemote, time: Date.now() / 1000 });
         return ErrorCode.RESULT_OK;
     }
 
@@ -585,7 +585,7 @@ export class ChainNode extends EventEmitter {
         let pending = this.m_pendingBlock;
         let index = 0;
         do {
-            if (!pending.sequence.length 
+            if (!pending.sequence.length
                 || index >= pending.sequence.length) {
                 break;
             }
@@ -604,7 +604,7 @@ export class ChainNode extends EventEmitter {
                 } else {
                     continue;
                 }
-            } 
+            }
             ++index;
         } while (true);
     }
@@ -636,7 +636,7 @@ export class ChainNode extends EventEmitter {
             // TODO: 过频繁的广播header, 要干掉
         }
         if (!valid) {
-           this._banConnection(fpid, BAN_LEVEL.forever);
+            this._banConnection(fpid, BAN_LEVEL.forever);
         }
         return valid;
     }
@@ -678,13 +678,14 @@ export class ChainNode extends EventEmitter {
         this.logger.info(`removing ${fullRemote} from block requesting source`);
         let connRequesting = this.m_requestingBlock.connMap.get(fullRemote);
         if (connRequesting) {
-            for (let hash of connRequesting.hashes) { 
+            for (let hash of connRequesting.hashes) {
                 this.logger.debug(`change block ${hash} from requesting to pending`);
                 this.m_requestingBlock.hashMap.delete(hash);
                 this._addToPendingBlocks(hash, true);
             }
         }
         this.m_requestingBlock.connMap.delete(fullRemote);
+
         for (let hash of this.m_blockFromMap.keys()) {
             let sources = this.m_blockFromMap.get(hash)!;
             if (sources.has(fullRemote)) {
@@ -711,7 +712,7 @@ export class ChainNode extends EventEmitter {
     }
 
     protected _banConnection(fullRemote: string, level: BAN_LEVEL) {
-        const {network, peerid} = INode.splitFullPeerid(fullRemote)!;
+        const { network, peerid } = INode.splitFullPeerid(fullRemote)!;
         const node = this.getNetwork(network);
         if (node) {
             node.banConnection(peerid, level);
@@ -788,7 +789,7 @@ export class ChainNode extends EventEmitter {
             pwriter.writeData(redoLogRaw);
             conn.addPendingWriter(pwriter);
         } else {
-            let pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.block, {redoLog: 0}, rawBlocks.length);
+            let pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.block, { redoLog: 0 }, rawBlocks.length);
             pwriter.writeData(rawBlocks);
             conn.addPendingWriter(pwriter);
         }
@@ -807,7 +808,7 @@ export class ChainNode extends EventEmitter {
                 if (tipResult.err) {
                     return tipResult.err;
                 }
-                
+
                 let heightResult = await node.headerStorage!.getHeightOnBest(req.from);
                 if (heightResult.err === ErrorCode.RESULT_NOT_FOUND) {
                     respErr = ErrorCode.RESULT_NOT_FOUND;
@@ -819,13 +820,13 @@ export class ChainNode extends EventEmitter {
                     respErr = ErrorCode.RESULT_SKIPPED;
                     break;
                 }
-     
+
                 if (!req.limit || heightResult.height! + req.limit > tipResult.header!.number) {
                     headerCount = tipResult.header!.number - heightResult.height!;
                 } else {
                     headerCount = req.limit;
                 }
-                
+
                 let hr = await node.headerStorage.getHeader(heightResult.height! + headerCount);
                 if (hr.err) {
                     // 中间changeBest了，返回not found
@@ -854,9 +855,9 @@ export class ChainNode extends EventEmitter {
                     }
                 }
             } while (false);
-            
+
             let rawHeaders = hwriter.render();
-            let pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, {count: headerCount, request: req, error: respErr}, rawHeaders.length);
+            let pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, { count: headerCount, request: req, error: respErr }, rawHeaders.length);
             pwriter.writeData(rawHeaders);
             conn.addPendingWriter(pwriter);
             return ErrorCode.RESULT_OK;
@@ -864,5 +865,5 @@ export class ChainNode extends EventEmitter {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
     }
-    
+
 }

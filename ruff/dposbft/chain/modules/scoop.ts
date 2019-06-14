@@ -9,6 +9,8 @@ export const NORMAL_TOKEN_PRECISION = 9;
 export const BANCOR_TOKEN_PRECISION = 12;
 export const MAX_QUERY_NUM = 21;
 
+export const VOTE_FROM_DEPOSIT = 6870;
+
 
 export const SYS_TOKEN = 'SYS';
 export const SVT_TOKEN = 'SVT';
