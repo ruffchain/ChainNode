@@ -320,6 +320,14 @@ export class SVTContext {
     // it does not vote yet
     return ErrorCode.RESULT_OK;
   }
+  protected async _removeSvtInfo(from: string): Promise<{ err: ErrorCode, value?: any }> {
+    let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv! as SqliteStorageKeyValue;
+
+    let retn = await kvSvtInfo.hdelallbyname(from);
+    if (retn.err) { return { err: retn.err, value: retn.err }; }
+
+    return { err: ErrorCode.RESULT_OK, value: ErrorCode.RESULT_OK };
+  }
   protected async _setSvtInfo(from: string, option: IfRegisterOption): Promise<{ err: ErrorCode, value?: any }> {
     let kvSvtInfo = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTInfo)).kv! as SqliteStorageKeyValue;
 
@@ -441,6 +449,10 @@ export class SVTContext {
     // 2019-6-14, 
     let hret4 = await this.removeDepositFromVote(item.name);
     if (hret4.err) { return hret4; }
+
+    // 2019-6-14, remove from SvtInfo
+    let hret5 = await this._removeSvtInfo(item.name);
+    if (hret5.err) { return hret5; }
 
     return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_OK };
   }
