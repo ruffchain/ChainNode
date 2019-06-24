@@ -49,4 +49,6 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 ...
 
 2019-5-26  -  Image version 1.12.3, merge test branch
+
+2019-6-21  - Image version 1.13.1 , 15 nodes tes
 ```
