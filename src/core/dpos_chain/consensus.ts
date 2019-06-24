@@ -460,7 +460,8 @@ export class Context extends ViewContext {
         this.m_logger.info('Yang Jun - creators:');
         console.log(creators);
 
-        /*
+
+        // You should add below judgeing words in formal release
         if (creators.length < this.m_globalOptions.minCreateor) {
             this.m_logger.warn(`finishElection not update propose miners,for new miners count (${creators.length}) less than minCreateor(${this.m_globalOptions.minCreateor})`);
             // 总的个数比最小要求的个数还少也不补
@@ -474,7 +475,7 @@ export class Context extends ViewContext {
             // 每次更新miner的时候，总的个数不能少于上一轮的个数，否则不补
             return { err: ErrorCode.RESULT_OK };
         }
-        */
+
         this._shuffle(shuffleFactor, creators);
         this.m_logger.info(`1st -> finishElection propose miners,${JSON.stringify(creators)}`);
 
