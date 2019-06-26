@@ -21,13 +21,16 @@ async function main() {
             console.log(commandTip);
             return ;
         }
-        const output = command!.options.get('output');
+        let output = command!.options.get('output');
         if (!output) {
             console.log(commandTip);
-            return ; 
+            return ;
+        }
+        if (!path.isAbsolute(output)) {
+            output = path.join(process.cwd(), output);
         }
         const chainCreator = initChainCreator({logger});
-        const ccir = await chainCreator.createChainInstance(dataDir, {readonly: true, initComponents: true});
+        const ccir = await chainCreator.createChainInstance(dataDir, {readonly: false, initComponents: true});
         if (ccir.err) {
             chainCreator.logger.error(`create chain instance from ${dataDir} failed `, stringifyErrorCode(ccir.err));
             return ;
@@ -47,15 +50,14 @@ async function main() {
         }
         fs.ensureDirSync(output);
         await csr.storage!.uninit();
-        fs.copyFileSync(csr.storage!.filePath, output);
+        fs.copyFileSync(csr.storage!.filePath, path.join(output, 'restore'));
         console.log(`restore complete.`);
     } else {
         console.log(commandTip);
     }
-    
-}
 
-if (require.main === module) {
-    main();
-    process.exit();
 }
+(async() => {
+    await main();
+    process.exit(1);
+})()
