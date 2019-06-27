@@ -224,4 +224,7 @@ export class DposChainTipState {
     public getProposedIRB() {
         return this.mProposedIRB;
     }
+    public getMiner() {
+        return this.m_tip.miner;
+    }
 }

@@ -535,6 +535,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
         this.logger.info(`==========dpos chain state=${this.chainTipState.dump()}`);
         // Added by yang Jun 2019-3-30
+        this.m_curMiner = this.chainTipState.getMiner();
         // 
         // this.logger.info('Yang Jun output:');
         // console.log('iRB: ', this.chainTipState.getIRB());
