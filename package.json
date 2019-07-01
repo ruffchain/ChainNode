@@ -10,7 +10,9 @@
     "profile": "mocha dist/blockchain-sdk/test/block/test_executor.js --timeout 120000 --prof",
     "build": "gulp build",
     "watch": "tsc -w",
-    "docker": "gulp build-docker"
+    "docker": "gulp build-docker",
+    "switch-formal": "cp backup/formal/genesis.json ruff/dposbft/chain/genesis.json",
+    "switch-internal": "cp backup/internal/genesis.json ruff/dposbft/chain/genesis.json"
   },
   "repository": {
     "type": "git",
