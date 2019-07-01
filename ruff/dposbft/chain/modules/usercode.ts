@@ -128,7 +128,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
 
     const sandbox = {
         bcLog: (resolve: any, arg0: string, arg1: string) => {
-            // console.log(arg0, arg1);
+            // context.logger.info(arg0, arg1);
         },
 
         bcTransfer: async (resolve: any, to: string, amount: string): Promise<any> => {
@@ -142,7 +142,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     return (resolve(false));
                 }
                 if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
-                    console.log('exceed the amount');
+                    context.logger.error('exceed the amount');
                     return (resolve(false));
                 }
 
@@ -152,11 +152,11 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     usedValue = usedValue.plus(toValue);
                     return (resolve(true));
                 } else {
-                    console.log('ret is', ret);
+                    context.logger.error('ret is', ret);
                     return (resolve(false));
                 }
             } catch (err) {
-                console.log('err when transfer', err);
+                context.logger.error('err when transfer', err);
                 resolve(false);
             }
         },
@@ -181,7 +181,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     return (resolve(true));
                 }
             } catch (err) {
-                console.log('error when DB create', err);
+                context.logger.error('error when DB create', err);
                 resolve(false);
             }
         },
@@ -196,7 +196,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                 }
 
                 if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
-                    console.log('Invalid input for bcDBSet');
+                    context.logger.error('Invalid input for bcDBSet');
                     return (resolve(false));
                 }
 
@@ -220,7 +220,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     }
                 }
             } catch (err) {
-                console.log('error when DB Set', err);
+                context.logger.error('error when DB Set', err);
                 resolve(false);
             }
         },
@@ -237,7 +237,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                 }
 
                 if (key.length > DB_KEY_MAX_LEN) {
-                    console.log('Invalid input for bcDBSet');
+                    context.logger.error('Invalid input for bcDBSet');
                     return (resolve(ret));
                 }
 
@@ -254,7 +254,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     return (resolve(ret));
                 }
             } catch (err) {
-                console.log('error when DB Set', err);
+                context.logger.error('error when DB Set', err);
                 resolve(ret);
             }
         },
@@ -266,7 +266,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
 
     let contractParam = null;
 
-    if (params.params && params.params.length <= 512) {
+    if (params.params && params.params.length <= 128) {
         contractParam = params.params;
     }
 
@@ -275,14 +275,16 @@ export async function runUserMethod(context: DposTransactionContext, params: any
             contract.${params.action}("${contractParam}");
         `;
     try {
-        await createScript(code)
+        context.logger.info('before ruffvm runAsync');
+        let ret = await createScript(code)
             .setUserCode(actionCode)
             .setSandbox(sandbox)
-            .setOption({ cpuCount: 640, memSizeKB: 200 })
+            .setOption({ cpuCount: 256, memSizeKB: 256 })
             .runAsync();
+        context.logger.info('after ruffvm runAsync', ret);
         return ErrorCode.RESULT_OK;
     } catch (err) {
-        console.log('err is', err);
+        context.logger.error('ruffvm runAsync error', err);
         return ErrorCode.RESULT_FAILED;
     }
 }
