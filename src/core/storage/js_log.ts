@@ -4,7 +4,6 @@ import { BufferReader, BufferWriter, toEvalText } from '../serializable';
 import { Storage, StorageTransaction, IReadWritableKeyValue, IReadWritableStorage, IWritableDatabase } from './storage';
 
 
-
 class TransactionLogger implements StorageTransaction {
     constructor(private owner: JStorageLogger) {
 
@@ -166,7 +165,7 @@ class DatabaseLogger implements IWritableDatabase {
         const name = Storage.getKeyValueFullName(dbname, name1);
 
         let val = this._kvVal();
-        this.owner.appendLog(`let ${val} = (await ${this.name}.createKeyValue(${JSON.stringify(name)})).kv;`);
+        this.owner.appendLog(`let ${val} = (await ${this.name}.createKeyValueWithDbname(${JSON.stringify(name)})).kv;`);
         return { err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val) };
     }
 
@@ -174,7 +173,7 @@ class DatabaseLogger implements IWritableDatabase {
         const name = Storage.getKeyValueFullName(dbname, name1);
 
         let val = this._kvVal();
-        this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValue(${JSON.stringify(name)})).kv;`);
+        this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValueWithDbname(${JSON.stringify(name)})).kv;`);
         return { err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val) };
     }
 

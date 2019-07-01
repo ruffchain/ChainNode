@@ -6,6 +6,7 @@ import * as sqlite from 'sqlite';
 import * as sqlite3 from 'sqlite3';
 
 const { TransactionDatabase } = require('sqlite3-transactions');
+
 declare module 'sqlite' {
     interface Database {
         driver: sqlite3.Database;
@@ -738,7 +739,7 @@ export class SqliteStorage extends Storage {
     public async toJsonStorage(storage: JsonStorage): Promise<{ err: ErrorCode }> {
         let tableNames: Map<string, string[]> = new Map();
         try {
-            const results = await this.m_db!.all(`select name fromsqlite_master where type='table' order by name;`);
+            const results = await this.m_db!.all(`select name from sqlite_master where type='table' order by name;`);
             for (const { name } of results) {
                 const { dbName, kvName } = SqliteStorage.splitFullName(name);
                 if (!tableNames.has(dbName!)) {
