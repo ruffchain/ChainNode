@@ -189,3 +189,6 @@ export function stringifyErrorCode(err: ErrorCode): string {
         return 'unknown';
     }
 }
+
+
+export interface IFeedBack { err: ErrorCode; data: any; }
