@@ -15,6 +15,10 @@
         {
             "address": "1D3TZwGEFpJzrYBpEuBh3MfG6h1QF5S65v",
             "amount": 4000000
+        },
+        {
+            "address": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r",
+            "amount": 76000000
         }
     ],
     "miners": [
