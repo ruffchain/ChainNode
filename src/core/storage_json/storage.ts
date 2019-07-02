@@ -398,7 +398,8 @@ class JsonReadableDatabase implements IReadableDatabase {
     }
 
     // Added by Yang Jun 2019-2-20, no use here, for compiling error coverage
-    public async getReadableKeyValueWithDbname(dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }> {
+    public async getReadableKeyValueWithDbname(dbname: string, name1: string): Promise<{ err: ErrorCode, kv?: IReadableKeyValue }> {
+        const name = Storage.getKeyValueFullName(dbname, name1);
         const err = Storage.checkTableName(name);
         if (err) {
             return { err };

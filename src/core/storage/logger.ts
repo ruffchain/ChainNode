@@ -87,6 +87,26 @@ export class LoggedStorage {
                 return btr;
             };
         }
+        // Added by Yang Jun 2019-7-2
+        {
+            let proto = database.createKeyValueWithDbname;
+            database.createKeyValueWithDbname = async (dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }> => {
+                let ltr = await logger.createKeyValueWithDbname(dbname, name);
+                let btr = await proto.bind(database)(dbname, name);
+                this._wrapKeyvalue(btr.kv!, ltr.kv!);
+                return btr;
+            };
+        }
+        // Added by Yang Jun 2019-7-2
+        {
+            let proto = database.getReadWritableKeyValueWithDbname;
+            database.getReadWritableKeyValueWithDbname = async (dbname: string, name: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }> => {
+                let ltr = await logger.getReadWritableKeyValueWithDbname(dbname, name);
+                let btr = await proto.bind(database)(dbname, name);
+                this._wrapKeyvalue(btr.kv!, ltr.kv!);
+                return btr;
+            };
+        }
     }
 
     private _wrapTransaction(transaction: StorageTransaction, logger: StorageTransaction) {

@@ -162,18 +162,16 @@ class DatabaseLogger implements IWritableDatabase {
 
     // Added by Yang Jun 2019-2-21
     async createKeyValueWithDbname(dbname: string, name1: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }> {
-        const name = Storage.getKeyValueFullName(dbname, name1);
 
         let val = this._kvVal();
-        this.owner.appendLog(`let ${val} = (await ${this.name}.createKeyValueWithDbname(${JSON.stringify(name)})).kv;`);
+        this.owner.appendLog(`let ${val} = (await ${this.name}.createKeyValueWithDbname(${JSON.stringify(dbname)},${JSON.stringify(name1)})).kv;`);
         return { err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val) };
     }
 
     async getReadWritableKeyValueWithDbname(dbname: string, name1: string): Promise<{ err: ErrorCode, kv?: IReadWritableKeyValue }> {
-        const name = Storage.getKeyValueFullName(dbname, name1);
 
         let val = this._kvVal();
-        this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValueWithDbname(${JSON.stringify(name)})).kv;`);
+        this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValueWithDbname(${JSON.stringify(dbname)},${JSON.stringify(name1)})).kv;`);
         return { err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val) };
     }
 
