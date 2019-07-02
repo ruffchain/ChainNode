@@ -1,0 +1,22 @@
+{
+    "handler": "./handler.js",
+    "type": {
+        "consensus": "dposbft",
+        "features": []
+    },
+    "global": {
+        "minCreateor": 2,
+        "maxCreateor": 12,
+        "reSelectionBlocks": 60,
+        "blockInterval": 10,
+        "timeOffsetToLastBlock": 86400,
+        "timeBan": 259200,
+        "unbanBlocks": 360,
+        "dposVoteMaxProducers": 7,
+        "maxBlockIntervalOffset": 1,
+        "depositAmount": 3000000,
+        "depositPeriod": 777600,
+        "mortgagePeriod": 25920,
+        "voteInterval": 10
+    }
+}

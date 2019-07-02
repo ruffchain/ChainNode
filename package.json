@@ -12,7 +12,8 @@
     "watch": "tsc -w",
     "docker": "gulp build-docker",
     "switch-formal": "cp backup/formal/genesis.json ruff/dposbft/chain/genesis.json",
-    "switch-internal": "cp backup/internal/genesis.json ruff/dposbft/chain/genesis.json"
+    "switch-internal": "cp backup/internal/genesis.json ruff/dposbft/chain/genesis.json",
+    "switch-testnodes": "cp backup/testnodes/genesis.json ruff/dposbft/chain/genesis.json"
   },
   "repository": {
     "type": "git",
