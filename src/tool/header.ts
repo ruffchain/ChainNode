@@ -6,6 +6,11 @@ import * as sqlite3 from 'sqlite3';
 import {Transaction, BlockStorage, BlockHeader, HeaderStorage, Receipt } from '../core';
 import {initUnhandledRejection, parseCommand, initLogger} from '../common';
 import {DposBftBlockHeader} from '../core/dpos_bft_chain';
+import {ValueTransaction, ValueReceipt} from '../core/value_chain/transaction';
+import {Block,EventLog, ErrorCode} from '../core';
+import {BufferReader} from '../common/lib/reader';
+//import { ErrorCode } from '../core/error_code';
+
 const digest = require('../common/lib/digest');
 const logger = initLogger({loggerOptions: {console: true}});
 initUnhandledRejection(logger);
@@ -14,9 +19,27 @@ process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
 });
 
+function dumpBlock(blockRaw: Buffer) {
+    let block = new Block({
+        header: undefined,
+        headerType: DposBftBlockHeader,
+        transactionType: ValueTransaction,
+        receiptType: ValueReceipt
+    });
+    let err = block.decode(new BufferReader(blockRaw));
+
+    if (err == ErrorCode.RESULT_OK) {
+        let res: any = { err: ErrorCode.RESULT_OK, block: block.header.stringify() };
+        res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
+        res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
+        console.log(JSON.stringify(res, null, 4));
+    }
+    return block;
+}
+
 let command = parseCommand(process.argv);
 if (!command) {
-    console.log(`Usage: node header.js {--height {height}  --data {dataDir} --dump {dumpPath} }`);
+    console.log(`Usage: node header.js {--height {height}  --data {dataDir} --dump {dumpPath} --block {blockPath} }`);
     process.exit();
 }
 
@@ -26,6 +49,7 @@ if (!command) {
     let height;
     let dataDir;
     let dumpPath;
+    let blockPath;
 
     if (command!.options.has('height')) {
         height = parseInt(command!.options.get('height'));
@@ -37,6 +61,10 @@ if (!command) {
 
     if (command!.options.has('dump')) {
         dumpPath = command!.options.get('dump');
+    }
+
+    if (command!.options.has('block')) {
+        blockPath = command!.options.get('block');
     }
 
     if (height && dataDir) {
@@ -65,6 +93,11 @@ if (!command) {
         let hash = digest.hash256(content).toString('hex');
         //let hash = digest.hash256(buf).toString('hex');
         console.log('dump snapshot', hash);
+    }
+
+    if (blockPath) {
+        let buf = fs.readFileSync(path.join(process.cwd(), blockPath));
+        dumpBlock(buf);
     }
 })()
 
