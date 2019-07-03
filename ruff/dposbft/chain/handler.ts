@@ -246,11 +246,15 @@ export function registerHandler(handler: ValueHandler) {
         let strAmount = strAmountPrecision(context.value.toString(), SYS_MORTGAGE_PRECISION);
 
         let bnAmount = new BigNumber(strAmount);
+        console.log('bnAmount:', bnAmount);
 
-        let balance: BigNumber = await context.getBalance(context.caller);
-        if (balance.lt(bnAmount)) {
-            return ErrorCode.RESULT_NOT_ENOUGH;
-        }
+        // let balance: BigNumber = await context.getBalance(context.caller);
+        // console.log('balance:', balance);
+        // balance = balance.plus(bnAmount);
+        // if (balance.lt(bnAmount)) {
+        //     context.logger.error('balance less than bnAmount');
+        //     return ErrorCode.RESULT_NOT_ENOUGH;
+        // }
 
         return await context.mortgage(context.caller, bnAmount);
     });
