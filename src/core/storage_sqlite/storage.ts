@@ -208,7 +208,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
     }
 
     // Added by Yang Jun 2019-5-19
-    // Add new API for field 
+    // Add new API for field
     public async hgetallbyfield(field: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
         try {
             const result = await this.db.all(`SELECT * FROM '${this.fullName}' WHERE field=?`, field);
@@ -661,9 +661,9 @@ export class SqliteStorage extends Storage {
         }
 
         try {
-            this.m_db!.run('PRAGMA journal_mode = MEMORY');
-            this.m_db!.run('PRAGMA synchronous = OFF');
-            this.m_db!.run('PRAGMA locking_mode = EXCLUSIVE');
+            await this.m_db!.run('PRAGMA journal_mode = MEMORY');
+            await this.m_db!.run('PRAGMA synchronous = OFF');
+            await this.m_db!.run('PRAGMA locking_mode = EXCLUSIVE');
         } catch (e) {
             this.m_logger.error(`pragma some options on sqlite database file ${this.m_filePath} failed `, e);
             err = ErrorCode.RESULT_EXCEPTION;
