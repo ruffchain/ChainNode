@@ -19,11 +19,11 @@ gulp.task("compile", function () {
 gulp.task("res", () => {
     [
         gulp.src(["./src/**/*.sql", "./src/**/*.js", "./src/**/*.d.ts", "./src/**/*.json"])
-        .pipe(gulp.dest("./dist/blockchain-sdk/src")),
+            .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./test/**/*.sql", "./test/**/*.js", "./test/**/*.d.ts", "./test/**/*.json"])
-        .pipe(gulp.dest("./dist/blockchain-sdk/src")),
+            .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./ruff/**/*.json"])
-        .pipe(gulp.dest("./dist/blockchain-sdk/ruff")),
+            .pipe(gulp.dest("./dist/blockchain-sdk/ruff")),
     ];
 });
 
@@ -68,6 +68,7 @@ const genGenisisCmd = [
     "./ruff/dposbft/create.sh >/dev/null 2>&1 || true",
     "mkdir -p distDocker/chainsdk",
     "cp Dockerfile distDocker",
+    "cp -R ruff distDocker"
     "cp -a src distDocker/chainsdk/",
     "cp scripts/* distDocker/chainsdk",
     "cp package.json distDocker/chainsdk && cp tsconfig.json distDocker/chainsdk && cp tslint.json distDocker/chainsdk && cp gulpfile.js distDocker/chainsdk",

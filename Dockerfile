@@ -28,6 +28,7 @@ ENV NODE_PATH $NVM_DIR/versions/node/v$NODE_VERSION/lib/node_modules
 ENV PATH      $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
 COPY ./chainsdk /home/ruff/chainsdk
+COPY ./ruff /home/ruff/chainsdk
 RUN node --version
 # 
 RUN cd /home/ruff/chainsdk && npm install --registry=https://registry.npm.taobao.org --verbose
