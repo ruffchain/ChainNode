@@ -29,7 +29,9 @@ function dumpBlock(blockRaw: Buffer) {
     let err = block.decode(new BufferReader(blockRaw));
 
     if (err == ErrorCode.RESULT_OK) {
-        let res: any = { err: ErrorCode.RESULT_OK, block: block.header.stringify() };
+        let res: any = { transactions: null, eventLogs: null };
+        console.log(block.header);
+
         res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
         res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
         console.log(JSON.stringify(res, null, 4));
@@ -57,19 +59,28 @@ if (!command) {
 
     if (command!.options.has('data')) {
         dataDir = command!.options.get('data');
+        if (!path.isAbsolute(dataDir)) {
+            dumpPath = path.join(process.cwd(), dataDir);
+        }
+
     }
 
     if (command!.options.has('dump')) {
         dumpPath = command!.options.get('dump');
+        if (!path.isAbsolute(dumpPath)) {
+            dumpPath = path.join(process.cwd(), dumpPath);
+        }
     }
 
     if (command!.options.has('block')) {
         blockPath = command!.options.get('block');
+        if (!path.isAbsolute(blockPath)) {
+            blockPath = path.join(process.cwd(), blockPath);
+        }
     }
 
     if (height && dataDir) {
-        const rootDir = path.join(process.cwd(), dataDir);
-        let dbpath = path.join(rootDir, 'database');
+        let dbpath = path.join(dataDir, 'database');
         let db = await sqlite.open(dbpath, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
 
         let headerStorage = new HeaderStorage({
@@ -87,7 +98,7 @@ if (!command) {
     }
 
     if (dumpPath) {
-        let buf = fs.readFileSync(path.join(process.cwd(), dumpPath));
+        let buf = fs.readFileSync(dumpPath);
         const sqliteHeaderSize: number = 100;
         const content = Buffer.from(buf.buffer as ArrayBuffer, sqliteHeaderSize, buf.length - sqliteHeaderSize);
         let hash = digest.hash256(content).toString('hex');
@@ -96,7 +107,7 @@ if (!command) {
     }
 
     if (blockPath) {
-        let buf = fs.readFileSync(path.join(process.cwd(), blockPath));
+        let buf = fs.readFileSync(blockPath);
         dumpBlock(buf);
     }
 })()
