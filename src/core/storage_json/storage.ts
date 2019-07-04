@@ -218,7 +218,7 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
                     valueLst.push({
                         name: item,
                         field: `${infield}`,
-                        value: this.m_root[item][infield]
+                        value: deepCopy(this.m_root[item][infield])
                     });
                 }
             });
@@ -247,7 +247,36 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
             return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
+    public async hdelallbyname(inname: string): Promise<{ err: ErrorCode }> {
+        try {
+            if (isUndefined(this.m_root[inname])) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            }
+            delete this.m_root[inname];
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`hdelallbyname ${inname}  `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+    public async hdelallbyfield(infield: string): Promise<{ err: ErrorCode }> {
+        try {
+            let keyLst = Object.keys(this.m_root);
+            if (!keyLst) {
+                return { err: ErrorCode.RESULT_EXCEPTION }
+            }
 
+            keyLst.forEach((item: string) => {
+                if (!isUndefined(this.m_root[item][infield])) {
+                    delete this.m_root[item][infield];
+                }
+            });
+            return { err: ErrorCode.RESULT_OK };
+        } catch (e) {
+            this.logger.error(`hdelallbyfield  ${infield} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
     ///////////////////////////////
 
 
