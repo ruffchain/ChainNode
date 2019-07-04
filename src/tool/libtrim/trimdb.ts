@@ -19,12 +19,39 @@ export interface IfMinersItem {
     irbhash: string;
     irbheight: number;
 }
-export class TrimDataBase extends CUDataBase {
-    constructor(logger: winston.LoggerInstance, options: IfCUDataBaseOptions) {
-        super(logger, options);
-    }
-    public async init(): Promise<IFeedBack> {
+export interface IfTxviewBlocksItem {
+    number: number;
+    hash: string;
+}
+export interface IfTxviewItem {
+    txhash: string;
+    address: string;
+    blockheight: number;
+    blockhash: string;
+}
+export class TrimDataBase {
+    private db: CUDataBase;
 
-        return { err: ErrorCode.RESULT_OK, data: null };
+    constructor(logger: winston.LoggerInstance, options: IfCUDataBaseOptions) {
+        this.db = new CUDataBase(logger, options);
     }
+    public async open() {
+        return this.db.open();
+    }
+    public async close() {
+        return this.db.close();
+    }
+
+    public async getTable(table: string): Promise<IFeedBack> {
+        let sql = `select * from ${table};`
+        let hret = await this.db.getAllRecords(sql);
+        if (hret.err) {
+            this.db.logger.error('query ' + table + ' failed');
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] };
+        }
+        return { err: ErrorCode.RESULT_OK, data: hret.data };
+    }
+    // public async deleteFromTable(table: string): Promise<IFeedBack> {
+    //     return { err: ErrorCode.RESULT_OK, data: hret.data };
+    // }
 }

@@ -16,7 +16,7 @@ export interface IfCUDataBaseOptions {
 /**
  * @class CUDataBase
  */
-export abstract class CUDataBase {
+export class CUDataBase {
     /**
      * 
      */
@@ -67,7 +67,6 @@ export abstract class CUDataBase {
                 });
         });
     }
-    abstract init(): Promise<IFeedBack>;
 
     // You can not insert a same priv key record
     public insertRecord(sql: string, params: any): Promise<IFeedBack> {

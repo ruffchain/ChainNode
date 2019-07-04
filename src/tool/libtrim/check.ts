@@ -1,16 +1,9 @@
 import winston = require("winston");
-import { TrimDataBase, IfBestItem, IfHeadersItem, IfMinersItem } from "./trimdb";
+import { TrimDataBase, IfBestItem, IfHeadersItem, IfMinersItem, IfTxviewBlocksItem, IfTxviewItem } from "./trimdb";
 import { IFeedBack } from "../../core";
 
-// async function readTable(logger: winston.LoggerInstance, db: TrimDataBase, tableName: string): Promise<IFeedBack> {
-//     let result = await db.open();
-//     if (result.err) {
-//         logger.error('Open database failed');
-//         return -1;
-//     }
-// }
 
-export async function checkMain(logger: winston.LoggerInstance, path: string) {
+async function checkDatabase(logger: winston.LoggerInstance, path: string): Promise<number> {
     let mDb = new TrimDataBase(logger, {
         path: path,
         name: 'database'
@@ -24,14 +17,15 @@ export async function checkMain(logger: winston.LoggerInstance, path: string) {
     logger.info('database opened');
 
     // check best table
-    let sql = "select * from best;"
-    let hret = await mDb.getAllRecords(sql);
-    if (hret.err) {
-        logger.error('query best failed');
+    console.log('\n----------------------')
+    let retrn = await mDb.getTable("best");
+    if (retrn.err) {
+        logger.error('Fetch best failed');
+        await mDb.close();
         return -1;
     }
     let bestLst: IfBestItem[] = [];
-    hret.data.forEach((item: any) => {
+    retrn.data.forEach((item: any) => {
         bestLst.push(item as IfBestItem)
     });
 
@@ -43,10 +37,12 @@ export async function checkMain(logger: winston.LoggerInstance, path: string) {
 
 
     // check headers table
-    sql = "select * from headers;"
-    let hret2 = await mDb.getAllRecords(sql);
+    console.log('\n----------------------------------------------')
+    logger.info('Read headers table:')
+    let hret2 = await mDb.getTable("headers");
     if (hret2.err) {
         logger.error('query headers failed');
+        await mDb.close();
         return -1;
     }
     // console.log(hret2.data);
@@ -54,25 +50,86 @@ export async function checkMain(logger: winston.LoggerInstance, path: string) {
     hret2.data.forEach((item: any) => {
         headersLst.push(item as IfHeadersItem)
     });
-    console.log(headersLst)
+    // console.log(headersLst)
 
     // check miners table
-    sql = "select * from miners;"
-    let hret3 = await mDb.getAllRecords(sql);
+    console.log('\n----------------------------------------------')
+    let hret3 = await mDb.getTable("Miners");
     if (hret3.err) {
         logger.error('query miners failed');
+        await mDb.close();
         return -1;
     }
-    // console.log(hret3.data);
 
+    logger.info("Read miners");
     let minersLst: IfMinersItem[] = [];
     hret3.data.forEach((item: any) => {
         minersLst.push(item as IfMinersItem)
     });
-    console.log(minersLst)
+    // console.log(minersLst)
+    const maxIrb = minersLst.reduce(function (prev, current) {
+        return (prev.irbheight > current.irbheight) ? prev : current
+    })
+    console.log('Irb:', maxIrb)
 
     result = await mDb.close();
 
+    return 0;
+}
+async function checkTxview(logger: winston.LoggerInstance, path: string): Promise<number> {
+    let mDb = new TrimDataBase(logger, {
+        path: path,
+        name: 'txview'
+    });
+
+    let result = await mDb.open();
+    if (result.err) {
+        logger.error('Open txview failed');
+        return -1;
+    }
+    logger.info('txview opened');
+
+    console.log('\n----------------------')
+    let retrn = await mDb.getTable("blocks");
+    if (retrn.err) {
+        logger.error('Fetch blocks failed');
+        await mDb.close();
+        return -1;
+    }
+    // console.log(retrn.data);
+    let blocksLst: IfTxviewBlocksItem[] = [];
+    retrn.data.forEach((item: any) => {
+        blocksLst.push(item as IfTxviewBlocksItem)
+    });
+    const max = blocksLst.reduce(function (prev, current) {
+        return (prev.number > current.number) ? prev : current
+    })
+    console.log('max:', max)
+
+
+    console.log('\n----------------------')
+    console.log('txview:')
+    let retrn2 = await mDb.getTable("txview");
+    if (retrn2.err) {
+        logger.error('Fetch blocks failed');
+        await mDb.close();
+        return -1;
+    }
+    console.log(retrn2.data);
+    let txviewLst: IfTxviewItem[] = [];
+    retrn2.data.forEach((item: any) => {
+        txviewLst.push(item as IfTxviewItem)
+    });
+    const max2 = txviewLst.reduce(function (prev, current) {
+        return (prev.blockheight > current.blockheight) ? prev : current
+    })
+    console.log('max2:', max2)
 
     return 0;
+}
+export async function checkMain(logger: winston.LoggerInstance, path: string) {
+    // let retn = await checkDatabase(logger, path);
+    // if (retn === -1) { return -1; }
+    let retn2 = await checkTxview(logger, path);
+    if (retn2 === -1) { return -1; }
 }
