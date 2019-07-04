@@ -162,6 +162,23 @@ export class LoggedStorage {
                 return await proto.bind(kv)(key);
             };
         }
+        // Add by Yang Jun 2019-7-4
+        {
+            let proto = kv.hdelallbyname;
+            kv.hdelallbyname = async (iname: string): Promise<{ err: ErrorCode }> => {
+                await logger.hdelallbyname(iname);
+                return await proto.bind(kv)(iname);
+            };
+        }
+        {
+            let proto = kv.hdelallbyfield;
+            kv.hdelallbyfield = async (infield: string): Promise<{ err: ErrorCode }> => {
+                await logger.hdelallbyfield(infield);
+                return await proto.bind(kv)(infield);
+            };
+        }
+
+        ////////////////////////////
         {
             let proto = kv.lset;
             kv.lset = async (key: string, index: number, value: any): Promise<{ err: ErrorCode }> => {

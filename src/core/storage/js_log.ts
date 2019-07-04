@@ -57,6 +57,14 @@ class KeyValueLogger implements IReadWritableKeyValue {
     hgetall(key: string): Promise<{ err: ErrorCode; value?: any[]; }> {
         return Promise.resolve({ err: ErrorCode.RESULT_NOT_SUPPORT });
     }
+    // Add by Yang Jun 2019-7-4
+    hgetallbyfield(infield: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+        return Promise.resolve({ err: ErrorCode.RESULT_NOT_SUPPORT });
+    }
+    hgetallbyname(inname: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+        return Promise.resolve({ err: ErrorCode.RESULT_NOT_SUPPORT });
+    }
+    ///////////////////////////
 
     lindex(key: string, index: number): Promise<{ err: ErrorCode, value?: any }> {
         return Promise.resolve({ err: ErrorCode.RESULT_NOT_SUPPORT });
@@ -87,6 +95,16 @@ class KeyValueLogger implements IReadWritableKeyValue {
         this.owner.appendLog(`await ${this.name}.hclean(${toEvalText(key)});`);
         return { err: ErrorCode.RESULT_OK };
     }
+    // Add by Yang Jun 2019-7-4
+    async hdelallbyname(inname: string): Promise<{ err: ErrorCode }> {
+        this.owner.appendLog(`await ${this.name}.hdelallbyname(${toEvalText(inname)});`);
+        return { err: ErrorCode.RESULT_OK };
+    }
+    async hdelallbyfield(infield: string): Promise<{ err: ErrorCode }> {
+        this.owner.appendLog(`await ${this.name}.hdelallbyfield(${toEvalText(infield)});`);
+        return { err: ErrorCode.RESULT_OK };
+    }
+    ///////////////////////
 
     public async hdel(key: string, field: string): Promise<{ err: ErrorCode }> {
         this.owner.appendLog(`await ${this.name}.hdel(${toEvalText(key)},${toEvalText(field)});`);
@@ -174,8 +192,6 @@ class DatabaseLogger implements IWritableDatabase {
         this.owner.appendLog(`let ${val} = (await ${this.name}.getReadWritableKeyValueWithDbname(${JSON.stringify(dbname)},${JSON.stringify(name1)})).kv;`);
         return { err: ErrorCode.RESULT_OK, kv: new KeyValueLogger(this.owner, val) };
     }
-
-
 }
 
 export class JStorageLogger implements StorageLogger {
