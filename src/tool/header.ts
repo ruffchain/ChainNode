@@ -60,7 +60,7 @@ if (!command) {
     if (command!.options.has('data')) {
         dataDir = command!.options.get('data');
         if (!path.isAbsolute(dataDir)) {
-            dumpPath = path.join(process.cwd(), dataDir);
+            dataDir = path.join(process.cwd(), dataDir);
         }
 
     }
