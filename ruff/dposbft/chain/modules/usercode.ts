@@ -149,6 +149,11 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                 const ret = await context
                     .transferTo(to, toValue);
                 if (ret === ErrorCode.RESULT_OK) {
+                    context.emit('transfer', {
+                        'from': params.to,
+                        'to': to,
+                        'amount': toValue.toString()
+                    });
                     usedValue = usedValue.plus(toValue);
                     return (resolve(true));
                 } else {
