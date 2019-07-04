@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { ErrorCode } from '../../core';
 import * as http from 'http';
 
 const MAX_CONTENTY_LENGTH = 5 * 1024 * 1024;
@@ -15,7 +16,15 @@ export class RPCServer extends EventEmitter {
 
     on(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
     on(event: string, listener: any): this {
-        return super.on(event, listener);
+        async function wrapper(args: any, resp: http.ServerResponse):Promise<any> {
+            try {
+                await listener(args, resp);
+            } catch (err) {
+                console.log('err is ', err);
+                resp.end(JSON.stringify({err: ErrorCode.RESULT_INVALID_FORMAT}));
+            }
+        }
+        return super.on(event, wrapper);
     }
 
     once(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
