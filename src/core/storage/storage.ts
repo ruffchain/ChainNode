@@ -22,6 +22,9 @@ export interface IReadableKeyValue {
     hvalues(key: string): Promise<{ err: ErrorCode, value?: any[] }>;
     hgetall(key: string): Promise<{ err: ErrorCode; value?: { key: string, value: any }[]; }>;
 
+    // Add by Yang Jun 2019-7-4
+    hgetallbyfield(field: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }>;
+    hgetallbyname(name: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }>;
 
 
     // array
@@ -39,6 +42,10 @@ export interface IWritableKeyValue {
     hmset(key: string, fields: string[], values: any[]): Promise<{ err: ErrorCode }>;
     hclean(key: string): Promise<{ err: ErrorCode }>;
     hdel(key: string, field: string): Promise<{ err: ErrorCode }>;
+
+    // Add by Yang Jun 2019-7-4
+    hdelallbyname(name: string): Promise<{ err: ErrorCode }>;
+    hdelallbyfield(name: string): Promise<{ err: ErrorCode }>;
 
     // array
     lset(key: string, index: number, value: any): Promise<{ err: ErrorCode }>;
