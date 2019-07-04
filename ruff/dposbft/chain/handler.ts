@@ -247,11 +247,6 @@ export function registerHandler(handler: ValueHandler) {
 
         let bnAmount = new BigNumber(strAmount);
 
-        // let balance: BigNumber = await context.getBalance(context.caller);
-        // if (balance.lt(bnAmount)) {
-        //     return ErrorCode.RESULT_NOT_ENOUGH;
-        // }
-
         return await context.mortgage(context.caller, bnAmount);
     });
 

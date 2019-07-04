@@ -10,3 +10,7 @@ node dist/blockchain-sdk/src/tool/header.js --data data/dposbft/miner1/ --height
 
 node ./dist/blockchain-sdk/src/tool/restore_storage.js  restore --dataDir ./data/dposbft/miner2 --height 50 --output ./data/dposbft/
 
+# trim the node
+node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner2
+
+node ./dist/blockchain-sdk/src/tool/trim.js  trim --dataDir ./data/dposbft/miner2 --height 50
