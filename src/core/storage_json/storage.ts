@@ -205,6 +205,52 @@ class JsonStorageKeyValue implements IReadWritableKeyValue {
         }
     }
 
+    // Add by Yang Jun 2019-7-4
+    public async hgetallbyfield(infield: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+        try {
+            let keyLst = Object.keys(this.m_root);
+            if (!keyLst) {
+                return { err: ErrorCode.RESULT_EXCEPTION }
+            }
+            let valueLst: { name: string, field: string, value: any }[] = [];
+            keyLst.forEach((item: string) => {
+                if (!isUndefined(this.m_root[item][infield])) {
+                    valueLst.push({
+                        name: item,
+                        field: `${infield}`,
+                        value: this.m_root[item][infield]
+                    });
+                }
+            });
+
+            return {
+                err: ErrorCode.RESULT_OK, value: valueLst
+            }
+
+        } catch (e) {
+            this.logger.error(`hgetallbyfield ${infield} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+    public async hgetallbyname(inname: string): Promise<{ err: ErrorCode; value?: { name: string, field: string, value: any }[] }> {
+        try {
+            if (isUndefined(this.m_root[inname])) {
+                return { err: ErrorCode.RESULT_NOT_FOUND };
+            }
+            return {
+                err: ErrorCode.RESULT_OK, value: Object.keys(this.m_root[inname]).map((x) => {
+                    return { name: inname, field: x, value: deepCopy(this.m_root[inname][x]) };
+                })
+            };
+        } catch (e) {
+            this.logger.error(`hgetallbyname ${inname} `, e);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+    }
+
+    ///////////////////////////////
+
+
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
         try {
             if (isUndefined(this.m_root[key])) {
