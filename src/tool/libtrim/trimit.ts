@@ -5,7 +5,7 @@
 
 import winston = require("winston");
 import { checkDatabaseBest } from "./check";
-import { TrimDataBase, IfBestItem } from "./trimdb";
+import { TrimDataBase, IfBestItem, IfHeadersItem } from "./trimdb";
 import { runMethodOnDb } from "./basic";
 import { IFeedBack, ErrorCode } from "../../core";
 
@@ -63,12 +63,69 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
 
     result = await trimStorageDump(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim storage/dump failed'); return -1; }
+
     result = await trimStorageLog(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim storage/log failed'); return -1; }
 }
+async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        let retn = await mDb.runBySQL(`delete from best where height > ${height}`);
+        if (retn.err) {
+            logger.error('delete best fail');
+            return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null }
+        }
+        return { err: ErrorCode.RESULT_OK, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
 
+    if (result !== 0) { return -1; }
+    return 0;
+}
+async function trimDatabaseHeaders(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+    let flag = 0;
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        itemLst.forEach(async (item: IfBestItem) => {
+            let hash = item.hash;
+
+            let retn = await mDb.runBySQL(`delete from headers where hash ="${hash}";`);
+            if (retn.err) {
+                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+            } else {
+                console.log(`[${item.height}] ` + 'header deleted :', hash);
+            }
+        });
+
+        return { err: flag, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
+
+    if (result !== 0) { return -1; }
+    return 0;
+}
+async function trimDatabaseMiners(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+
+        return { err: ErrorCode.RESULT_OK, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
+
+    if (result !== 0) { return -1; }
+    return 0;
+}
 async function trimDatabase(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+    let min = itemLst.reduce((prev, curr) => {
+        return (prev.height < curr.height) ? prev : curr;
+    });
 
+    console.log('\nTo trim database-headers:');
+    let result = await trimDatabaseHeaders(itemLst, logger, path);
+    if (result !== 0) { return -1; }
+
+    console.log('\nTo trim database-best:', min.height);
+    // delete best at the last step
+    // let result = await trimDatabaseBest(min.height, logger, path);
+    // if (result !== 0) { return -1; }
 
     return 0;
 }
