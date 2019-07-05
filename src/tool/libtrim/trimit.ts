@@ -10,10 +10,13 @@ import { runMethodOnDb } from "./basic";
 import { IFeedBack, ErrorCode } from "../../core";
 import * as path from 'path';
 import * as fs from 'fs';
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 
 const LOG_PATH = "storage/log/"
 const DUMP_PATH = "storage/dump/"
 const SAFE_GAP = 5;
+const RESTORE_FILE_PATH = './data/dposbft/restore';
 
 async function checkHeightValid(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
     let retn = await checkDatabaseBest(logger, path);
@@ -27,7 +30,6 @@ async function checkHeightValid(height: number, logger: winston.LoggerInstance, 
     }
     return 0;
 }
-
 
 export async function trimMain(height: number, logger: winston.LoggerInstance, path: string) {
     let result = await checkHeightValid(height, logger, path);
@@ -68,6 +70,11 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
 
     result = await trimStorageDump(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim storage/dump failed'); return -1; }
+
+    result = await generateStorageDump(height, logger, path);
+    if (result !== 0) {
+        logger.error('generate storage/dump OK'); return -1;
+    }
 }
 ///////////////////////////////////////////////////////////////////////////////
 async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
@@ -232,6 +239,59 @@ async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInsta
             console.log('Failed delete.', e)
         }
     });
+
+    return 0;
+}
+async function generateStorageDump(height: number, logger: winston.LoggerInstance, path1: string): Promise<number> {
+    console.log('\nGenerate database under dump/');
+
+    let trimHeightItem: IfBestItem = Object.create(null);
+    async function fetchTrimItem(mDb: TrimDataBase): Promise<IFeedBack> {
+        console.log('\n--------------------------------')
+        let retrn = await mDb.getBySQL(`select * from best where height = ${height}`);
+        if (retrn.err) {
+            logger.error('query best for height failed');
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] }
+        }
+        trimHeightItem = retrn.data[0];
+        return { err: ErrorCode.RESULT_OK, data: retrn.data };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path1, method: fetchTrimItem });
+
+    if (result !== 0) { return -1; }
+
+    console.log('height item:');
+    console.log(trimHeightItem);
+    const dumpPath = path.join(path1, DUMP_PATH);
+
+    // generate database and copy it to storage/dump/
+    try {
+        await fs.unlinkSync(RESTORE_FILE_PATH);
+        const { stdout, stderr } = await exec(`node ./dist/blockchain-sdk/src/tool/restore_storage.js  restore --dataDir ${path1} --height ${height} --output ./data/dposbft/`);
+    } catch (e) {
+        console.log('Not right')
+
+    }
+    if (!fs.existsSync(RESTORE_FILE_PATH)) {
+        return -1;
+    }
+    let stats = fs.statSync(RESTORE_FILE_PATH)
+    let fileSizeInBytes = stats["size"]
+    console.log('resotre file created, ' + fileSizeInBytes)
+    if (fileSizeInBytes < 10) {
+        logger.error('Restore file generation failed!');
+        return -1;
+    }
+    console.log('Copy restore to dump/ as: ', trimHeightItem.hash);
+    let srcFile = RESTORE_FILE_PATH;
+    let dstFile = path.join(path1, DUMP_PATH + trimHeightItem.hash);
+    await fs.copyFileSync(srcFile, dstFile);
+
+
+    // delete from best table
+    console.log('\nClear best table');
+    let hret = await trimDatabaseBest(trimHeightItem.height, logger, path1);
+    if (hret !== 0) { return -1; }
 
     return 0;
 }

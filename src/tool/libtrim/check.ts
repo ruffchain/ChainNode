@@ -18,6 +18,10 @@ export async function checkDatabaseBest(logger: winston.LoggerInstance, path: st
             bestLst.push(item as IfBestItem)
         });
 
+        if (bestLst.length === 0) {
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: null };
+        }
+
         const max = bestLst.reduce(function (prev, current) {
             return (prev.height > current.height) ? prev : current
         })
