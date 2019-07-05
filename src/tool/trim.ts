@@ -34,7 +34,7 @@ async function main() {
             return;
         }
 
-        await trimMain(logger, dataDir);
+        await trimMain(parseInt(height + ''), logger, dataDir);
     }
 
 }

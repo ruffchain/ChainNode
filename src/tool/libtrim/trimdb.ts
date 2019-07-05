@@ -29,6 +29,7 @@ export interface IfTxviewItem {
     blockheight: number;
     blockhash: string;
 }
+
 export class TrimDataBase {
     private db: CUDataBase;
 
@@ -51,6 +52,23 @@ export class TrimDataBase {
         }
         return { err: ErrorCode.RESULT_OK, data: hret.data };
     }
+    public async getBySQL(sql: string): Promise<IFeedBack> {
+        let hret = await this.db.getAllRecords(sql);
+        if (hret.err) {
+            this.db.logger.error('query  failed');
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] };
+        }
+        return { err: ErrorCode.RESULT_OK, data: hret.data };
+    }
+    public async runBySQL(sql: string): Promise<IFeedBack> {
+        let hret = await this.db.execRecord(sql, {});
+        if (hret.err) {
+            this.db.logger.error('runBySQL  failed');
+            return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: [] };
+        }
+        return { err: ErrorCode.RESULT_OK, data: hret.data };
+    }
+
     // public async deleteFromTable(table: string): Promise<IFeedBack> {
     //     return { err: ErrorCode.RESULT_OK, data: hret.data };
     // }
