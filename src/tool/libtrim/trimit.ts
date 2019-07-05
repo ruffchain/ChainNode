@@ -75,6 +75,10 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     if (result !== 0) {
         logger.error('generate storage/dump OK'); return -1;
     }
+
+    console.log('===================');
+    console.log('    End of Trim    ')
+    console.log('===================');
 }
 ///////////////////////////////////////////////////////////////////////////////
 async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
