@@ -29,6 +29,7 @@ export interface IfTxviewItem {
     blockheight: number;
     blockhash: string;
 }
+
 export class TrimDataBase {
     private db: CUDataBase;
 
@@ -47,6 +48,14 @@ export class TrimDataBase {
         let hret = await this.db.getAllRecords(sql);
         if (hret.err) {
             this.db.logger.error('query ' + table + ' failed');
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] };
+        }
+        return { err: ErrorCode.RESULT_OK, data: hret.data };
+    }
+    public async getBySQL(sql: string): Promise<IFeedBack> {
+        let hret = await this.db.getAllRecords(sql);
+        if (hret.err) {
+            this.db.logger.error('query  failed');
             return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] };
         }
         return { err: ErrorCode.RESULT_OK, data: hret.data };

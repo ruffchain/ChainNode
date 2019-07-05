@@ -3,7 +3,7 @@ import { TrimDataBase, IfBestItem, IfHeadersItem, IfMinersItem, IfTxviewItem, If
 import { IFeedBack, ErrorCode } from "../../core";
 import { runMethodOnDb } from "./basic";
 
-async function checkDatabaseBest(logger: winston.LoggerInstance, path: string): Promise<IFeedBack> {
+export async function checkDatabaseBest(logger: winston.LoggerInstance, path: string): Promise<IFeedBack> {
     let mData;
     async function checkBest(mDb: TrimDataBase): Promise<IFeedBack> {
         // check best table
