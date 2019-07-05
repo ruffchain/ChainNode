@@ -8,9 +8,11 @@ import { checkDatabaseBest } from "./check";
 import { TrimDataBase, IfBestItem, IfHeadersItem } from "./trimdb";
 import { runMethodOnDb } from "./basic";
 import { IFeedBack, ErrorCode } from "../../core";
+import * as path from 'path';
+import * as fs from 'fs';
 
-const LOG_PATH = "storage/log"
-const DUMP_PATH = "storage/dump"
+const LOG_PATH = "storage/log/"
+const DUMP_PATH = "storage/dump/"
 const SAFE_GAP = 5;
 
 async function checkHeightValid(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
@@ -61,12 +63,13 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
         return -1;
     }
 
-    result = await trimStorageDump(trimItemLst, logger, path);
-    if (result !== 0) { logger.error('trim storage/dump failed'); return -1; }
-
     result = await trimStorageLog(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim storage/log failed'); return -1; }
+
+    result = await trimStorageDump(trimItemLst, logger, path);
+    if (result !== 0) { logger.error('trim storage/dump failed'); return -1; }
 }
+///////////////////////////////////////////////////////////////////////////////
 async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         let retn = await mDb.runBySQL(`delete from best where height > ${height}`);
@@ -105,8 +108,20 @@ async function trimDatabaseHeaders(itemLst: IfBestItem[], logger: winston.Logger
 }
 async function trimDatabaseMiners(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        let flag = 0;
+        itemLst.forEach(async (item: IfBestItem) => {
+            let height = item.height;
 
-        return { err: ErrorCode.RESULT_OK, data: null };
+            let retn = await mDb.runBySQL(`delete from miners where irbheight ="${height}";`);
+            if (retn.err) {
+                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+            } else {
+                console.log(`[${item.height}] ` + 'header deleted :', height);
+            }
+        });
+
+        return { err: flag, data: null };
     }
     let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
 
@@ -122,6 +137,10 @@ async function trimDatabase(itemLst: IfBestItem[], logger: winston.LoggerInstanc
     let result = await trimDatabaseHeaders(itemLst, logger, path);
     if (result !== 0) { return -1; }
 
+    console.log('\nTo trim database-miners:');
+    result = await trimDatabaseMiners(itemLst, logger, path);
+    if (result !== 0) { return -1; }
+
     console.log('\nTo trim database-best:', min.height);
     // delete best at the last step
     // let result = await trimDatabaseBest(min.height, logger, path);
@@ -129,18 +148,90 @@ async function trimDatabase(itemLst: IfBestItem[], logger: winston.LoggerInstanc
 
     return 0;
 }
+
+async function trimTxviewBlocks(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        let flag = 0;
+        itemLst.forEach(async (item: IfBestItem) => {
+            let height = item.height;
+
+            let retn = await mDb.runBySQL(`delete from blocks where number ="${height}";`);
+            if (retn.err) {
+                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+            } else {
+                console.log(`[${item.height}] ` + 'block deleted :', height);
+            }
+        });
+        return { err: flag, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "txview", logger: logger, path: path, method: funcMethod });
+
+    if (result !== 0) { return -1; }
+    return 0;
+}
+async function trimTxviewTxview(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        let flag = 0;
+        itemLst.forEach(async (item: IfBestItem) => {
+            let height = item.height;
+
+            let retn = await mDb.runBySQL(`delete from txview where blockheight ="${height}";`);
+            if (retn.err) {
+                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+            } else {
+                console.log(`[${item.height}] ` + 'block deleted :', height);
+            }
+        });
+        return { err: flag, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "txview", logger: logger, path: path, method: funcMethod });
+
+    if (result !== 0) { return -1; }
+    return 0;
+}
 async function trimTxview(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
 
+    console.log('\nTo trim txview-blocks:');
+    let result = await trimTxviewBlocks(itemLst, logger, path);
+    if (result !== 0) { return -1; }
+
+    console.log('\nTo trim txview-txview:');
+    result = await trimTxviewTxview(itemLst, logger, path);
+    if (result !== 0) { return -1; }
+    return 0;
+}
+async function trimStorageDump(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
+    console.log('\nClear database under dump/');
+    const dumpPath = path.join(path1, DUMP_PATH);
+
+    console.log('\nDelete databases')
+    itemLst.forEach((item: IfBestItem) => {
+        let filename = path.join(dumpPath, item.hash);
+        console.log('Delete ' + item.height + ' : ' + filename);
+        try {
+            fs.unlinkSync(filename);
+        } catch (e) {
+            console.log('Failed delete')
+        }
+    });
 
     return 0;
 }
-async function trimStorageDump(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
+async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
+    console.log('\nClear redo.log');
+    const logPath = path.join(path1, LOG_PATH);
 
-
-    return 0;
-}
-async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
-
+    itemLst.forEach((item: IfBestItem) => {
+        let filename = path.join(logPath, item.hash + '.redo');
+        console.log('Delete ' + item.height + ' : ' + filename);
+        try {
+            fs.unlinkSync(filename);
+        } catch (e) {
+            console.log('Failed delete.', e)
+        }
+    });
 
     return 0;
 }
