@@ -145,10 +145,15 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     context.logger.error('exceed the amount');
                     return (resolve(false));
                 }
-
+                let toValuePrecision = toValue.toFixed(SYS_TOKEN_PRECISION);
                 const ret = await context
-                    .transferTo(to, toValue);
+                    .transferTo(to, new BigNumber(toValuePrecision));
                 if (ret === ErrorCode.RESULT_OK) {
+                    context.emit('transfer', {
+                        'from': params.to,
+                        'to': to,
+                        'value': toValuePrecision
+                    });
                     usedValue = usedValue.plus(toValue);
                     return (resolve(true));
                 } else {
