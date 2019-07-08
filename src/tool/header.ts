@@ -19,6 +19,23 @@ process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
 });
 
+function dumpBftSign(header: DposBftBlockHeader) {
+    let printEnd = false;
+    header.bftSigns.forEach((sign, num) => {
+        if (num == 0) {
+            console.log('=== BFT Sign Begin ===');
+            printEnd = true;
+        }
+        console.log('\tsign num: ', num);
+        console.log('\thash: ', sign.hash);
+        console.log('\tpubkey: ', sign.pubkey.toString('hex'));
+        console.log('\tsign: ', sign.sign.toString('hex'));
+    });
+    if (printEnd) {
+        console.log('=== BFT Sign End ===');
+    }
+}
+
 function dumpBlock(blockRaw: Buffer) {
     let block = new Block({
         header: undefined,
@@ -30,8 +47,9 @@ function dumpBlock(blockRaw: Buffer) {
 
     if (err == ErrorCode.RESULT_OK) {
         let res: any = { transactions: null, eventLogs: null };
-        console.log(block.header);
+        console.log(block.header.stringify());
 
+        dumpBftSign(block.header as DposBftBlockHeader)
         res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
         res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
         console.log(JSON.stringify(res, null, 4));
@@ -94,7 +112,10 @@ if (!command) {
         let ret = await headerStorage.init();
 
         let hr = await headerStorage.getHeader(height);
-        console.log(hr);
+        if (!hr.err) {
+            console.log(hr.header!.stringify());
+            dumpBftSign(hr.header! as DposBftBlockHeader);
+        }
     }
 
     if (dumpPath) {
