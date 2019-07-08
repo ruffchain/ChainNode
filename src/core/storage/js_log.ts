@@ -1,7 +1,7 @@
 import { ErrorCode } from '../error_code';
 import { StorageLogger } from './logger';
 import { BufferReader, BufferWriter, toEvalText } from '../serializable';
-import { Storage, StorageTransaction, IReadWritableKeyValue, IReadWritableStorage, IWritableDatabase } from './storage';
+import { StorageTransaction, IReadWritableKeyValue, IReadWritableStorage, IWritableDatabase } from './storage';
 
 
 class TransactionLogger implements StorageTransaction {
