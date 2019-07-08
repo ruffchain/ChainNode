@@ -270,7 +270,11 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
 
     // generate database and copy it to storage/dump/
     try {
-        await fs.unlinkSync(RESTORE_FILE_PATH);
+        if (fs.existsSync(RESTORE_FILE_PATH)) {
+            // Do something
+            await fs.unlinkSync(RESTORE_FILE_PATH);
+        }
+
         const { stdout, stderr } = await exec(`node ./dist/blockchain-sdk/src/tool/restore_storage.js  restore --dataDir ${path1} --height ${height} --output ./data/dposbft/`);
     } catch (e) {
         console.log('Not right')
