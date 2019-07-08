@@ -16,24 +16,24 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   let tokenIdUpperCase = params.tokenid.toUpperCase();
 
   // If context.value lt sys value
-  let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
-  if (syskv.err) {
-    console.log('Yang-- not exist balance');
-    return syskv.err;
-  }
+  // let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
+  // if (syskv.err) {
+  //   console.log('Yang-- not exist balance');
+  //   return syskv.err;
+  // }
 
 
 
-  // find all valid bancortoken
-  let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
+  // // find all valid bancortoken
+  // let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
 
-  let strAmount = context.value.toFixed(SYS_TOKEN_PRECISION);
-  let amount = new BigNumber(strAmount);
+  // let strAmount = context.value.toFixed(SYS_TOKEN_PRECISION);
+  // let amount = new BigNumber(strAmount);
 
-  if (fromTotalSys.lt(amount)) {
-    console.log('Yang-- not enough balance');
-    return ErrorCode.RESULT_NOT_ENOUGH;
-  }
+  // if (fromTotalSys.lt(amount)) {
+  //   console.log('Yang-- not enough balance');
+  //   return ErrorCode.RESULT_NOT_ENOUGH;
+  // }
 
   // get F
   let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);

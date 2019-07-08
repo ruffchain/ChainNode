@@ -87,7 +87,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
     protected get _ignoreVerify() {
         // return true;
-        // Yang Jun change at 3-5-2019
+        // Yang Jun change at 3-5-2019, We will not ignore verify here
         return false;
     }
 
