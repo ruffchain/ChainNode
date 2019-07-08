@@ -1,25 +1,25 @@
 
 class LRUNode<T> {
-    protected m_next: LRUNode<T>|null = null;
-    protected m_prev: LRUNode<T>|null = null;
+    protected m_next: LRUNode<T> | null = null;
+    protected m_prev: LRUNode<T> | null = null;
     protected m_v: T;
     constructor(value: T) {
         this.m_v = value;
     }
 
-    set next(node: LRUNode<T>|null) {
+    set next(node: LRUNode<T> | null) {
         this.m_next = node;
     }
 
-    get next(): LRUNode<T>|null {
+    get next(): LRUNode<T> | null {
         return this.m_next;
     }
 
-    set prev(node: LRUNode<T>|null) {
+    set prev(node: LRUNode<T> | null) {
         this.m_prev = node;
     }
 
-    get prev(): LRUNode<T>|null {
+    get prev(): LRUNode<T> | null {
         return this.m_prev;
     }
 
@@ -30,8 +30,8 @@ class LRUNode<T> {
 
 class DLink<T> {
     protected m_count: number;
-    protected m_head: LRUNode<T>|null = null;
-    protected m_tail: LRUNode<T>|null = null;
+    protected m_head: LRUNode<T> | null = null;
+    protected m_tail: LRUNode<T> | null = null;
 
     constructor() {
         this.m_count = 0;
@@ -41,11 +41,11 @@ class DLink<T> {
         return this.m_count;
     }
 
-    get head(): LRUNode<T>|null {
+    get head(): LRUNode<T> | null {
         return this.m_head;
     }
 
-    get tail(): LRUNode<T>|null {
+    get tail(): LRUNode<T> | null {
         return this.m_tail;
     }
 
@@ -123,7 +123,11 @@ export class LRUCache<TKey, TValue> {
             this.m_link.addToHead(node);
             this.m_memValue.set(key, [value, node]);
         } else {
-            if (this.m_link.length >= this.m_maxCount) {
+            // Yang jun 2019-7-8
+            // if (this.m_link.length >= this.m_maxCount) {
+            if (this.m_link.length >= this.m_maxCount && this.m_link.tail) {
+                this.m_memValue.delete(this.m_link.tail.value);
+                ////////////////////////////////////////////
                 this.m_link.removeTail();
             }
             let node: LRUNode<TKey> = new LRUNode<TKey>(key);
@@ -132,7 +136,7 @@ export class LRUCache<TKey, TValue> {
         }
     }
 
-    public get(key: TKey): TValue|null {
+    public get(key: TKey): TValue | null {
         if (!this.m_memValue.has(key)) {
             return null;
         }
