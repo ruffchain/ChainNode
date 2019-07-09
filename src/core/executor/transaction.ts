@@ -23,7 +23,7 @@ class BaseExecutor {
     protected async prepareContext(blockHeader: BlockHeader, storage: Storage, externContext: any): Promise<any> {
         let database =  (await storage.getReadWritableDatabase(Chain.dbUser)).value!;
         let context = Object.create(externContext);
-        
+
         // context.getNow = (): number => {
         //     return blockHeader.timestamp;
         // };
@@ -32,21 +32,21 @@ class BaseExecutor {
             context, 'now', {
                 writable: false,
                 value: blockHeader.timestamp
-            } 
+            }
         );
 
         Object.defineProperty(
             context, 'height', {
                 writable: false,
                 value: blockHeader.number
-            } 
+            }
         );
 
         Object.defineProperty(
             context, 'storage', {
                 writable: false,
                 value: database
-            } 
+            }
         );
 
         context.emit = (name: string, param?: any) => {
@@ -113,7 +113,7 @@ export class TransactionExecutor extends BaseExecutor {
             this.m_logger.error(`methodexecutor, beginTransaction error,storagefile=${storage.filePath}`);
             return {err: work.err};
         }
-         
+
         receipt.returnCode = await this._execute(context, this.m_tx.input);
         assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
         if (!isNumber(receipt.returnCode)) {
@@ -133,13 +133,13 @@ export class TransactionExecutor extends BaseExecutor {
             }
             receipt.eventLogs = this.m_logs;
         }
-        
+
         return {err: ErrorCode.RESULT_OK, receipt};
     }
 
     protected async _execute(env: any, input: any): Promise<ErrorCode> {
         try {
-            this.m_logger.info(`will execute tx ${this.m_tx.hash}: ${this.m_tx.method},from ${this.m_tx.address}, params ${JSON.stringify(this.m_tx.input)}`);
+            this.m_logger.debug(`will execute tx ${this.m_tx.hash}: ${this.m_tx.method},from ${this.m_tx.address}, params ${JSON.stringify(this.m_tx.input)}`);
             return await this.m_listener(env, this.m_tx.input);
         } catch (e) {
             this.m_logger.error(`execute method linstener e=`, e.stack);
@@ -156,7 +156,7 @@ export class TransactionExecutor extends BaseExecutor {
             context, 'caller', {
                 writable: false,
                 value: this.m_tx.address!
-            } 
+            }
         );
 
         context.createAddress = () => {
@@ -175,8 +175,8 @@ export class EventExecutor extends BaseExecutor {
 
     constructor(handler: BaseHandler, listener: BlockHeightListener, logger: LoggerInstance) {
         super({
-            eventDefinations: handler.getEventDefinations(), 
-            logger 
+            eventDefinations: handler.getEventDefinations(),
+            logger
         });
         this.m_listener = listener;
     }
@@ -214,7 +214,7 @@ export class EventExecutor extends BaseExecutor {
             this.m_logger.debug(`event handler return code ${returnCode} rollback storage`);
             await work.value!.rollback();
         }
-       
+
         return {err: ErrorCode.RESULT_OK, receipt};
     }
 }

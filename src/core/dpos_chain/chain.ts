@@ -235,7 +235,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         // register
         externalContext.register = async (from: string, option: IfRegisterOption): Promise<ErrorCode> => {
             // let mr = await de.registerToCandidate(from);
-            // Add by Yang Jun 
+            // Add by Yang Jun
             let mr = await dsvt.register(from, option);
             if (mr.err) {
                 return mr.err;
@@ -533,10 +533,10 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (hr.err) {
             return hr.err;
         }
-        this.logger.info(`==========dpos chain state=${this.chainTipState.dump()}`);
+        this.logger.debug(`==========dpos chain state=${this.chainTipState.dump()}`);
         // Added by yang Jun 2019-3-30
         this.m_curMiner = this.chainTipState.getMiner();
-        // 
+        //
         // this.logger.info('Yang Jun output:');
         // console.log('iRB: ', this.chainTipState.getIRB());
         // console.log('proposedIRB ', this.chainTipState.getProposedIRB());

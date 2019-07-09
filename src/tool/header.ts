@@ -49,8 +49,12 @@ function dumpBlock(blockRaw: Buffer) {
         let res: any = { transactions: null, eventLogs: null };
         console.log(block.header.stringify());
 
+        console.log('transactions:', block.content.transactions);
+
         dumpBftSign(block.header as DposBftBlockHeader)
-        res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
+        res.transactions = block.content.transactions.map((tr: Transaction) => {
+            tr.stringify()
+        });
         res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
         console.log(JSON.stringify(res, null, 4));
     }

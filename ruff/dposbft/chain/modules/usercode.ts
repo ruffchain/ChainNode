@@ -1,7 +1,7 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../../src/host';
 import { bCheckDBName, bCheckTokenPrecision, bCheckMethodName, strAmountPrecision, SYS_TOKEN_PRECISION } from "./scoop";
 
-import { createScript } from 'ruff-vm';
+import { createScript, resolveHelper } from 'ruff-vm';
 
 const DB_NAME_MAX_LEN: number = 12;
 const DB_KEY_MAX_LEN: number = 256;
@@ -135,15 +135,16 @@ export async function runUserMethod(context: DposTransactionContext, params: any
             if (context.cost(USER_CODE_MIN_COST) != ErrorCode.RESULT_OK) {
                 return resolve(false);
             }
+            const resolver = resolveHelper(resolve, 100);
             try {
                 let toValue = new BigNumber(amount);
 
                 if (toValue.isNaN() || !isValidAddress(to)) {
-                    return (resolve(false));
+                    return (resolver(false));
                 }
                 if (usedValue.plus(toValue).isGreaterThan(totalValue)) {
                     context.logger.error('exceed the amount');
-                    return (resolve(false));
+                    return (resolver(false));
                 }
                 let toValuePrecision = toValue.toFixed(SYS_TOKEN_PRECISION);
                 const ret = await context
@@ -155,24 +156,24 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                         'value': toValuePrecision
                     });
                     usedValue = usedValue.plus(toValue);
-                    return (resolve(true));
+                    return (resolver(true));
                 } else {
                     context.logger.error('ret is', ret);
-                    return (resolve(false));
+                    return (resolver(false));
                 }
             } catch (err) {
                 context.logger.error('err when transfer', err);
-                resolve(false);
+                resolver(false);
             }
         },
         bcDBCreate: async (resolve: any, name: string): Promise<any> => {
+            const resolver = resolveHelper(resolve, 100);
             try {
-
                 if (context.cost(new BigNumber(FEE_PER_BYTE)) != ErrorCode.RESULT_OK) {
-                    return (resolve(false));
+                    return (resolver(false));
                 }
                 if (!bCheckDBName(name)) {
-                    return (resolve(false));
+                    return (resolver(false));
                 }
 
                 const dbName = `${receiver}-${name}`;
@@ -181,13 +182,13 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     .storage
                     .createKeyValue(dbName);
                 if (kvRet1.err) {
-                    return (resolve(false));
+                    return (resolver(false));
                 } else {
-                    return (resolve(true));
+                    return (resolver(true));
                 }
             } catch (err) {
                 context.logger.error('error when DB create', err);
-                resolve(false);
+                resolver(false);
             }
         },
         bcDBSet: async (resolve: any, name: string, key: string, value: string): Promise<any> => {
@@ -195,14 +196,16 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                 return (resolve(false));
             }
 
+            const resolver = resolveHelper(resolve, 100);
             try {
+
                 if (!bCheckDBName(name) || !value || !key) {
-                    return (resolve(false));
+                    return (resolver(false));
                 }
 
                 if (key.length > DB_KEY_MAX_LEN || value.length > DB_VALUE_MAX_LEN) {
                     context.logger.error('Invalid input for bcDBSet');
-                    return (resolve(false));
+                    return (resolver(false));
                 }
 
                 let dbName = `${receiver}-${name}`;
@@ -212,21 +215,21 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     .getReadWritableKeyValue(dbName);
 
                 if (kvRet2.err) {
-                    return (resolve(false));
+                    return (resolver(false));
                 } else {
                     if (context.cost(new BigNumber(FEE_PER_BYTE * value.length)) != ErrorCode.RESULT_OK) {
-                        return (resolve(false));
+                        return (resolver(false));
                     }
                     let ret = await kvRet2.kv!.set(key, value);
                     if (ret.err) {
-                        return (resolve(false));
+                        return (resolver(false));
                     } else {
-                        return (resolve(true));
+                        return (resolver(true));
                     }
                 }
             } catch (err) {
                 context.logger.error('error when DB Set', err);
-                resolve(false);
+                resolver(false);
             }
         },
         bcDBGet: async (resolve: any, name: string, key: string): Promise<any> => {
@@ -235,15 +238,16 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                 return (resolve(false));
             }
 
+            const resolver = resolveHelper(resolve, 100);
             try {
 
                 if (!bCheckDBName(name) || !name || !key) {
-                    return (resolve(ret));
+                    return (resolver(ret));
                 }
 
                 if (key.length > DB_KEY_MAX_LEN) {
                     context.logger.error('Invalid input for bcDBSet');
-                    return (resolve(ret));
+                    return (resolver(ret));
                 }
 
                 let dbName = `${receiver}-${name}`;
@@ -253,14 +257,14 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     .getReadWritableKeyValue(dbName);
 
                 if (kvRet3.err) {
-                    return (resolve(ret));
+                    return (resolver(ret));
                 } else {
                     ret = await getTableValue(kvRet3.kv!, key);
-                    return (resolve(ret));
+                    return (resolver(ret));
                 }
             } catch (err) {
                 context.logger.error('error when DB Set', err);
-                resolve(ret);
+                resolver(ret);
             }
         },
     };
