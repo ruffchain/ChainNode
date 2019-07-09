@@ -578,7 +578,7 @@ export class SqliteReadWritableDatabase extends SqliteReadableDatabase implement
             (name TEXT, field TEXT, value TEXT, unique(name, field))`);
         }
         let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
-        return { err: ErrorCode.RESULT_OK, kv: tbl };
+        return { err, kv: tbl };
     }
 
     public async getReadWritableKeyValue(name: string) {
