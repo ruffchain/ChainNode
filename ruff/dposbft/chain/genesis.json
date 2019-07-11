@@ -1,19 +1,19 @@
 {
     "preBalances": [
         {
-            "address": "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq",
+            "address": "14pfYReBoVo93KCeFvfhuPmaeoz1vUnNAZ",
             "amount": 4000000
         },
         {
-            "address": "1LcLZNsntAcU55LSqkrGDQTLuEnvJAVjrW",
+            "address": "1FbwA2egJnzUqifZWFggrHcDHE1mv1XEwx",
             "amount": 4000000
         },
         {
-            "address": "168JPuqCa2ZWepPcjq8SowyduUnZjtEtG5",
+            "address": "18bea6HE35DfsLy3JrGDdhgt2Lgpj6cnVk",
             "amount": 4000000
         },
         {
-            "address": "1D3TZwGEFpJzrYBpEuBh3MfG6h1QF5S65v",
+            "address": "125yhbpdLjW9NrZA5vM6s6URDT9cLAAgHZ",
             "amount": 4000000
         },
         {
@@ -22,37 +22,35 @@
         }
     ],
     "miners": [
-        "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq",
-        "1LcLZNsntAcU55LSqkrGDQTLuEnvJAVjrW",
-        "168JPuqCa2ZWepPcjq8SowyduUnZjtEtG5"
+        "14pfYReBoVo93KCeFvfhuPmaeoz1vUnNAZ",
+        "1FbwA2egJnzUqifZWFggrHcDHE1mv1XEwx"
     ],
     "candidates": [
-        "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq",
-        "1LcLZNsntAcU55LSqkrGDQTLuEnvJAVjrW",
-        "168JPuqCa2ZWepPcjq8SowyduUnZjtEtG5"
+        "14pfYReBoVo93KCeFvfhuPmaeoz1vUnNAZ",
+        "1FbwA2egJnzUqifZWFggrHcDHE1mv1XEwx"
     ],
     "candidatesInfo": [
         {
-            "address": "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq",
+            "address": "14pfYReBoVo93KCeFvfhuPmaeoz1vUnNAZ",
             "name": "Shepherd-1",
             "ip": "139.217.133.187",
             "url": "http://x.yz",
             "location": "Shanghai"
         },
         {
-            "address": "1LcLZNsntAcU55LSqkrGDQTLuEnvJAVjrW",
+            "address": "1FbwA2egJnzUqifZWFggrHcDHE1mv1XEwx",
             "name": "Shepherd-2",
             "ip": "139.217.129.248",
             "url": "http://y.xz",
             "location": "Shanghai"
         },
         {
-            "address": "168JPuqCa2ZWepPcjq8SowyduUnZjtEtG5",
+            "address": "18bea6HE35DfsLy3JrGDdhgt2Lgpj6cnVk",
             "name": "Shepherd-3",
             "ip": "139.219.141.143",
             "url": "http://y.xz",
             "location": "Shanghai"
         }
     ],
-    "coinbase": "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq"
+    "coinbase": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r"
 }

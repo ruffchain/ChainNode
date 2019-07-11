@@ -100,6 +100,9 @@ async function checkTxviewBlocks(logger: winston.LoggerInstance, path: string): 
         retrn.data.forEach((item: any) => {
             txLst.push(item as IfTxviewBlocksItem)
         });
+        if (txLst.length === 0) {
+            return { err: ErrorCode.RESULT_OK, data: 0 }
+        }
         const maxIrb = txLst.reduce(function (prev, current) {
             return (prev.number > current.number) ? prev : current
         })
