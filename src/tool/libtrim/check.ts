@@ -70,6 +70,10 @@ async function checkDatabaseMiners(logger: winston.LoggerInstance, path: string)
         hret3.data.forEach((item: any) => {
             minersLst.push(item as IfMinersItem)
         });
+
+        if (minersLst.length === 0) {
+            return { err: ErrorCode.RESULT_OK, data: 0 }
+        }
         // console.log(minersLst)
         const maxIrb = minersLst.reduce(function (prev, current) {
             return (prev.irbheight > current.irbheight) ? prev : current
@@ -128,6 +132,10 @@ async function checkTxviewTxview(logger: winston.LoggerInstance, path: string): 
         retrn.data.forEach((item: any) => {
             txLst.push(item as IfTxviewItem)
         });
+
+        if (txLst.length === 0) {
+            return { err: ErrorCode.RESULT_OK, data: 0 }
+        }
         const maxIrb = txLst.reduce(function (prev, current) {
             return (prev.blockheight > current.blockheight) ? prev : current
         })

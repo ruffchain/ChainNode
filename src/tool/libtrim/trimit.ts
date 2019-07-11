@@ -74,7 +74,22 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
 
     result = await generateStorageDump(height, logger, path);
     if (result !== 0) {
-        logger.error('generate storage/dump OK'); return -1;
+        logger.error('generate storage/dump 1 NOK'); return -1;
+    }
+
+    result = await generateStorageDump(height - 1, logger, path);
+    if (result !== 0) {
+        logger.error('generate storage/dump 2 NOK'); return -1;
+    }
+
+    result = await generateStorageDump(height - 2, logger, path);
+    if (result !== 0) {
+        logger.error('generate storage/dump 3 NOK'); return -1;
+    }
+
+    result = await generateStorageDump(height - 3, logger, path);
+    if (result !== 0) {
+        logger.error('generate storage/dump 3 NOK'); return -1;
     }
 
     // delete from best table
@@ -301,6 +316,7 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
         const { stdout, stderr } = await exec(`node ./dist/blockchain-sdk/src/tool/restore_storage.js  restore --dataDir ${path1} --height ${height} --output ./data/dposbft/`);
     } catch (e) {
         console.log('Not right')
+        console.log(e);
 
     }
     if (!fs.existsSync(RESTORE_FILE_PATH)) {
