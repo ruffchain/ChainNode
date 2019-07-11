@@ -36,14 +36,3 @@ RUN cd /home/ruff/chainsdk && npm install --registry=https://registry.npm.taobao
 WORKDIR /home/ruff/chainsdk
 # USER ruff
 CMD /bin/bash
-
-
-
-
-
-
-
-
-
-
-

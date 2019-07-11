@@ -17,6 +17,7 @@ const LOG_PATH = "storage/log/"
 const DUMP_PATH = "storage/dump/"
 const SAFE_GAP = 5;
 const RESTORE_FILE_PATH = './data/dposbft/restore';
+const BLOCK_DIR = 'Block/';
 
 async function checkHeightValid(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
     let retn = await checkDatabaseBest(logger, path);
@@ -75,6 +76,9 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     if (result !== 0) {
         logger.error('generate storage/dump OK'); return -1;
     }
+
+    result = await trimBlockDir(trimItemLst, logger, path);
+    if (result !== 0) { logger.error('trim Block/ failed'); return -1; }
 
     console.log('===================');
     console.log('    End of Trim    ')
@@ -228,6 +232,20 @@ async function trimStorageDump(itemLst: IfBestItem[], logger: winston.LoggerInst
         }
     });
 
+    return 0;
+}
+async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
+    console.log('\nClear Block/');
+
+    itemLst.forEach(async (item: IfBestItem) => {
+        let blockPath = path.join(path1, BLOCK_DIR);
+        let FILE = path.join(blockPath, item.hash);
+        if (fs.existsSync(FILE)) {
+            // Do something
+            await fs.unlinkSync(FILE);
+            console.log('Delete ', FILE);
+        }
+    });
     return 0;
 }
 async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
