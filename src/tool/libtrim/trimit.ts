@@ -77,6 +77,11 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
         logger.error('generate storage/dump OK'); return -1;
     }
 
+    // delete from best table
+    console.log('\nClear best table');
+    let hret = await trimDatabaseBest(height, logger, path);
+    if (hret !== 0) { return -1; }
+
     result = await trimBlockDir(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim Block/ failed'); return -1; }
 
@@ -312,12 +317,6 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
     let srcFile = RESTORE_FILE_PATH;
     let dstFile = path.join(path1, DUMP_PATH + trimHeightItem.hash);
     await fs.copyFileSync(srcFile, dstFile);
-
-
-    // delete from best table
-    console.log('\nClear best table');
-    let hret = await trimDatabaseBest(trimHeightItem.height, logger, path1);
-    if (hret !== 0) { return -1; }
 
     return 0;
 }
