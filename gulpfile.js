@@ -1,4 +1,5 @@
 const gulp = require("gulp");
+const { series } = gulp;
 const ts = require("gulp-typescript");
 const sourcemaps = require("gulp-sourcemaps");
 const tsProject = ts.createProject("tsconfig.json");
@@ -17,17 +18,17 @@ gulp.task("compile", function () {
 
 // 其他需要拷贝到dist目录的非代码文件,可以在这里加,调用npm run build会拷贝到dist
 gulp.task("res", () => {
-    [
+    return Promise.all([
         gulp.src(["./src/**/*.sql", "./src/**/*.js", "./src/**/*.d.ts", "./src/**/*.json"])
             .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./test/**/*.sql", "./test/**/*.js", "./test/**/*.d.ts", "./test/**/*.json"])
             .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./ruff/**/*.json"])
             .pipe(gulp.dest("./dist/blockchain-sdk/ruff")),
-    ];
+    ]);
 });
 
-gulp.task("build", ["compile", "res"]);
+gulp.task("build", series("compile", "res"));
 
 gulp.task("_publish", () => {
     let pkg = fs.readJSONSync("./package.json");
@@ -61,7 +62,7 @@ gulp.task("prepareCli", () => {
 
 let imageName = process.env.CHAINNODE_DOCKER_IMAGENAME;
 
-gulp.task("publish", ["build", "_publish", "prepareCli"]);
+gulp.task("publish", series("build", "_publish", "prepareCli"));
 
 const genGenisisCmd = [
     "rm -fr distDocker",
@@ -75,4 +76,4 @@ const genGenisisCmd = [
     `cd distDocker && docker build -t ${imageName} . && docker push ${imageName}`
 ];
 
-gulp.task("build-docker", ["build"], shell.task(genGenisisCmd));
+gulp.task("build-docker", series("build", shell.task(genGenisisCmd)));
