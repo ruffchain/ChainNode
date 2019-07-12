@@ -53,14 +53,14 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
         if (!this.m_readonly) {
             fs.ensureDirSync(this.m_logPath);
         }
-        
+
         let err = await this.m_dumpManager.init();
         if (err) {
             return err;
         }
         let snapshots = this.m_dumpManager.listSnapshots();
         for (let ss of snapshots) {
-            this.m_snapshots.set(ss.blockHash, { ref: 0 });
+            this.m_snapshots.set(ss.blockHash, { ref: 1 });
         }
         return ErrorCode.RESULT_OK;
     }
@@ -113,7 +113,7 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
         } catch (error) {
             this.m_logger.warn(`read log file ${this.getLogPath(blockHash)} failed.`);
         }
-        
+
         if ( !redoLogRaw ) {
             this.m_logger.error(`get redo log ${blockHash} failed`);
             return undefined;
@@ -151,7 +151,7 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
         if (!ssr.err) {
             assert(this.m_snapshots.get(blockHash));
             this.m_logger.info(`get snapshot ${blockHash} directly from dump`);
-            ++this.m_snapshots.get(blockHash)!.ref; 
+            ++this.m_snapshots.get(blockHash)!.ref;
             return ssr;
         } else if (ssr.err !== ErrorCode.RESULT_NOT_FOUND) {
             this.m_logger.error(`get snapshot ${blockHash} failed for dump manager get snapshot failed for ${ssr.err}`);
@@ -230,7 +230,7 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
             return {err};
         }
         this.m_snapshots.set(blockHash, {ref: 1});
-        return {err: ErrorCode.RESULT_OK, 
+        return {err: ErrorCode.RESULT_OK,
             snapshot: new StorageDumpSnapshot(blockHash, storage.filePath)};
     }
 
