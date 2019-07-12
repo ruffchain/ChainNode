@@ -59,5 +59,5 @@ async function main() {
 }
 (async() => {
     await main();
-    process.exit(1);
+    process.exit(0);
 })()
