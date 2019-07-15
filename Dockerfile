@@ -9,8 +9,8 @@ RUN apt-get update && apt search linux-headers-$(uname -r) &&\
     vim \
     git \
     curl \
-    sudo \
-    clean
+    sudo &&\
+    apt-get clean
 
 RUN useradd -m ruff -g root && echo "ruff:123456" | chpasswd && adduser ruff sudo
 

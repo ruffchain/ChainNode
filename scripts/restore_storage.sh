@@ -1,5 +1,7 @@
 #!/bin/bash
 
+npm run build
+
 echo "restore_storage ..."
 
 echo 'current directory:'

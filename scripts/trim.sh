@@ -1,5 +1,7 @@
 #!/bin/bash
 
+npm run build
+
 echo "Trim data/ ..."
 
 echo 'current directory:'
