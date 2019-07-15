@@ -12,6 +12,11 @@ node ./dist/blockchain-sdk/src/tool/restore_storage.js  restore --dataDir ./data
 
 # trim the node
 * Use check to figure out the trim-height
+
+```
+node ./dist/blockchain-sdk/src/tool/restore_storage.js restore --dataDir ${path1} --height ${height} --output ./data/dposbft/
+```
+
 * Use trim to trim the node-state for every nodes
 * Affected data
     - database

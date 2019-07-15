@@ -1,15 +1,16 @@
 FROM ubuntu:18.04
-MAINTAINER yang o3
+LABEL maintainer="yang o3" 
+LABEL Name="RFC docker image"
+LABEL Version="1.14.9"
 RUN apt-get update && apt search linux-headers-$(uname -r) &&\
     apt-get install -y build-essential \
     libssl-dev \
     python \
     vim \
-    openssh-server \
     git \
     curl \
-    sudo 
-
+    sudo \
+    clean
 
 RUN useradd -m ruff -g root && echo "ruff:123456" | chpasswd && adduser ruff sudo
 
