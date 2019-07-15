@@ -77,3 +77,16 @@ const genGenisisCmd = [
 ];
 
 gulp.task("build-docker", series("build", shell.task(genGenisisCmd)));
+
+const genGenisisSimpleCmd = [
+    "rm -fr distDocker",
+    "mkdir -p distDocker/chainsdk",
+    "cp Dockerfile distDocker",
+    "cp -R ruff distDocker",
+    "cp -a src distDocker/chainsdk/",
+    "cp scripts/* distDocker/chainsdk",
+    "cp package.json distDocker/chainsdk && cp tsconfig.json distDocker/chainsdk && cp tslint.json distDocker/chainsdk && cp gulpfile.js distDocker/chainsdk",
+    `cd distDocker && docker build -t ${imageName} . && docker push ${imageName}`
+];
+
+gulp.task("build-simple-docker", series("build", shell.task(genGenisisSimpleCmd)));
