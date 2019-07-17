@@ -382,7 +382,7 @@ export class HeaderStorage implements IHeaderStorage {
             this.m_logger.error(`changeBest ${header.hash}(${header.number}) failed, ${e}`);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        this.m_logger.debug(`remove header storage cache hash: ${header.hash} number: ${header.number}`);
+        this.m_logger.debug(`Added Best storage cache hash: ${header.hash} number: ${header.number}`);
         this.m_relayOpt = () => {
             // 可能先前已经添加了header，但是这次状态变化了，所以需要删除
             this.m_cacheHash.remove(header.hash);
