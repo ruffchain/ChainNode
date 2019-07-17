@@ -21,7 +21,7 @@ export interface IChainStateStorage {
 
 export type DposChainTipStateManagerOptions = {
     logger: LoggerInstance,
-    headerStorage: IHeaderStorage, 
+    headerStorage: IHeaderStorage,
     getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
     globalOptions: any;
     stateStorage: IChainStateStorage;
@@ -55,7 +55,7 @@ export class DposChainTipStateManager {
             logger: this.m_logger,
             globalOptions: this.m_globalOptions,
             getMiners: this.m_getMiners,
-            headerStorage: this.m_headerStorage, 
+            headerStorage: this.m_headerStorage,
             libHeader
         });
     }
@@ -87,7 +87,7 @@ export class DposChainTipStateManager {
                 this.m_bestTipState = this._newChainTipState(gh.header! as DposBlockHeader);
                 this.m_tipStateCache.set(header.hash, this.m_bestTipState);
                 this.m_prevBestIRB = gh.header!;
-            } 
+            }
         }
         // 可能分叉了 已经切换分支了，所以需要从fork上去bulid
         let hr = await this._getState(header);
@@ -164,7 +164,8 @@ export class DposChainTipStateManager {
         if (header.number < bestTipState!.IRB.number) {
             this.m_logger.error(`_getState failed, for the fork and best's crossed block number is less than the best's irreversible`);
             return {err: ErrorCode.RESULT_OUT_OF_LIMIT};
-        } 
+        }
+        this.m_logger.debug(`IRB number: ${bestTipState.IRB.number}`);
         const hr = await this.m_headerStorage.getHeader(header, bestTipState.IRB.number - header.number);
         if (hr.err) {
             this.m_logger.error(`_getState getHeader of ${header.number} ${header.hash} on irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash} failed for ${stringifyErrorCode(hr.err)}`);
@@ -182,6 +183,7 @@ export class DposChainTipStateManager {
             if (cacheState ) {
                 newState = cacheState;
                 this.m_tipStateCache.remove(thisHeader.hash);
+                this.m_logger.debug(`Find cache for hash: ${thisHeader.hash} number: ${thisHeader.number}`);
                 // 另一种方案是clone当前的
                 // newState = cacheState.clone();
                 break;
@@ -190,11 +192,15 @@ export class DposChainTipStateManager {
 
         if (!newState) {
             newState = this._newChainTipState(bestTipState.IRB);
+            this.m_logger.error('#### Set fromIndex to 1');
+            fromIndex = 1;
         } else {
             fromIndex += 1;
         }
+        this.m_logger.debug(`fromIndex is ${fromIndex}, length is ${hr.headers!.length}`);
         const passedHeaders = hr.headers!.slice(fromIndex);
         for (let h of passedHeaders) {
+            this.m_logger.debug(`update tip for ${h.number} hash ${h.hash}`);
             let err = await newState.updateTip(h as DposBlockHeader);
             if (err) {
                 this.m_logger.error(`_getState updateTip error according to number, err = ${err}`);
