@@ -1,8 +1,36 @@
 import * as process from 'process';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export type Options = Map<string, any>;
 
 export type Command = {command?: string, options: Options};
+
+function objToStrMap(obj:any): Map<string, any> {
+    let strMap = new Map();
+    for (let k of Object.keys(obj)) {
+        strMap.set(k,obj[k]);
+    }
+    return strMap;
+}
+
+export function parseCommandFromCfgFile(cmd: Command): Command {
+
+    if (cmd.options.has('cfgFile')) {
+        let filePath = cmd.options.get('cfgFile');
+        if (!path.isAbsolute(filePath)) {
+            filePath = path.join(process.cwd(), filePath);
+        }
+        let content = fs.readFileSync(filePath).toString();
+        let obj = JSON.parse(content);
+        let newCommand: Command = {command: cmd.command, options: objToStrMap(obj)};
+        cmd.options.forEach((value, key) => {
+            newCommand.options.set(key, value);
+        });
+        return newCommand;
+    }
+    return cmd;
+}
 
 export function parseCommand(argv: string[]): Command|undefined {
     if (argv.length < 3) {
@@ -36,6 +64,6 @@ export function parseCommand(argv: string[]): Command|undefined {
             }
         }
         ++start;
-    } 
+    }
     return command;
 }
