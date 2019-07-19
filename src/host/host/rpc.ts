@@ -53,7 +53,7 @@ export class ChainServer {
     _initMethods() {
         this.m_server!.on('sendTransaction', async (params: { tx: any }, resp) => {
             // Yang Jun, make createToken, createBancorToken , tokenid to be UpperCase
-            // 
+            //
 
 
             let tx = ValueTransaction.fromRaw(Buffer.from(params.tx, 'hex'), ValueTransaction);
@@ -69,11 +69,10 @@ export class ChainServer {
 
                     // Yang Jun added 2019-4-8
                     // this.m_logger.info('Yang Jun tx.input');
-                    this.m_logger.info(tx.input);
                     if (tx.input.tokenid) {
                         tx.input.tokenid = tx.input.tokenid.toUpperCase();
                     }
-                    this.m_logger.info(tx.input);
+                    this.m_logger.debug(tx.input);
                     const err = await this.m_chain.addTransaction(tx);
                     await promisify(resp.write.bind(resp)(JSON.stringify(err)));
                 }
@@ -175,7 +174,7 @@ export class ChainServer {
             await promisify(resp.end.bind(resp))();
         });
 
-        // Yang Jun 2019-4-11 
+        // Yang Jun 2019-4-11
         this.m_server!.on('getBlocks', async (params: { min: number, max: number, transactions?: boolean, eventLog?: boolean }, resp) => {
             let output: any = { err: ErrorCode.RESULT_OK, blocks: [] };
 

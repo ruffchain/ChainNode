@@ -764,11 +764,10 @@ export class Chain extends EventEmitter implements IConsistency {
         while (this.m_storageMorkRequests.morking) {
             await doMork();
             delete this.m_storageMorkRequests.morking;
-            this.m_logger.debug('In morking loop, .pending ->');
-            console.log(this.m_storageMorkRequests.pending);
 
             // Yang Jun remove it for BP restart infinite loop problem 2019-6-11
-            // this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
+            this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
+            this.m_logger.debug('In morking loop, .pending ->',this.m_storageMorkRequests.pending);
         }
     }
 
@@ -1514,8 +1513,8 @@ export class Chain extends EventEmitter implements IConsistency {
     }
 
     /**
-     * virtual 
-     * @param block 
+     * virtual
+     * @param block
      */
     async onCreateGenesisBlock(block: Block, storage: Storage, genesisOptions?: any): Promise<ErrorCode> {
         let dbr = await storage.createDatabase(Chain.dbUser);
@@ -1775,7 +1774,7 @@ class VerifyBlockWithRedoLogRoutine extends BlockExecutorRoutine {
             return { err: ErrorCode.RESULT_OK, result: { err: digestResult.err } };
         }
         const valid = digestResult.value === this.block.header.storageHash ? ErrorCode.RESULT_OK : ErrorCode.RESULT_VERIFY_NOT_MATCH;
-        // 当前的storage hash和header上的storageHash 比较 
+        // 当前的storage hash和header上的storageHash 比较
         // 设置verify 结果, 后续流程需要使用 res.valid
         return { err: ErrorCode.RESULT_OK, result: { err: ErrorCode.RESULT_OK, valid } };
     }

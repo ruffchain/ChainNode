@@ -1,5 +1,6 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../../src/host';
 import { bCheckDBName, bCheckTokenPrecision, bCheckMethodName, strAmountPrecision, SYS_TOKEN_PRECISION } from "./scoop";
+import { isBuffer, isString } from 'util';
 
 import { createScript, resolveHelper } from 'ruff-vm';
 
@@ -25,8 +26,15 @@ function getFeeCostForCode(code: string | Buffer) : BigNumber {
     return new BigNumber(0.002).plus(byteCost);
 }
 
+function isValidUserCode(code: string | Buffer) : Boolean {
+    if ((isString(code) || isBuffer(code)) && code.length < 100 * 1024) {
+        return true;
+    }
+    return false;
+}
+
 export async function setUserCode(context: DposTransactionContext, params: any): Promise<ErrorCode> {
-    if (!params.userCode) {
+    if (!isValidUserCode(params.userCode)) {
         context.cost(context.fee);
         return ErrorCode.RESULT_INVALID_PARAM;
     }

@@ -2,7 +2,8 @@ import { EventEmitter } from 'events';
 import { ErrorCode } from '../../core';
 import * as http from 'http';
 
-const MAX_CONTENTY_LENGTH = 5 * 1024 * 1024;
+// At first stage set max length to 300K
+const MAX_CONTENTY_LENGTH = 300 * 1024;
 
 export class RPCServer extends EventEmitter {
     private m_addr: string;
@@ -54,18 +55,23 @@ export class RPCServer extends EventEmitter {
                 contentType.indexOf('application/json') >= 0
             )  {
                 let jsonData = '';
+                let isValidReq = true;
                 req.on('data', (chunk: any) => {
+                    if (!isValidReq) {
+                        return;
+                    }
                     jsonData += chunk;
                     if (jsonData.length >= MAX_CONTENTY_LENGTH) {
+                        isValidReq = false;
                         resp.writeHead(404);
                         resp.end();
                     }
                 });
                 req.on('end', () => {
-
                     let reqObj: any;
-                    // Added by Yang Jun 2019-4-26
-
+                    if (!isValidReq) {
+                        return;
+                    }
                     try {
                         reqObj = JSON.parse(jsonData);
                     } catch (e) {
@@ -75,12 +81,10 @@ export class RPCServer extends EventEmitter {
                         return;
                     }
 
-                    // console.info(`RPCServer emit request ${reqObj.funName}, params ${JSON.stringify(reqObj.args)}`);
                     if (!this.emit(reqObj.funName, reqObj.args, resp)) {
                         resp.writeHead(404);
                         resp.end();
                     }
-
                 });
             } else {
                 resp.writeHead(404);
