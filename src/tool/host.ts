@@ -2,7 +2,7 @@
 import * as process from 'process';
 import * as path from 'path';
 import {host as chainhost} from '../host';
-import {initUnhandledRejection, parseCommand, initLogger} from '../common/';
+import {initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger} from '../common/';
 
 Error.stackTraceLimit = 1000;
 
@@ -11,7 +11,7 @@ async function main() {
     if (ret !== 0) {
         process.exit(ret);
     }
-    
+
 }
 
 export async function run(argv: string[]) {
@@ -21,6 +21,9 @@ export async function run(argv: string[]) {
         // process.exit(-1);
         return -1;
     }
+
+    command = parseCommandFromCfgFile(command);
+
     if (command.options.has('dataDir')) {
         initUnhandledRejection(initLogger({
             loggerOptions: {console: true, file: {root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log'}}

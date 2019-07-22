@@ -21,13 +21,20 @@ export function parseCommandFromCfgFile(cmd: Command): Command {
         if (!path.isAbsolute(filePath)) {
             filePath = path.join(process.cwd(), filePath);
         }
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`file ${filePath} not exist`);
+        }
         let content = fs.readFileSync(filePath).toString();
-        let obj = JSON.parse(content);
-        let newCommand: Command = {command: cmd.command, options: objToStrMap(obj)};
-        cmd.options.forEach((value, key) => {
-            newCommand.options.set(key, value);
-        });
-        return newCommand;
+        try {
+            let obj = JSON.parse(content);
+            let newCommand: Command = {command: cmd.command, options: objToStrMap(obj)};
+            cmd.options.forEach((value, key) => {
+                newCommand.options.set(key, value);
+            });
+            return newCommand;
+        } catch(err) {
+            throw new Error(`invalid config file ${filePath}`);
+        }
     }
     return cmd;
 }
