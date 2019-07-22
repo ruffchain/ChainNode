@@ -44,8 +44,9 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   if (retFactor.err) {
     return retFactor.err;
   }
-  console.log('Yang-- factor:', retFactor.value.toString());
+
   let F = new BigNumber(retFactor.value);
+  context.logger.info('Yang-- factor:', F);
 
   // get S
   let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
@@ -54,8 +55,8 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   let retSupply = await kvSupply.kv!.get(tokenIdUpperCase);
   if (retSupply.err) { return retSupply.err; }
 
-  console.log('Yang-- supply:', retSupply.value.toString());
   let S = new BigNumber(retSupply.value);
+  context.logger.info('Yang-- supply:', S);
 
   // get R
   let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
@@ -64,8 +65,8 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   let retReserve = await kvReserve.kv!.get(tokenIdUpperCase);
   if (retReserve.err) { return retReserve.err; }
 
-  console.log('Yang-- reserve:', retReserve.value.toString());
   let R = new BigNumber(retReserve.value);
+  context.logger.info('Yang-- reserve:', R);
 
   // get nonliquidity
   let kvNonliquidity = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
@@ -75,26 +76,30 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   if (retNonliquidity.err) { return retNonliquidity.err; }
 
   let N = new BigNumber(retNonliquidity.value);
-  console.log('N:', N.toNumber());
+  context.logger.info('N:', N);
 
   // do computation
   let e = new BigNumber(context.value);
   let out: BigNumber;
 
-  out = e.dividedBy(R);
-  out = out.plus(new BigNumber(1.0));
-  let temp1 = out.toNumber();
-  console.log('temp1:', temp1);
-  console.log('F:', F.toNumber());
-  console.log('math.pow:', Math.pow(temp1, F.toNumber()));
+  // If F=1, not use the formula
+  if (F.eq(1)) {
+    out = e;
+  } else {
+    out = e.dividedBy(R);
+    out = out.plus(new BigNumber(1.0));
 
-  out = new BigNumber(Math.pow(temp1, F.toNumber()));
+    let temp1 = out.toNumber();
+    context.logger.info('temp1:', temp1);
+    context.logger.info('F:', F.toNumber());
+    context.logger.info('math.pow:', Math.pow(temp1, F.toNumber()));
+    out = new BigNumber(Math.pow(temp1, F.toNumber()));
+    out = out.minus(new BigNumber(1));
+    out = out.multipliedBy(S);
+  }
 
-  out = out.minus(new BigNumber(1));
-  out = out.multipliedBy(S);
-
-  console.log('Yang-- supply plus:', out.toString());
-  console.log('Yang-- reserve plus:', e.toString());
+  context.logger.info('Yang-- supply plus:', out.toString());
+  context.logger.info('Yang-- reserve plus:', e.toString());
 
   // Update system R,S; Update User account
   R = R.plus(e);
@@ -102,43 +107,42 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
 
   // Yang Jun 2019-3-15, Nonliquiidty is not zero, S > N
   if ((!N.isZero()) && S.gt(N)) {
-    console.log('N is abnormal:', N.toNumber());
+    context.logger.error('N is abnormal:', N.toNumber());
     return ErrorCode.BANCOR_TOTAL_SUPPLY_LIMIT;
   }
 
   let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
   if (kvRet.err) {
-    console.log('Yang-- update reserve failed')
+    context.logger.error('Yang-- update reserve failed')
     return kvRet.err;
   }
 
   kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
   if (kvRet.err) {
-    console.log('Yang-- update supply failed')
+    context.logger.error('Yang-- update supply failed')
     return kvRet.err;
   }
 
   // Update User account
   let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
   if (kvToken.err) {
-    console.log('Yang-- update user account failed')
+    context.logger.error('Yang-- update user account failed')
     return kvToken.err;
   }
 
   // If it's LockBancor
   let testrtn = await bLockBancorToken(kvToken.kv!);
   if (testrtn === false) {
-    console.log('not a lockBancorToken');
+    context.logger.error('not a lockBancorToken');
     return ErrorCode.RESULT_DB_TABLE_GET_FAILED;
   }
 
   let fromTotal = await fetchLockBancorTokenBalance(kvToken.kv!, context.caller);
   let retToken = await kvToken.kv!.hset(context.caller, '0', fromTotal.plus(out));
   if (retToken.err) {
-    console.log('set token back failed')
+    context.logger.error('set token back failed')
     return retToken.err;
   }
-
 
   return ErrorCode.RESULT_OK;
 }
