@@ -1,6 +1,6 @@
 import BigNumber from 'bignumber.js';
 import { IReadableKeyValue, ErrorCode } from '../../../../src/core';
-import { IfConfigGlobal } from '../handler';
+import { ChainGlobalOptions } from '../../../../src/core/chain'
 import * as fs from 'fs';
 
 export const SYS_MORTGAGE_PRECISION = 0;
@@ -146,7 +146,31 @@ export async function getTokenBalance(balanceKv: IReadableKeyValue, address: str
   return retInfo.err === ErrorCode.RESULT_OK ? retInfo.value : new BigNumber(0);
 }
 
-export let configObj: IfConfigGlobal;
+export interface IfConfigGlobal {
+    handler: string;
+    type: {
+        consensus: string;
+        features: any[]
+    };
+
+    global: {
+        minCreateor: number;
+        maxCreateor: number;
+        reSelectionBlocks: number;
+        blockInterval: number;
+        timeOffsetToLastBlock: number;
+        timeBan: number;
+        unbanBlocks: number;
+        dposVoteMaxProducers: number;
+        maxBlockIntervalOffset: number;
+        depositAmount: number;
+        depositPeriod: number;
+        mortgagePeriod: number;
+        heightIntervalForUserCode: number;
+    };
+}
+
+let configObj: IfConfigGlobal | any = { global: {} };
 
 export function readConfigFile() {
   // Added by Yang Jun 2019-3-27
@@ -156,6 +180,14 @@ export function readConfigFile() {
   } catch (e) {
     throw new Error('handler.ts read ./config.json')
   }
+}
+
+export function getConfigObj(): IfConfigGlobal {
+  return configObj;
+}
+
+export function setGlobalObjConfig(globalObj: any) {
+  Object.assign(configObj.global, globalObj);
 }
 
 export function bCheckBancorTokenFactor(factor: string): boolean {

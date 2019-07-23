@@ -1,7 +1,8 @@
 import { ErrorCode, DposTransactionContext, Chain, BigNumber, isValidAddress } from "../../../../../src/core";
-import { bCheckTokenid, IfBancorTokenItem, isANumber, strAmountPrecision, BANCOR_TOKEN_PRECISION, configObj, bCheckBancorTokenFactor } from "../scoop";
+import { bCheckTokenid, IfBancorTokenItem, isANumber, strAmountPrecision, BANCOR_TOKEN_PRECISION, bCheckBancorTokenFactor, getConfigObj, IfConfigGlobal } from "../scoop";
 
 export async function funcCreateLockBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
+    const configObj: IfConfigGlobal = getConfigObj();
     // context.cost(context.fee);
     context.cost(context.fee);
 
@@ -77,9 +78,9 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
                 return hret.err;
             }
 
-            // 
+            //
             let strLockAmount: string = strAmountPrecision(item.lock_amount, BANCOR_TOKEN_PRECISION);
-            // 
+            //
             let bnLockAmount = new BigNumber(strLockAmount);
             console.log('bnLockAmoutn: ', bnLockAmount);
 

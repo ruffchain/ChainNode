@@ -1,10 +1,11 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
+import { ChainGlobalOptions } from '../../../src/core/chain'
 import { createScript } from 'ruff-vm';
 
 import {
     SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
     bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, bCheckMethodName, SYS_MORTGAGE_PRECISION, IfRegisterOption,
-    bCheckRegisterOption, IfBancorTokenItem, isANumber, configObj, readConfigFile
+    bCheckRegisterOption, IfBancorTokenItem, isANumber, setGlobalObjConfig, getConfigObj, IfConfigGlobal
 } from './modules/scoop';
 import { funcCreateToken } from './modules/token/create';
 import { funcTransferLockBancorTokenTo } from './modules/lockbancor/transferlockbancortokento';
@@ -27,36 +28,23 @@ import { funcGetCandidateInfo } from './modules/vote/candidate';
 import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
 import { funcGetLockBancorTokenBalances } from './modules/lockbancor/balances';
 
-export interface IfConfigGlobal {
-    handler: string;
-    type: {
-        consensus: string;
-        features: any[]
-    };
+export function registerHandler(handler: ValueHandler, globalOption: ChainGlobalOptions) {
+    setGlobalObjConfig(globalOption);
+    let configObj: IfConfigGlobal = getConfigObj();
 
-    global: {
-        minCreateor: number;
-        maxCreateor: number;
-        reSelectionBlocks: number;
-        blockInterval: number;
-        timeOffsetToLastBlock: number;
-        timeBan: number;
-        unbanBlocks: number;
-        dposVoteMaxProducers: number;
-        maxBlockIntervalOffset: number;
-        depositAmount: number;
-        depositPeriod: number;
-        mortgagePeriod: number;
-    };
-}
-
-readConfigFile();
-
-export function registerHandler(handler: ValueHandler) {
     handler.genesisListener = async (context: DposTransactionContext) => {
-        // await context.storage.createKeyValue('bid');
-        // await context.storage.createKeyValue('bidInfo');
-        await context.storage.createKeyValue('userCode');
+        let ret = await context.storage.createKeyValue('userCode');
+        if (ret.err != ErrorCode.RESULT_OK) {
+            return ret.err;
+        }
+        let userCodeRet =  await context.storage.getReadWritableKeyValue('userCode');
+        if (userCodeRet.err != ErrorCode.RESULT_OK) {
+            return userCodeRet.err;
+        }
+        ret = await userCodeRet.kv!.set('lastHeight', -1);
+        if (ret.err != ErrorCode.RESULT_OK) {
+            return ret.err;
+        }
         return ErrorCode.RESULT_OK;
     };
 
@@ -105,28 +93,6 @@ export function registerHandler(handler: ValueHandler) {
     // feed back is never an object
     handler.addViewMethod('getBalances', funcGetBalances);
 
-    // Added by Yang Jun 2019-2-21
-    // Added by Yang Jun 2019-2-20
-    /**
-     * context's storage is storage_sqlite/storage.ts SqliteReadWritableDatabase
-     */
-    // token
-
-    /////////////////////
-    // bancor token
-    /////////////////////
-    // handler.addTX('createBancorToken', funcCreateBancorToken);
-    // Added by Yang Jun 2019-2-21
-    // handler.addTX('transferBancorTokenTo', funcTransferBancorTokenTo);
-    // Added by Yang Jun 2019-2-21
-    // handler.addTX('buyBancorToken', funcBuyBancorToken);
-    // Added by Yang Jun 2019-2-21
-    // handler.addTX('sellBancorToken', funcSellBancorToken);
-    // Added by Yang Jun 2019-2-21
-    //handler.addViewMethod('getBancorTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
-    //     let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
-    //     return await getTokenBalance(balancekv.kv!, params.address);
-    // });
     handler.addViewMethod('getBancorTokenFactor', async (context: DposViewContext, params: any): Promise<BigNumber> => {
 
         if (!params.tokenid) {
@@ -298,132 +264,4 @@ export function registerHandler(handler: ValueHandler) {
 
         return await context.unregister(context.caller);
     });
-
-    // 拍卖
-    // handler.addTX('publish', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-    //     context.cost(context.fee);
-    //     // params.name: 发布的name, name不能相同
-    //     // context.value: 最低出价, BigNumber
-    //     // params.duation: 持续时间，单位是block
-
-    //     // 暂时没有对发布方有value的要求，可以加上发布方要扣除一定数量币的功能
-    //     if (isNullOrUndefined(params.name) || !params.duation || params.duation <= 0 || !(params.lowest instanceof BigNumber)) {
-    //         return ErrorCode.RESULT_INVALID_PARAM;
-    //     }
-
-    //     let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-    //     let ret = await bidKV.get(params.name);
-    //     if (ret.err === ErrorCode.RESULT_OK) {
-    //         return ErrorCode.RESULT_ALREADY_EXIST;
-    //     }
-    //     let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
-    //     await bidInfoKV.hset('biding', params.name, { publisher: context.caller, finish: context.height + params.duation });
-    //     await bidKV.set(params.name, { caller: context.caller, value: context.value });
-    //     await bidKV.rpush((context.height + params.duation).toString(), params.name);
-    //     return ErrorCode.RESULT_OK;
-    // });
-
-    // 出价
-    // handler.addTX('bid', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
-    //     context.cost(context.fee);
-    //     // params.name: 发布的name, name不能相同
-    //     // context.value: 最低出价, BigNumber
-    //     let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-    //     let ret = await bidKV.get(params.name);
-    //     if (ret.err !== ErrorCode.RESULT_OK) {
-    //         return ret.err;
-    //     }
-    //     // 如果本次出价不高于上次，则无效
-    //     if ((ret.value!.value as BigNumber).gte(new BigNumber(context.value))) {
-    //         return ErrorCode.RESULT_NOT_ENOUGH;
-    //     }
-    //     // 把上一次的出价还给出价者
-    //     await context.transferTo(ret.value!.caller, ret.value!.value);
-    //     // 更新新的出价
-    //     await bidKV.set(params.name, { caller: context.caller, value: context.value });
-    //     return ErrorCode.RESULT_OK;
-    // });
-
-    // 在块后事件中处理拍卖结果
-    // handler.addPostBlockListener(async (height: number): Promise<boolean> => true,
-    //     async (context: DposEventContext): Promise<ErrorCode> => {
-    //         context.logger.info(`on BlockHeight ${context.height}`);
-    //         let bidKV = (await context.storage.getReadWritableKeyValue('bid')).kv!;
-    //         let bidInfoKV = (await context.storage.getReadWritableKeyValue('bidInfo')).kv!;
-    //         do {
-    //             let ret = await bidKV.rpop(context.height.toString());
-    //             if (ret.err === ErrorCode.RESULT_OK) {
-    //                 const name = ret.value;
-    //                 let info = (await bidInfoKV.hget('biding', name)).value!;
-    //                 const lastBid = (await bidKV.get(name)).value;
-    //                 if (lastBid.caller !== info.publisher) {    //  否则流标
-    //                     await context.transferTo(info.publisher, lastBid.value);
-    //                     // 存储本次拍卖的结果
-    //                     info.owner = lastBid.caller;
-    //                     info.value = lastBid.value;
-    //                 }
-    //                 await bidInfoKV.hdel('biding', name);
-    //                 await bidInfoKV.hset('finish', name, info);
-    //                 // 清理掉不需要的数据
-    //                 await bidKV.hclean(name);
-    //             } else {
-    //                 break;
-    //             }
-    //         } while (true);
-    //         return ErrorCode.RESULT_OK;
-    //     });
-
-    // 查询指定name的拍卖信息
-    // handler.addViewMethod('GetBidInfo', async (context: DposViewContext, params: any): Promise<any> => {
-    //     let value: any = {};
-    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-    //     let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
-    //     let bid = await bidKV.get(params.name);
-    //     let bidInfo = await bidInfoKV.hget(bid.err === ErrorCode.RESULT_NOT_FOUND ? 'finish' : 'biding', params.name);
-    //     if (bidInfo.err !== ErrorCode.RESULT_OK) {
-    //         return;
-    //     }
-    //     value = bidInfo.value!;
-    //     value.name = params.name;
-    //     if (!bidInfo.value!.owner) {
-    //         value.bidder = bid.value!.caller;
-    //         value.bidvalue = bid.value!.value;
-    //     }
-
-    //     return value;
-    // });
-
-    // 查询所有正在拍卖的name的信息
-    // handler.addViewMethod('GetAllBiding', async (context: DposViewContext, params: any): Promise<any[]> => {
-    //     let ret: any[] = [];
-    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-    //     let bidKV = (await context.storage.getReadableKeyValue('bid')).kv!;
-    //     let rets = await bidInfoKV.hgetall('biding');
-    //     if (rets.err === ErrorCode.RESULT_OK) {
-    //         for (const { key, value } of rets.value!) {
-    //             let i = value;
-    //             i.name = key;
-    //             let bid = await bidKV.get(key);
-    //             i.bidder = bid.value!.caller;
-    //             i.bidvalue = bid.value!.value;
-    //             ret.push(i);
-    //         }
-    //     }
-    //     return ret;
-    // });
-
-    // 查询所有拍卖完成name的信息
-    // handler.addViewMethod('GetAllFinished', async (context: DposViewContext, params: any): Promise<any[]> => {
-    //     let ret: any[] = [];
-    //     let bidInfoKV = (await context.storage.getReadableKeyValue('bidInfo')).kv!;
-    //     let rets = await bidInfoKV.hgetall('finish');
-    //     if (rets.err === ErrorCode.RESULT_OK) {
-    //         for (const { key, value } of rets.value!) {
-    //             let i = value;
-    //             i.name = key;
-    //             ret.push(i);
-    //         }
-    //     }
-    //     return ret;
-    // });
 }

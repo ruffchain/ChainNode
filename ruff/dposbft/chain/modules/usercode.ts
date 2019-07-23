@@ -1,5 +1,5 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../../src/host';
-import { bCheckDBName, bCheckTokenPrecision, bCheckMethodName, strAmountPrecision, SYS_TOKEN_PRECISION } from "./scoop";
+import { bCheckDBName, bCheckTokenPrecision, bCheckMethodName, strAmountPrecision, SYS_TOKEN_PRECISION, getConfigObj, IfConfigGlobal} from "./scoop";
 import { isBuffer, isString } from 'util';
 
 import { createScript, resolveHelper } from 'ruff-vm';
@@ -34,6 +34,9 @@ function isValidUserCode(code: string | Buffer) : Boolean {
 }
 
 export async function setUserCode(context: DposTransactionContext, params: any): Promise<ErrorCode> {
+    const configObj: IfConfigGlobal = getConfigObj();
+    const HeightIntervalForUserCode = configObj.global.heightIntervalForUserCode || 100;
+
     if (!isValidUserCode(params.userCode)) {
         context.cost(context.fee);
         return ErrorCode.RESULT_INVALID_PARAM;
@@ -43,21 +46,37 @@ export async function setUserCode(context: DposTransactionContext, params: any):
     if (kvRet.err) {
         return kvRet.err;
     }
-    let minFee = getFeeCostForCode(params.userCode);
-
-    if (context.fee.isLessThan(minFee)) {
-        context.cost(context.fee);
-        return ErrorCode.RESULT_FEE_TOO_SMALL;
+    let info = await kvRet.kv!.get('lastHeight');
+    if (info.err) {
+        return info.err;
     }
+    const lastHeight = info.value;
+    if (lastHeight === -1 ||
+        (context.height > lastHeight &&
+        Math.floor((context.height / HeightIntervalForUserCode)) > Math.floor((lastHeight / HeightIntervalForUserCode)))) {
+        let minFee = getFeeCostForCode(params.userCode);
 
-    kvRet = await kvRet.kv!.set(context.caller, { code: params.userCode });
-    if (kvRet.err) {
-        context.cost(USER_CODE_MIN_COST);
-        return kvRet.err;
+        if (context.fee.isLessThan(minFee)) {
+            context.cost(context.fee);
+            return ErrorCode.RESULT_FEE_TOO_SMALL;
+        }
+
+        let codeRet  = await kvRet.kv!.set(context.caller, { code: params.userCode });
+        if (codeRet.err) {
+            context.cost(USER_CODE_MIN_COST);
+            return codeRet.err;
+        }
+        let heightRet = await kvRet.kv!.set('lastHeight', context.height);
+
+        if (heightRet.err) {
+            return heightRet.err;
+        }
+        context.cost(minFee);
+
+        return ErrorCode.RESULT_OK;
+    } else {
+        return ErrorCode.RESULT_INVALID_STATE;
     }
-    context.cost(minFee);
-
-    return ErrorCode.RESULT_OK;
 }
 
 export async function getUserCode(context: DposViewContext, params: any): Promise<Buffer | undefined> {

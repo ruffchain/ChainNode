@@ -5,14 +5,14 @@ import { ErrorCode } from './error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from './lib/logger_util';
 import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner, NetworkCreator, BlockExecutorExternParamCreator } from './chain';
 
-export type ChainCreatorConfig = {handler: BaseHandler, 
-    typeOptions: ChainTypeOptions, 
+export type ChainCreatorConfig = {handler: BaseHandler,
+    typeOptions: ChainTypeOptions,
     globalOptions: ChainGlobalOptions};
 
 type ChainTypeInstance = {
     newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): BaseHandler;
     newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): Chain;
-    newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): Miner; 
+    newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): Miner;
 };
 
 export class ChainCreator {
@@ -23,7 +23,7 @@ export class ChainCreator {
     constructor(options: LoggerOptions & {networkCreator: NetworkCreator}) {
         this.m_logger = initLogger(options);
         this.m_networkCreator = options.networkCreator;
-        
+
     }
 
     public get networkCreator(): NetworkCreator {
@@ -100,21 +100,24 @@ export class ChainCreator {
         let handlerPath = constConfig['handler'];
         if (!path.isAbsolute(handlerPath)) {
             handlerPath = path.join(dataDir, handlerPath);
-        } 
+        }
 
         let typeOptions = constConfig['type'];
         if (!typeOptions || !typeOptions.consensus || !typeOptions.features) {
             this.m_logger.error(`invalid type from package ${dataDir}`);
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        let handler = this._loadHandler(handlerPath, typeOptions);
-        if (!handler) {
-            return {err: ErrorCode.RESULT_EXCEPTION};
-        }
+
         let globalOptions = constConfig['global'];
         if (!globalOptions) {
             globalOptions = {};
         }
+
+        let handler = this._loadHandler(handlerPath, typeOptions, globalOptions);
+        if (!handler) {
+            return {err: ErrorCode.RESULT_EXCEPTION};
+        }
+
         return {
             err: ErrorCode.RESULT_OK,
             config: {
@@ -124,8 +127,8 @@ export class ChainCreator {
             }
         };
     }
-    
-    protected _loadHandler(handlerPath: string, typeOptions: ChainTypeOptions): BaseHandler|undefined {
+
+    protected _loadHandler(handlerPath: string, typeOptions: ChainTypeOptions, globalOptions: ChainGlobalOptions): BaseHandler|undefined {
         let instance = this._getTypeInstance(typeOptions);
         if (!instance) {
             return undefined;
@@ -143,9 +146,9 @@ export class ChainCreator {
                 }
                 handlerPath = pathsplitter.join(':');
             }
-            
+
             let handlerMod = require(handlerPath);
-            handlerMod.registerHandler(handler);
+            handlerMod.registerHandler(handler, globalOptions);
         } catch (e) {
             console.error(`handler error: ${e.message}`);
             return undefined;
@@ -191,7 +194,7 @@ export class ChainCreator {
             if (err) {
                 return {err};
             }
-        } 
+        }
         return {err: ErrorCode.RESULT_OK, chain};
     }
 }
