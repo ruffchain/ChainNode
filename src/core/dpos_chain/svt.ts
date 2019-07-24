@@ -863,12 +863,13 @@ export class SVTViewContext {
     this.m_logger.info(JSON.stringify(hret.value));
 
     if (hret.value!.length === 0) {
-      let hret1 = await kvVoteLasttime.hset(from, '0', 0);
-      if (hret1.err) {
-        return { err: hret1.err, value: '' };
-      } else {
-        return { err: ErrorCode.RESULT_OK, value: '0' };
-      }
+      // let hret1 = await kvVoteLasttime.hset(from, '0', 0);
+      // if (hret1.err) {
+      //   return { err: hret1.err, value: '' };
+      // } else {
+      //   return { err: ErrorCode.RESULT_OK, value: '0' };
+      // }
+      return { err: ErrorCode.RESULT_NOT_FOUND, value: '0' };
     }
     return { err: ErrorCode.RESULT_OK, value: hret.value![0].field };
 
@@ -879,8 +880,12 @@ export class SVTViewContext {
 
     let hret = await kvVoteVote.hgetallbyname(address);
     if (hret.err) {
-      console.log('getTicket wrong getallbyname');
+      this.m_logger.error('getTicket wrong getallbyname');
       return { err: hret.err, value: {} };
+    }
+    if (hret.value!.length === 0) {
+      this.m_logger.error('Not voted yet');
+      return { err: ErrorCode.RESULT_NOT_FOUND, value: {} };
     }
 
     // get last vote time
