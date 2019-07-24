@@ -59,6 +59,10 @@ function numNumbers(str: string) {
 }
 
 export function bCheckTokenid(tokenid: string) {
+  if (typeof tokenid != 'string') {
+    return false;
+  }
+
   let str = tokenid.toUpperCase();
 
   // 3~12位
@@ -67,6 +71,10 @@ export function bCheckTokenid(tokenid: string) {
   }
 
   if (str === SYS_TOKEN || str === SVT_TOKEN) {
+    return false;
+  }
+
+  if (containInvalidWord(str)) {
     return false;
   }
   // 1st not number,
@@ -102,12 +110,30 @@ const DB_REGPAT = /^[A-Z]{1}[0-9A-Z]{2,11}$/g
 const DB_NAME_MIN_LEN = 3;
 const DB_NAME_MAX_LEN = 12;
 
-export function bCheckDBName(dbName: string) {
-  let str = dbName.toUpperCase();
+function containInvalidWord(name: string) {
+  if (name.includes('COMMIT') ||
+      name.includes('BEGIN') ||
+      name.includes('ROLLBACK')) {
+    return true;
+  }
+  return false;
+}
 
-  if (!dbName) {
+export function bCheckDBName(dbName: string) {
+  if (typeof dbName != 'string') {
     return false;
   }
+
+  let str = dbName.toUpperCase();
+
+  if (!str) {
+    return false;
+  }
+
+  if (containInvalidWord(str)) {
+    return false;
+  }
+
   // 3~12位
   if (str.length < DB_NAME_MIN_LEN || str.length > DB_NAME_MAX_LEN) {
     return false;
