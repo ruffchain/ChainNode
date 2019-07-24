@@ -13,7 +13,7 @@ import { isNumber } from 'util';
 
 const assert = require('assert');
 
-// Yang Jun, global 
+// Yang Jun, global
 export let M_WAGE = 0;
 
 export class ValueBlockExecutor extends BlockExecutor {
@@ -140,6 +140,7 @@ export class ValueTransactionExecutor extends TransactionExecutor {
         assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
         if (!isNumber(receipt.returnCode)) {
             this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=${receipt.returnCode},address=${this.m_tx.address}, hash=${this.m_tx.hash}`);
+            await work.value!.rollback();
             return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
         if (receipt.returnCode) {

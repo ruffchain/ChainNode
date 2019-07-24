@@ -117,6 +117,7 @@ export class TransactionExecutor extends BaseExecutor {
         receipt.returnCode = await this._execute(context, this.m_tx.input);
         assert(isNumber(receipt.returnCode), `invalid handler return code ${receipt.returnCode}`);
         if (!isNumber(receipt.returnCode)) {
+            await work.value!.rollback();
             this.m_logger.error(`methodexecutor failed for invalid handler return code type, return=`, receipt.returnCode);
             return {err: ErrorCode.RESULT_INVALID_PARAM};
         }
