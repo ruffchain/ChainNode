@@ -28,6 +28,10 @@ export async function run(argv: string[]) {
         initUnhandledRejection(initLogger({
             loggerOptions: {console: true, file: {root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log'}}
         }));
+        if (command.options.has('vmLogLevel')) {
+            process.env['RUFFVM_LOG_LEVEL'] = command.options.get('vmLogLevel').toUpperCase();
+            process.env['RUFFVM_LOG_FILE'] =  path.join(process.cwd(), command.options.get('dataDir'), 'vm.log');
+        }
     }
     let exit: boolean = false;
     if (command.command === 'peer') {
