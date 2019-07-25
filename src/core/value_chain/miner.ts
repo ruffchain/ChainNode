@@ -8,10 +8,11 @@ import {ValueTransaction} from './transaction';
 import {ValuePendingTransactions} from './pending';
 const assert = require('assert');
 
-export type ValueMinerInstanceOptions = {feelimit: BigNumber, coinbase?: string} & MinerInstanceOptions;
+export type ValueMinerInstanceOptions = {feelimit: BigNumber, txlimit: number, coinbase?: string} & MinerInstanceOptions;
 
 export class ValueMiner extends Miner {
     protected m_feelimit: BigNumber = new BigNumber(0);
+    protected m_txlimit: number = 0;
     constructor(options: ChainContructOptions) {
         super(options);
     }
@@ -35,7 +36,7 @@ export class ValueMiner extends Miner {
     }
 
     public parseInstanceOptions(options: {
-        parsed: any, 
+        parsed: any,
         origin: Map<string, any>
     }): {err: ErrorCode, value?: any} {
         let {err, value} = super.parseInstanceOptions(options);
@@ -48,6 +49,9 @@ export class ValueMiner extends Miner {
             return {err: ErrorCode.RESULT_PARSE_ERROR};
         }
         value.feelimit = new BigNumber(options.origin.get('feelimit'));
+        if (options.origin.has('txlimit')) {
+            value.txlimit = parseInt(options.origin.get('txlimit'));
+        }
         return {err: ErrorCode.RESULT_OK, value};
     }
 
@@ -56,6 +60,7 @@ export class ValueMiner extends Miner {
             this.m_coinbase = options.coinbase;
         }
         this.m_feelimit = options.feelimit;
+        this.m_txlimit = options.txlimit || 100;
         return await super.initialize(options);
     }
 
@@ -65,7 +70,7 @@ export class ValueMiner extends Miner {
     }
 
     protected _collectTransactions(block: Block) {
-        let txs = (this.chain.pending as ValuePendingTransactions).popTransactionWithFee(this.m_feelimit);
+        let txs = (this.chain.pending as ValuePendingTransactions).popTransactionWithFee(this.m_feelimit, this.m_txlimit);
         for (const tx of txs) {
             block.content.addTransaction(tx);
         }

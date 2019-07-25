@@ -113,13 +113,13 @@ export class ValuePendingTransactions extends PendingTransactions {
         this.m_transactions.splice(pos, 0, txTime);
     }
 
-    public popTransactionWithFee(maxFee: BigNumber): ValueTransaction[] {
+    public popTransactionWithFee(maxFee: BigNumber, txLimit: number): ValueTransaction[] {
         let txs: ValueTransaction[] = [];
         let total: BigNumber = new BigNumber(0);
         for (let pos = 0; pos < this.m_transactions.length; pos++) {
             total = total.plus((this.m_transactions[pos].tx as ValueTransaction).fee);
             txs.push(this.m_transactions[pos].tx as ValueTransaction);
-            if (total.gt(maxFee)) {
+            if (total.gt(maxFee) || txs.length >= txLimit) {
                 break;
             }
         }
