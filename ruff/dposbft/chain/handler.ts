@@ -1,6 +1,7 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
 import { ChainGlobalOptions } from '../../../src/core/chain'
 import { createScript } from 'ruff-vm';
+import * as Joi from '@hapi/joi';
 
 import {
     SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
@@ -27,6 +28,10 @@ import { funcTransferTo } from './modules/sys/transfer';
 import { funcGetCandidateInfo } from './modules/vote/candidate';
 import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
 import { funcGetLockBancorTokenBalances } from './modules/lockbancor/balances';
+
+const transferToSchema = Joi.object().keys({
+    to: Joi.string().min(26).max(34).required(),
+});
 
 export function registerHandler(handler: ValueHandler, globalOption: ChainGlobalOptions) {
     setGlobalObjConfig(globalOption);
@@ -81,7 +86,14 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     // sys about
     /////////////
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
-    handler.addTX('transferTo', funcTransferTo);
+    handler.addTX('transferTo', funcTransferTo, (tx) => {
+        let error = transferToSchema.validate(tx.input).error;
+        if (error) {
+            return ErrorCode.RESULT_INVALID_PARAM;
+        } else {
+            return ErrorCode.RESULT_OK;
+        }
+    });
 
     handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         return await context.getBalance(params.address);

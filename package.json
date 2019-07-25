@@ -24,6 +24,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@hapi/joi": "^15.1.0",
+    "@types/hapi__joi": "^15.0.3",
     "bdt-p2p": "^0.1.238",
     "bignumber.js": "8.0.1",
     "bn.js": "^4.11.8",
