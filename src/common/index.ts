@@ -6,6 +6,7 @@ export * from './lib/writer';
 export * from './serializable';
 export * from './address';
 export * from './lib/logger_util';
+export * from './schema';
 export {BigNumber} from 'bignumber.js';
 export * from './simple_command';
 export {init as initUnhandledRejection} from './unhandled_rejection';

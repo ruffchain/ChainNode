@@ -1,8 +1,7 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
-import { ChainGlobalOptions } from '../../../src/core/chain'
+import { ChainGlobalOptions } from '../../../src/core/chain';
+import { accountSchema, transferToSchema, transferTokenSchema, createTokenSchema, genChecker } from '../../../src/common';
 import { createScript } from 'ruff-vm';
-import * as Joi from '@hapi/joi';
-
 import {
     SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
     bCheckTokenPrecision, MAX_QUERY_NUM, bCheckDBName, bCheckMethodName, SYS_MORTGAGE_PRECISION, IfRegisterOption,
@@ -29,9 +28,6 @@ import { funcGetCandidateInfo } from './modules/vote/candidate';
 import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
 import { funcGetLockBancorTokenBalances } from './modules/lockbancor/balances';
 
-const transferToSchema = Joi.object().keys({
-    to: Joi.string().min(26).max(34).required(),
-});
 
 export function registerHandler(handler: ValueHandler, globalOption: ChainGlobalOptions) {
     setGlobalObjConfig(globalOption);
@@ -71,9 +67,9 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     ////////////////
     // token about
     ////////////////
-    handler.addTX('createToken', funcCreateToken);
+    handler.addTX('createToken', funcCreateToken, genChecker(createTokenSchema));
 
-    handler.addTX('transferTokenTo', funcTransferTokenTo);
+    handler.addTX('transferTokenTo', funcTransferTokenTo, genChecker(transferTokenSchema));
 
     handler.addViewMethod('getTokenBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
@@ -86,14 +82,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     // sys about
     /////////////
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
-    handler.addTX('transferTo', funcTransferTo, (tx) => {
-        let error = transferToSchema.validate(tx.input).error;
-        if (error) {
-            return ErrorCode.RESULT_INVALID_PARAM;
-        } else {
-            return ErrorCode.RESULT_OK;
-        }
-    });
+    handler.addTX('transferTo', funcTransferTo, genChecker(transferToSchema));
 
     handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {
         return await context.getBalance(params.address);
