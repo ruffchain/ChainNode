@@ -1,6 +1,11 @@
 import { ErrorCode, BigNumber, DposViewContext, DposTransactionContext, ValueHandler, IReadableKeyValue, MapToObject, Chain, isValidAddress } from '../../../src/host';
 import { ChainGlobalOptions } from '../../../src/core/chain';
-import { accountSchema, transferToSchema, transferTokenSchema, createTokenSchema, genChecker } from '../../../src/common';
+import {
+    transferToSchema, transferTokenSchema, createTokenSchema, genChecker,
+    registerSchema, unregisterSchema, mortgageSchema, voteScheme,
+    sellTokenSchema, buyTokenSchema, transferTokenToMultiAccoutSchema,
+    createBancorTokenSchema,
+} from '../../../src/common';
 import { createScript } from 'ruff-vm';
 import {
     SYS_TOKEN_PRECISION, strAmountPrecision, bCheckTokenid, BANCOR_TOKEN_PRECISION,
@@ -128,7 +133,6 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
         if (!params.tokenid) {
             return new BigNumber(0);
         }
-
         let balancekv = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
         return await getTokenBalance(balancekv.kv!, params.tokenid.toUpperCase());
     });
@@ -139,16 +143,16 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     //////////////////////
     // lock bancor token
     //////////////////////
-    handler.addTX('createBancorToken', funcCreateLockBancorToken);
+    handler.addTX('createBancorToken', funcCreateLockBancorToken, genChecker(createBancorTokenSchema));
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferBancorTokenTo', funcTransferLockBancorTokenTo);
+    handler.addTX('transferBancorTokenTo', funcTransferLockBancorTokenTo,  genChecker(transferTokenSchema));
 
     // Added by Yang Jun 2019-5-31
-    handler.addTX('transferBancorTokenToMulti', funcTransferLockBancorTokenToMulti);
+    handler.addTX('transferBancorTokenToMulti', funcTransferLockBancorTokenToMulti, genChecker(transferTokenToMultiAccoutSchema));
 
-    handler.addTX('buyBancorToken', funcBuyLockBancorToken);
+    handler.addTX('buyBancorToken', funcBuyLockBancorToken, genChecker(buyTokenSchema));
 
-    handler.addTX('sellBancorToken', funcSellLockBancorToken);
+    handler.addTX('sellBancorToken', funcSellLockBancorToken, genChecker(sellTokenSchema));
 
     // Added by Yang Jun 2019-2-21
     handler.addViewMethod('getBancorTokenBalance', funcGetLockBancorTokenBalance);
@@ -199,7 +203,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
             return ErrorCode.RESULT_WRONG_ARG;
         }
         return await context.vote(context.caller, params);
-    });
+    }, genChecker(voteScheme));
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
@@ -215,7 +219,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
         let bnAmount = new BigNumber(strAmount);
 
         return await context.mortgage(context.caller, bnAmount);
-    });
+    }, genChecker(mortgageSchema));
 
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
@@ -230,7 +234,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
             return hret;
         }
         return context.transferTo(context.caller, bnAmount);
-    });
+    }, genChecker(mortgageSchema));
     // api_register
     handler.addTX('register', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
@@ -249,7 +253,8 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
         }
         // Check if name already exists
         return await context.register(context.caller, paramsNew as IfRegisterOption);
-    });
+    }, genChecker(registerSchema));
+
     handler.addTX('unregister', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         if (params !== context.caller) {
@@ -264,5 +269,5 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
         }
 
         return await context.unregister(context.caller);
-    });
+    }, genChecker(unregisterSchema));
 }
