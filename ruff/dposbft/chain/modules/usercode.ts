@@ -27,7 +27,7 @@ function getFeeCostForCode(code: string | Buffer) : BigNumber {
 }
 
 function isValidUserCode(code: string | Buffer) : Boolean {
-    if ((isString(code) || isBuffer(code)) && code.length < 100 * 1024) {
+    if ((isString(code) || isBuffer(code)) && code.length <= 100 * 1024) {
         return true;
     }
     return false;

@@ -4,7 +4,7 @@ import {
     transferToSchema, transferTokenSchema, createTokenSchema, genChecker,
     registerSchema, unregisterSchema, mortgageSchema, voteScheme,
     sellTokenSchema, buyTokenSchema, transferTokenToMultiAccoutSchema,
-    createBancorTokenSchema,
+    createBancorTokenSchema, userCodeSchema,
 } from '../../../src/common';
 import { createScript } from 'ruff-vm';
 import {
@@ -61,7 +61,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     //////////////////
     // smart contract
     //////////////////
-    handler.addTX('setUserCode', setUserCode);
+    handler.addTX('setUserCode', setUserCode, genChecker(userCodeSchema));
 
     handler.addViewMethod('getUserCode', getUserCode);
 

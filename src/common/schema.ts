@@ -75,6 +75,10 @@ export const voteScheme = Joi.array().min(1).max(7).items(accountSchema).require
 
 export const mortgageSchema = amountSchema;
 
+export const userCodeSchema = Joi.object().keys({
+    userCode: Joi.binary().max(100*1024).required()
+});
+
 export function genChecker(schema: BaseJoi.AnySchema): TxPendingChecker {
     return (tx: Transaction) => {
         if (schema.validate(tx.input).error) {
