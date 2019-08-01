@@ -2,10 +2,9 @@ import 'mocha';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 const assert = require('assert');
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
-import {Transaction, BlockStorage, BlockHeader, initLogger, HeaderStorage, Receipt } from '../../src/core';
-
+import * as sqlite from 'better-sqlite3';
+import {Transaction, BlockStorage, BlockHeader, initLogger, Receipt } from '../../src/core';
+import { HeaderStorage } from '../../src/core/block/header_storage';
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
     // 记录日志、抛出错误、或其他逻辑。
@@ -15,7 +14,7 @@ class TestHeaderStorage extends HeaderStorage {
     constructor(options: any) {
         super(options);
     }
-} 
+}
 
 describe('headerStorage', () => {
     let headerStorage: HeaderStorage;
@@ -26,18 +25,19 @@ describe('headerStorage', () => {
             fs.removeSync(rootDir);
             fs.ensureDirSync(rootDir);
             let dbpath = path.join(rootDir, 'database');
-            let db = await sqlite.open(dbpath, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+            let db = new sqlite(dbpath);
+            db.pragma('journal_mode = WAL');
             let blockStorage = new BlockStorage({
                 path: rootDir,
                 blockHeaderType: BlockHeader,
                 transactionType: Transaction,
-                receiptType: Receipt, 
+                receiptType: Receipt,
                 logger
             });
             headerStorage = new TestHeaderStorage({
                 blockStorage,
-                logger, 
-                blockHeaderType: BlockHeader, 
+                logger,
+                blockHeaderType: BlockHeader,
                 db});
         }
         __test().then(done);
@@ -53,12 +53,14 @@ describe('headerStorage', () => {
     it('changeBest', (done) => {
         async function __test() {
             let gh = new BlockHeader();
-            let t = 1;
+            let t = 0;
+            gh.timestamp = 0;
+            gh.updateHash();
             let err = await headerStorage.createGenesis(gh);
             assert(!err, `createGenesis error`);
             let best = 0;
             let ph = gh;
-            logger.info(`save 10 headers`);
+            console.log(`save 10 headers`);
             for (let ix = 0; ix < 10; ++ix) {
                 let h = new BlockHeader();
                 h.setPreBlock(ph);
@@ -75,9 +77,9 @@ describe('headerStorage', () => {
             let hr = await headerStorage.getHeader(best - 3);
             assert(!hr.err, `get ${best - 3} header err`);
             let fork = hr.header!;
-            ph = fork;  
+            ph = fork;
             let fh = [];
-            logger.info(`fork from ${best - 3}`);
+            console.log(`fork from ${best - 3}`);
             for (let ix = 0; ix < 4; ++ix) {
                 let h = new BlockHeader();
                 h.setPreBlock(ph);
@@ -90,14 +92,14 @@ describe('headerStorage', () => {
             }
             let nh = new BlockHeader();
             nh.setPreBlock(ph);
-            nh.setPreBlock(ph);
             nh.timestamp = ++t;
             nh.updateHash();
             err = await headerStorage.saveHeader(nh);
             assert(!err, `saveHeader err`);
             err = await headerStorage.changeBest(nh);
             assert(!err, `changeBest err`);
-            fh.push(nh);
+
+            await headerStorage.commitConsistency();
             for (let h of fh) {
                 const _hr = await headerStorage.getHeader(h.number);
                 assert(!_hr.err, `getHeader err`);

@@ -1,8 +1,8 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 const assert = require('assert');
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
+
+import * as sqlite from 'better-sqlite3';
 import {Transaction, BlockStorage, BlockHeader, HeaderStorage, Receipt } from '../core';
 import {initUnhandledRejection, parseCommand, initLogger} from '../common';
 import {DposBftBlockHeader} from '../core/dpos_bft_chain';
@@ -103,7 +103,7 @@ if (!command) {
 
     if (height && dataDir) {
         let dbpath = path.join(dataDir, 'database');
-        let db = await sqlite.open(dbpath, { mode: sqlite3.OPEN_CREATE | sqlite3.OPEN_READWRITE });
+        let db = new sqlite(dbpath);
 
         let headerStorage = new HeaderStorage({
                     logger,
@@ -117,7 +117,7 @@ if (!command) {
 
         let hr = await headerStorage.getHeader(height);
         if (!hr.err) {
-            console.log(hr.header!.stringify());
+            console.log(hr.header!.stringify() as DposBftBlockHeader);
             dumpBftSign(hr.header! as DposBftBlockHeader);
         }
     }

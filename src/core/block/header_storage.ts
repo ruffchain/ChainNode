@@ -1,4 +1,4 @@
-import * as sqlite from 'sqlite';
+import * as sqlite from 'better-sqlite3';
 import { BlockHeader } from './block';
 import { BufferWriter } from '../lib/writer';
 import { BufferReader } from '../lib/reader';
@@ -89,8 +89,8 @@ export class HeaderStorage implements IHeaderStorage {
     public async init(): Promise<ErrorCode> {
         if (!this.m_readonly) {
             try {
-                let stmt = await this.m_db.run(initHeaderSql);
-                stmt = await this.m_db.run(initBestSql);
+                this.m_db.prepare(initHeaderSql).run();
+                this.m_db.prepare(initBestSql).run();
             } catch (e) {
                 this.m_logger.error(e);
                 return ErrorCode.RESULT_EXCEPTION;
@@ -163,7 +163,7 @@ export class HeaderStorage implements IHeaderStorage {
                 return { err: ErrorCode.RESULT_OK, header: headerEntry.blockheader, verified: headerEntry.verified };
             }
             try {
-                let result = await this.m_db.get(getByHeightSql, { $height: arg });
+                let result = this.m_db.prepare(getByHeightSql).get({ height: arg });
                 if (!result) {
                     return { err: ErrorCode.RESULT_NOT_FOUND };
                 }
@@ -176,7 +176,7 @@ export class HeaderStorage implements IHeaderStorage {
         } else if (typeof arg === 'string') {
             if (arg === 'latest') {
                 try {
-                    let result = await this.m_db.get(getTipSql);
+                    let result = this.m_db.prepare(getTipSql).get();
                     if (!result) {
                         return { err: ErrorCode.RESULT_NOT_FOUND };
                     }
@@ -194,7 +194,7 @@ export class HeaderStorage implements IHeaderStorage {
                 }
 
                 try {
-                    let result = await this.m_db.get(getByHashSql, { $hash: arg });
+                    let result = this.m_db.prepare(getByHashSql).get({ hash: arg });
                     if (!result) {
                         return { err: ErrorCode.RESULT_NOT_FOUND };
                     }
@@ -231,7 +231,7 @@ export class HeaderStorage implements IHeaderStorage {
         // Yang Jun 2019-7-8
         // let result = await this.m_db.get(getHeightOnBestSql, { $hash: hash });
         // if (!result || result.height === undefined) {
-        let result = await this.m_db.get('select raw from headers where hash=$hash', { $hash: hash });
+        let result = this.m_db.prepare('select raw from headers where hash=$hash').get({ hash: hash });
         if (!result || !result.raw) {
             return { err: ErrorCode.RESULT_NOT_FOUND };
         }
@@ -245,7 +245,7 @@ export class HeaderStorage implements IHeaderStorage {
         }
         // Yang Jun 2019-7-8
         // return { err: ErrorCode.RESULT_OK, height: result.height, header };
-        result = await this.m_db.get('select hash from best where height=$height', { $height: header.number });
+        result = this.m_db.prepare('select hash from best where height=$height').get({ height: header.number });
         if (!result || !result.hash || result.hash !== header.hash) {
             return { err: ErrorCode.RESULT_NOT_FOUND };
         }
@@ -262,7 +262,7 @@ export class HeaderStorage implements IHeaderStorage {
         }
         try {
             let headerRaw = writer.render();
-            await this.m_db.run(insertHeaderSql, { $hash: header.hash, $raw: headerRaw, $pre: header.preBlockHash, $verified: VERIFY_STATE.notVerified });
+            this.m_db.prepare(insertHeaderSql).run({ hash: header.hash, raw: headerRaw, pre: header.preBlockHash, verified: VERIFY_STATE.notVerified });
         } catch (e) {
             this.m_logger.error(`save Header ${header.hash}(${header.number}) failed, ${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -287,8 +287,8 @@ export class HeaderStorage implements IHeaderStorage {
         }
         let hash = genesis.hash;
         let headerRaw = writer.render();
-        await this.m_db.run(insertHeaderSql, { $hash: genesis.hash, $pre: genesis.preBlockHash, $raw: headerRaw, $verified: VERIFY_STATE.verified });
-        await this.m_db.run(extendBestSql, { $hash: genesis.hash, $height: genesis.number, $timestamp: genesis.timestamp });
+        this.m_db.prepare(insertHeaderSql).run({ hash: genesis.hash, pre: genesis.preBlockHash, raw: headerRaw, verified: VERIFY_STATE.verified });
+        this.m_db.prepare(extendBestSql).run({ hash: genesis.hash, height: genesis.number, timestamp: genesis.timestamp });
 
         return ErrorCode.RESULT_OK;
     }
@@ -296,7 +296,7 @@ export class HeaderStorage implements IHeaderStorage {
     public async getNextHeader(hash: string): Promise<{ err: ErrorCode, results?: { header: BlockHeader, verified: VERIFY_STATE }[] }> {
         let query: any;
         try {
-            query = await this.m_db.all(getByPreBlockSql, { $pre: hash });
+            query = this.m_db.prepare(getByPreBlockSql).all({ pre: hash });
         } catch (e) {
             this.m_logger.error(`getNextHeader ${hash} failed, ${e}`);
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -322,7 +322,7 @@ export class HeaderStorage implements IHeaderStorage {
             this.m_logger.debug(`remove header storage cache hash: ${header.hash} number: ${header.number}`);
             this.m_cacheHash.remove(header.hash);
             this.m_cacheHeight.remove(header.number);
-            await this.m_db.run(updateVerifiedSql, { $hash: header.hash, $verified: verified });
+            this.m_db.prepare(updateVerifiedSql).run({ hash: header.hash, verified: verified });
         } catch (e) {
             this.m_logger.error(`updateVerified ${header.hash}(${header.number}) failed, ${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -375,9 +375,9 @@ export class HeaderStorage implements IHeaderStorage {
         sqls.push(`UPDATE headers SET verified="${VERIFY_STATE.verified}" WHERE hash="${header.hash}"`);
         sqls = sqls.reverse();
         try {
-            for (let sql of sqls) {
-                await this.m_db.run(sql);
-            }
+            sqls.forEach((sql) => {
+                this.m_db.prepare(sql).run();
+            });
         } catch (e) {
             this.m_logger.error(`changeBest ${header.hash}(${header.number}) failed, ${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -395,7 +395,7 @@ export class HeaderStorage implements IHeaderStorage {
 
     protected async _getBestHeight(): Promise<{ err: ErrorCode, height?: number }> {
         try {
-            let r = await this.m_db!.get(getBestHeightSql);
+            let r = this.m_db!.prepare(getBestHeightSql).get();
             if (!r || !r.height) {
                 return { err: ErrorCode.RESULT_OK, height: 0 };
             }

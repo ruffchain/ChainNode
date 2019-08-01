@@ -114,7 +114,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         const readonly = options && options.readonly;
         if (!readonly) {
             try {
-                await this.m_db!.run(initMinersSql);
+                this.m_db!.prepare(initMinersSql).run();
             } catch (e) {
                 this.logger.error(e);
                 return ErrorCode.RESULT_EXCEPTION;
@@ -502,7 +502,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         try {
-            const gm = await this.m_db!.get(getMinersSql, { $hash: electionHeader.hash });
+            const gm = this.m_db!.prepare(getMinersSql).get({ hash: electionHeader.hash });
             if (!gm || !gm.miners) {
                 this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}`);
                 return { err: ErrorCode.RESULT_NOT_FOUND };
@@ -547,9 +547,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
     public async saveIRB(header: DposBlockHeader, irbHeader: DposBlockHeader): Promise<ErrorCode> {
         try {
             if (header.number === 0 || header.number % this.globalOptions.reSelectionBlocks === 0) {
-                await this.m_db!.run(saveIrbSqlUpdate, { $hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number });
+                this.m_db!.prepare(saveIrbSqlUpdate).run({ hash: header.hash, irbhash: irbHeader.hash, irbheight: irbHeader.number });
             } else {
-                await this.m_db!.run(saveIrbSqlReplace, { $hash: header.hash, $irbhash: irbHeader.hash, $irbheight: irbHeader.number });
+                this.m_db!.prepare(saveIrbSqlReplace).run({ hash: header.hash, irbhash: irbHeader.hash, irbheight: irbHeader.number });
             }
         } catch (e) {
             this.logger.error(`dpos chain save irb failed, e=${e}`);
@@ -568,9 +568,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         try {
             let gh: any;
             if (blockHash === 'latest') {
-                gh = await this.m_db!.get(getLatestIrbSql);
+                gh = this.m_db!.prepare(getLatestIrbSql).get();
             } else {
-                gh = await this.m_db!.get(getIrbSql, { $hash: blockHash });
+                gh = this.m_db!.prepare(getIrbSql).get({ hash: blockHash });
             }
             if (!gh || !gh.irb || !gh.irbhash.length || gh.irb.irbheight === -1) {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
@@ -613,7 +613,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return minersInfo.err;
         }
         try {
-            await this.m_db!.run(updateMinersSql, { $hash: header.hash, $miners: JSON.stringify(minersInfo.creators!) });
+            this.m_db!.prepare(updateMinersSql).run({ hash: header.hash, miners: JSON.stringify(minersInfo.creators!) });
             return ErrorCode.RESULT_OK;
         } catch (e) {
             this.logger.error(e);

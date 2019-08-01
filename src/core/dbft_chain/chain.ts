@@ -6,7 +6,6 @@ import { DbftContext } from './context';
 import { DbftBlockExecutor } from './executor';
 import * as ValueContext from '../value_chain/context';
 import { DbftHeaderStorage } from './header_storage';
-// Added by Yang Jun 2019-2-25
 
 import { BigNumber } from 'bignumber.js';
 

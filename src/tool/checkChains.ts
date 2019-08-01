@@ -1,7 +1,6 @@
 import { initLogger, HeaderStorage, BlockHeader, Chain, ErrorCode, DposBlockHeader, PowBlockHeader, DbftBlockHeader } from '../host';
 import { ChainClient, ChainClientOptions} from '../client';
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
+import * as sqlite from 'better-sqlite3';
 import * as fs from 'fs-extra';
 
 let mainpeer: string|undefined;
@@ -50,12 +49,12 @@ class SqliteChainClient extends ChainClient {
     constructor(options: ChainClientOptions) {
         super(options);
         this.m_dataDir = options.host;
-        
+
     }
 
     private async init() {
         if (!this.m_headerStorage) {
-            this.m_db = await sqlite.open(this.m_dataDir + '/' + Chain.s_dbFile, {mode: sqlite3.OPEN_READONLY});
+            this.m_db = new sqlite(this.m_dataDir + '/' + Chain.s_dbFile, { readonly: true });
             let config = fs.readJSONSync(this.m_dataDir + '/config.json');
             let blockHeaderType = BlockHeader;
             switch (config.type.consensus) {
@@ -91,7 +90,7 @@ async function checkDiff(peer1: {name: string, client: ChainClient}, peer2: {nam
     console.log(`checking between ${peer1.name} and ${peer2.name}`);
     let ph1 = new PeerHelper(peer1.name, peer1.client);
     let ph2 = new PeerHelper(peer2.name, peer2.client);
-    
+
     let hash1 = await ph1.get('latest');
     let hash2 = await ph2.get('latest');
     let num1 = ph1.getLatestHeight();
@@ -99,7 +98,7 @@ async function checkDiff(peer1: {name: string, client: ChainClient}, peer2: {nam
     if (hash1 === hash2) {
         if (num1 === num2) {
             console.log(`${peer1.name} and ${peer2.name} are synced, latest block ${num1} : ${hash1}`);
-            
+
         } else {
             console.log(`${peer1.name} is ${num1 > num2 ? 'longer' : 'shorter'} then ${peer2.name} but syncd`);
             console.log(`${peer1.name} latest block ${num1} : ${hash1} and ${peer2.name} latest block ${num2} : ${hash2}`);

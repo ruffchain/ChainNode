@@ -1,5 +1,4 @@
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
+import * as sqlite from 'better-sqlite3';
 import {ErrorCode} from '../error_code';
 import { LoggerInstance } from '../lib/logger_util';
 import {IHeaderStorage, IReadableStorage, StorageManager} from '../chain';
@@ -35,7 +34,7 @@ export class DbftHeaderStorage {
     public async init(): Promise<ErrorCode> {
         if (!this.m_readonly) {
             try {
-                await this.m_db!.run(initHeadersSql);
+                this.m_db!.prepare(initHeadersSql).run();
             } catch (e) {
                 this.m_logger.error(e);
                 return ErrorCode.RESULT_EXCEPTION;
@@ -43,7 +42,7 @@ export class DbftHeaderStorage {
         }
         return ErrorCode.RESULT_OK;
     }
-    
+
     uninit() {
         // do nothing
     }
@@ -59,7 +58,7 @@ export class DbftHeaderStorage {
         }
 
         try {
-            const gm = await this.m_db!.get(getHeaderSql, {$hash: hash});
+            const gm = this.m_db!.prepare(getHeaderSql).get({hash: hash});
             if (!gm || !gm.miners) {
                 this.m_logger.error(`getMinersSql error,election block hash=${hash}`);
                 return {err: ErrorCode.RESULT_NOT_FOUND};
@@ -101,7 +100,7 @@ export class DbftHeaderStorage {
         }
         totalView += Math.pow(2, header.view + 1) - 1;
         try {
-            await this.m_db!.run(addHeaderSql, {$hash: header.hash, $miners: JSON.stringify(miners), $totalView: totalView});
+            this.m_db!.prepare(addHeaderSql).run({hash: header.hash, miners: JSON.stringify(miners), totalView: totalView});
             return ErrorCode.RESULT_OK;
         } catch (e) {
             this.m_logger.error(e);
@@ -135,7 +134,7 @@ export class DbftHeaderStorage {
             }
             electionHeader = hr.header as DbftBlockHeader;
         }
-        
+
         return this._getHeader(electionHeader.hash);
     }
 

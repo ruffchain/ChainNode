@@ -1,8 +1,7 @@
 import * as assert from 'assert';
 import { EventEmitter } from 'events';
 import * as path from 'path';
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
+import * as sqlite from 'better-sqlite3';
 import * as fs from 'fs-extra';
 import { isNumber, isBoolean, isString, isNullOrUndefined, isArray, isObject } from 'util';
 
@@ -394,14 +393,14 @@ export class Chain extends EventEmitter implements IConsistency {
         });
         await this.m_blockStorage.init();
 
-        let sqliteOptions: any = {};
-        if (!readonly) {
-            sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE;
-        } else {
-            sqliteOptions.mode = sqlite3.OPEN_READONLY;
-        }
         try {
-            this.m_db = await sqlite.open(this.m_dataDir + '/' + Chain.s_dbFile, sqliteOptions);
+            let dbPath = path.join(this.m_dataDir, Chain.s_dbFile);
+            if (readonly) {
+                this.m_db = new sqlite(dbPath, { readonly: true });
+            } else {
+                this.m_db = new sqlite(dbPath);
+            }
+            this.m_db!.pragma('journal_mode = WAL');
         } catch (e) {
             this.m_logger.error(`open database failed`, e);
             return ErrorCode.RESULT_EXCEPTION;
@@ -1284,7 +1283,7 @@ export class Chain extends EventEmitter implements IConsistency {
 
     protected async _begin(): Promise<ErrorCode> {
         try {
-            await this.m_db!.run('BEGIN;');
+            this.m_db!.prepare('BEGIN;').run();
             await this.beginConsistency();
             return ErrorCode.RESULT_OK;
         } catch (e) {
@@ -1295,7 +1294,7 @@ export class Chain extends EventEmitter implements IConsistency {
 
     protected async _commit(): Promise<ErrorCode> {
         try {
-            await this.m_db!.run('COMMIT;');
+            this.m_db!.prepare('COMMIT;').run();
             await this.commitConsistency();
             return ErrorCode.RESULT_OK;
         } catch (e) {
@@ -1308,7 +1307,7 @@ export class Chain extends EventEmitter implements IConsistency {
 
     protected async _rollback(): Promise<ErrorCode> {
         try {
-            await this.m_db!.run('ROLLBACK;');
+            this.m_db!.prepare('ROLLBACK;').run();
             await this.rollbackConsistency();
             return ErrorCode.RESULT_OK;
         } catch (e) {
