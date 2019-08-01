@@ -17,6 +17,7 @@
         "depositAmount": 3000000,
         "depositPeriod": 60,
         "mortgagePeriod": 60,
-        "voteInterval": 10
+        "voteInterval": 10,
+        "heightIntervalForUserCode": 20
     }
 }
