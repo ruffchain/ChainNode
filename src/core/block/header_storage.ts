@@ -360,7 +360,7 @@ export class HeaderStorage implements IHeaderStorage {
                 forkFrom = result.header!;
                 sqls.push(`DELETE FROM best WHERE height > ${forkFrom.number}`);
                 delPoint.begin = forkFrom.number + 1;
-                delPoint.begin = gh.height!; // 这里不能直接用header.number，因为分叉前的best的高度可能高于header
+                delPoint.end = gh.height!; // 这里不能直接用header.number，因为分叉前的best的高度可能高于header
                 break;
             } else if (result.err === ErrorCode.RESULT_NOT_FOUND) {
                 let _result = await this._loadHeader(forkFrom.preBlockHash);
