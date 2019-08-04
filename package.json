@@ -59,6 +59,6 @@
     "gulp-shell": "^0.7.1",
     "gulp-sourcemaps": "^2.6.4",
     "mocha": "^5.1.0",
-    "typescript": "^3.0.1"
+    "typescript": "3.0.1"
   }
 }
