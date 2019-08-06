@@ -2,9 +2,8 @@ import * as assert from 'assert';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../error_code';
-import {LoggerInstance} from '../lib/logger_util';
-import {IHeaderStorage} from '../block';
-
+import { LoggerInstance, remove_db_files } from '../../common/';
+import { IHeaderStorage} from '../block';
 import { Storage, StorageOptions} from './storage';
 const digest = require('../lib/digest');
 
@@ -39,17 +38,14 @@ export class StorageDumpSnapshot {
     }
 
     public remove(): ErrorCode {
-        if (fs.existsSync(this.filePath!)) {
-            fs.unlinkSync(this.filePath!);
-            return ErrorCode.RESULT_OK;
-        }
+        remove_db_files(this.filePath!)
         return ErrorCode.RESULT_NOT_FOUND;
     }
 }
 
 export type StorageSnapshotManagerOptions = {
     path: string,
-    headerStorage: IHeaderStorage, 
+    headerStorage: IHeaderStorage,
     storageType: new (options: StorageOptions) => Storage,
     logger: LoggerInstance,
     readonly?: boolean

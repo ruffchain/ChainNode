@@ -4,7 +4,7 @@ import * as fs from 'fs-extra';
 import { ErrorCode } from '../error_code';
 import { Storage } from './storage';
 import { StorageDumpSnapshot, IStorageSnapshotManager } from './dump_snapshot';
-import { LoggerInstance } from '../lib/logger_util';
+import { LoggerInstance, remove_db_files, copyDBFileSync } from '../../common/';
 
 export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     constructor(options: {logger: LoggerInstance, path: string, readonly?: boolean}) {
@@ -24,7 +24,7 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
         if (!this.m_readonly) {
             fs.ensureDirSync(this.m_path);
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -46,7 +46,8 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     public async createSnapshot(from: Storage, blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
         this.m_logger.info(`creating snapshot ${blockHash}`);
         const snapshot = new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
-        fs.copyFileSync(from.filePath, snapshot.filePath);
+        //await from.uninit();
+        copyDBFileSync(from.filePath, snapshot.filePath);
         return {err: ErrorCode.RESULT_OK, snapshot};
     }
 
@@ -60,18 +61,18 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     }
 
     public releaseSnapshot(blockHash: string): void {
-        
+
     }
 
     public removeSnapshot(blockHash: string): ErrorCode {
         const snapshot = new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
         try {
-            fs.unlinkSync(snapshot.filePath);
+            remove_db_files(snapshot.filePath);
         } catch (e) {
             this.m_logger.error(`removeSnapshot ${blockHash} `, e);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 }

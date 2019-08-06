@@ -7,7 +7,7 @@ import { LoggerInstance } from '../lib/logger_util';
 import { BufferWriter, BufferReader } from '../serializable';
 import {StorageLogger} from './logger';
 import {JStorageLogger} from './js_log';
-
+import { copyDBFileSync } from '../../common/wal_util';
 import { Storage, StorageOptions } from './storage';
 import { IStorageSnapshotManager, StorageDumpSnapshot, StorageSnapshotManagerOptions } from './dump_snapshot';
 import { StorageDumpSnapshotManager } from './dump_snapshot_manager';
@@ -198,7 +198,8 @@ export class StorageLogSnapshotManager implements IStorageSnapshotManager {
             logger: this.m_logger
         }
         );
-        fs.copyFileSync(nearestSnapshot!.filePath, storage.filePath);
+
+        copyDBFileSync(nearestSnapshot!.filePath, storage.filePath);
          /** 这段代码要保证同步 end */
         err = await storage.init();
         if (err) {

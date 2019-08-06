@@ -61,8 +61,9 @@ function defineStorageTest(rootDir: string, storageType: new (...args: any[]) =>
         }
         __test().then(done);
     });
-
+    let start: any;
     it(`${descName}: keyvalue set get`, (done) => {
+        start = Date.now();
         async function __test() {
             const values = jsonableValues.values;
             for (let i = 0; i < values.length; ++i) {
@@ -71,6 +72,7 @@ function defineStorageTest(rootDir: string, storageType: new (...args: any[]) =>
                 assert(!(await keyvalue.set(k, values[i])).err);
                 assert(jsonableValues.checkValue(values[i], (await keyvalue.get(k)).value));
             }
+            console.log('delta is ', Date.now() - start);
         }
         __test().then(done);
     });
@@ -189,5 +191,5 @@ describe('Storage', async () => {
     fs.removeSync(rootDir);
     fs.ensureDirSync(rootDir);
     defineStorageTest(rootDir, SqliteStorage, 'SqliteStorage');
-    defineStorageTest(rootDir, JsonStorage, 'JsonStorage');
+    //defineStorageTest(rootDir, JsonStorage, 'JsonStorage');
 });
