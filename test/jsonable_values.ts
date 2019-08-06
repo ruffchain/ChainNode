@@ -3,10 +3,10 @@ import { isNull, isNumber, isString, isArray, isObject } from 'util';
 
 const NORMAL_NUMBER = 123;
 const NORMAL_STRING = 'scj';
-const NORMAL_BUFFER = new Buffer('abef007654321', 'hex');
-const NORMAL_BIGNUMBER = new BigNumber(1244);
+const NORMAL_BUFFER = new Buffer('abef007654321888324hfuafajfafjiafaf', 'hex');
+const NORMAL_BIGNUMBER = new BigNumber(1244.44);
 const __values = [
-    NORMAL_NUMBER,  
+    NORMAL_NUMBER,
     NORMAL_STRING,
     NORMAL_BUFFER,
     NORMAL_BIGNUMBER,

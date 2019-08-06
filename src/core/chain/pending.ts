@@ -90,7 +90,7 @@ export class PendingTransactions extends EventEmitter {
 
         let latest: number | null = this.m_txRecord.get(tx.hash);
         if (latest && Date.now() - latest < 2 * 60 * 1000) {
-            this.m_logger.warn(`addTransaction failed, add too frequently,hash=${tx.hash}`);
+            //this.m_logger.warn(`addTransaction failed, add too frequently,hash=${tx.hash}`);
             return ErrorCode.RESULT_TX_EXIST;
         }
         this.m_txRecord.set(tx.hash, Date.now());
@@ -99,7 +99,7 @@ export class PendingTransactions extends EventEmitter {
             this.m_logger.warn(`addTransaction failed, tx exist,hash=${tx.hash}`);
             return ErrorCode.RESULT_TX_EXIST;
         }
-        
+
         let opt: SyncOpt = {_type: SyncOptType.addTx, param: {tx, ct: Date.now()}};
         this._addPendingOpt(opt);
         return ErrorCode.RESULT_OK;
@@ -239,7 +239,7 @@ export class PendingTransactions extends EventEmitter {
             this._addToQueue(txTime, -1);
             await this._onAddedTx(txTime);
             await this._scanOrphan(address);
-            return ErrorCode.RESULT_OK;   
+            return ErrorCode.RESULT_OK;
         }
 
         if (nonce! + 1 < txTime.tx.nonce) {

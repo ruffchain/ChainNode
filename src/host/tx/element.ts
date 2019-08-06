@@ -25,6 +25,8 @@ export class TxStorage implements IElement {
 
         try {
             await this.m_db!.run(initSql);
+            await this.m_db!.run('PRAGMA journal_mode = WAL');
+//            await this.m_db!.run('PRAGMA synchronous = ON');
         } catch (e) {
             this.m_logger.error(`txstorage init failed e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -35,9 +37,9 @@ export class TxStorage implements IElement {
 
     public async addBlock(block: Block): Promise<ErrorCode> {
         try {
-            for (let tx of block.content.transactions) { 
+            for (let tx of block.content.transactions) {
                 await this.m_db!.run(`insert into txview (txhash, address, blockheight, blockhash) values ("${tx.hash}","${tx.address}", ${block.number}, "${block.hash}")`);
-            }    
+            }
         } catch (e) {
             this.m_logger.error(`txstorage, add exception,error=${e},blockhash=${block.hash}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -60,7 +62,7 @@ export class TxStorage implements IElement {
     public async get(txHash: string): Promise<{err: ErrorCode, blockhash?: string}> {
         try {
             let result = await this.m_db!.get(`select blockhash from txview where txhash="${txHash}"`);
-            if (!result || result.blockhash === undefined) { 
+            if (!result || result.blockhash === undefined) {
                 return {err: ErrorCode.RESULT_NOT_FOUND};
             }
 
