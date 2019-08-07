@@ -7,7 +7,6 @@ import { IHeaderStorage, BlockHeader } from '../chain';
 import {DposChainTipState, DposChainTipStateOptions} from './chain_state';
 import {DposBlockHeader} from './block';
 const assert = require('assert');
-import * as sqlite from 'sqlite';
 
 export type StorageIrbEntry = {
     tipHash: string,

@@ -197,8 +197,8 @@ class LogShim {
             fullpath: this.m_options.fullpath,
             stack: this.m_options.stack,
         };
-        BLogStackHelper.getStack(info);
-
+        //BLogStackHelper.getStack(info);
+        info.pos = { file: 'disable' };
         const pos = info.pos;
         if (pos.file == null) {
             pos.file = '[unknown]';

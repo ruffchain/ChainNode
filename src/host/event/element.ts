@@ -1,6 +1,6 @@
 import {ErrorCode, LoggerInstance, Chain, ChainEventDefinations, ChainEventDefination, Block, ReceiptSourceType, EventLog, stringifyErrorCode} from '../../core';
 import {IElement, ElementOptions} from '../context/element';
-import * as sqlite from 'sqlite';
+import * as sqlite from 'better-sqlite3';
 import { isNullOrUndefined, isNull, isString, isObject } from 'util';
 const assert = require('assert');
 import {ChainEventFilterStub} from './stub';
@@ -69,20 +69,20 @@ export class ChainEvent implements IElement {
                 return ErrorCode.RESULT_EXCEPTION;
             }
         }
-        const runOps = sqls.map((sql) => this.m_db!.run(sql));
+        const runOps = sqls.map((sql) => this.m_db!.prepare(sql).run);
         try {
             await Promise.all(runOps);
         } catch (e) {
             this.m_logger.error(`sql add block failed for `, e);
             return ErrorCode.RESULT_EXCEPTION;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
     public async revertToBlock(num: number): Promise<ErrorCode> {
         for (const name of this.m_eventDefinations.keys()) {
             try {
-                await this.m_db!.run(`DELETE FROM ${this._eventTblName(name)} WHERE block_number > ${num}`);
+                await this.m_db!.prepare(`DELETE FROM ${this._eventTblName(name)} WHERE block_number > ${num}`).run();
             } catch (e) {
                 this.m_logger.error(`sql delete from event failed for `, e);
                 return ErrorCode.RESULT_EXCEPTION;
@@ -93,7 +93,7 @@ export class ChainEvent implements IElement {
     }
 
     async getEventByStub(block: any, stub: ChainEventFilterStub): Promise<{
-        err: ErrorCode, 
+        err: ErrorCode,
         events?: {blockHash: string, blockNumber: number, eventLogs: EventLog[]}[]}> {
         let ghr;
         if (isString(block)) {
@@ -158,7 +158,7 @@ export class ChainEvent implements IElement {
             if (!sqls.length) {
                 events.set(hash, []);
                 continue;
-            } 
+            }
             let sqlGet;
             if (sqls.length === 1) {
                 sqlGet = sqls[0];
@@ -171,13 +171,13 @@ export class ChainEvent implements IElement {
             sqlGet += ` ORDER BY "index" `;
             let records;
             try {
-                records = await this.m_db!.all(sqlGet);
+                records = this.m_db!.prepare(sqlGet).all();
             } catch (e) {
                 this.m_logger.error(`sql get events of ${hash} failed e=${e}, sql=${sqlGet}`, e);
                 err = ErrorCode.RESULT_EXCEPTION;
                 break;
             }
-            
+
             if (records.length) {
                 let blockEvents: number[] = [];
                 for (const r of records) {
@@ -200,7 +200,7 @@ export class ChainEvent implements IElement {
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
         let sql = `INSERT INTO ${this._eventTblName(log.name)} ("index", "block_number"`;
-        const param = isNullOrUndefined(log.param) ? {} : log.param; 
+        const param = isNullOrUndefined(log.param) ? {} : log.param;
         if (def.indices) {
             for (const index of def.indices) {
                 sql += `, ${this._indexColName(index)}`;
@@ -210,7 +210,7 @@ export class ChainEvent implements IElement {
                 const indexValue = JSON.stringify(param[index]);
                 sql += `, '${indexValue}'`;
             }
-            sql += ')'; 
+            sql += ')';
         }
         return {err: ErrorCode.RESULT_OK, sql};
     }
@@ -231,7 +231,8 @@ export class ChainEvent implements IElement {
         }
         const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL` + sqlCreateIndex;
         try {
-            await this.m_db!.run(sqlCreate);
+            console.log('sqlCreate string', sqlCreate);
+            this.m_db!.exec(sqlCreate);
         } catch (e) {
             this.m_logger.error(`init event ${name} table failed `, e);
             return ErrorCode.RESULT_EXCEPTION;

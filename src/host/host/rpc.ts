@@ -62,7 +62,7 @@ export class ChainServer {
                 await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_FORMAT)));
             } else {
                 if (!tx.verify()) {
-                    this.m_logger.error(`rpc server tx param error , txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
+                    this.m_logger.debug(`rpc server tx param error , txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
                     await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_PARAM)));
                 } else {
                     this.m_logger.debug(`rpc server txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
@@ -85,13 +85,13 @@ export class ChainServer {
                 let element: TxStorage = this.m_chainContext!.getElement(TxStorage.ElementName)! as TxStorage;
                 let ret = await element.get(params.tx);
                 if (ret.err !== ErrorCode.RESULT_OK) {
-                    this.m_logger.error(`get transaction receipt ${s} failed for ${ret.err}`);
+                    this.m_logger.debug(`get transaction receipt ${s} failed for ${ret.err}`);
                     return { err: ret.err };
                 }
 
                 let block = this.m_chain.getBlock(ret.blockhash!);
                 if (!block) {
-                    this.m_logger.error(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
+                    this.m_logger.debug(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
                     return { err: ErrorCode.RESULT_NOT_FOUND };
                 }
                 let tx: Transaction | null = block.content.getTransaction(s);
@@ -139,7 +139,7 @@ export class ChainServer {
                     s = toStringifiable(cr.value!, true);
                     cr.value = s;
                 } catch (e) {
-                    this.m_logger.error(`call view ${params} returns ${cr.value!} isn't stringifiable`);
+                    this.m_logger.debug(`call view ${params} returns ${cr.value!} isn't stringifiable`);
                     cr.err = ErrorCode.RESULT_INVALID_FORMAT;
                     delete cr.value;
                 }

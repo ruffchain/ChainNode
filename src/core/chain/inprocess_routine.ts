@@ -13,7 +13,7 @@ export class InprocessRoutineManager implements IBlockExecutorRoutineManager {
 
     create(options: { name: string, block: Block, storage: Storage}): {err: ErrorCode, routine: BlockExecutorRoutine} {
         const routine = new InprogressRoutine({
-            name: options.name, 
+            name: options.name,
             chain: this.m_chain,
             block: options.block,
             storage: options.storage
@@ -24,13 +24,13 @@ export class InprocessRoutineManager implements IBlockExecutorRoutineManager {
 
 class InprogressRoutine extends BlockExecutorRoutine {
     constructor(options: {
-        name: string, 
+        name: string,
         chain: Chain,
         block: Block,
         storage: Storage
     }) {
         super({
-            name: options.name, 
+            name: options.name,
             logger: options.chain.logger,
             block: options.block,
             storage: options.storage,
@@ -44,6 +44,7 @@ class InprogressRoutine extends BlockExecutorRoutine {
     private m_canceled: boolean = false;
 
     async execute(): Promise<{err: ErrorCode, result?: {err: ErrorCode}}> {
+        let t1: number = Date.now();
         if (this.m_state !== BlockExecutorRoutineState.init) {
             return {err: ErrorCode.RESULT_INVALID_STATE};
         }
@@ -61,6 +62,8 @@ class InprogressRoutine extends BlockExecutorRoutine {
 
         await ner.executor!.finalize();
 
+        let t2: number = Date.now();
+        this.m_logger.info(`execute runblock time====${t2 - t1}`);
         this.m_state = BlockExecutorRoutineState.finished;
         if (this.m_canceled) {
             return {err: ErrorCode.RESULT_CANCELED};
@@ -73,6 +76,7 @@ class InprogressRoutine extends BlockExecutorRoutine {
         if (this.m_state !== BlockExecutorRoutineState.init) {
             return {err: ErrorCode.RESULT_INVALID_STATE};
         }
+        let t1: number = Date.now();
         this.m_state = BlockExecutorRoutineState.running;
         let ner = await this._newBlockExecutor(this.block, this.storage);
         if (ner.err) {
@@ -80,13 +84,15 @@ class InprogressRoutine extends BlockExecutorRoutine {
             return {err: ner.err};
         }
         const result = await ner.executor!.verify();
-        
+
         if (this.m_cancelSet && !this.m_canceled) {
             this.m_canceled = true;
         }
 
+        let t2: number = Date.now();
         await ner.executor!.finalize();
 
+        this.m_logger.info(`verify runblock time====${t2 - t1}`);
         this.m_state = BlockExecutorRoutineState.finished;
         if (this.m_canceled) {
             return {err: ErrorCode.RESULT_CANCELED};
@@ -99,7 +105,7 @@ class InprogressRoutine extends BlockExecutorRoutine {
         if (this.m_state === BlockExecutorRoutineState.finished) {
             return ;
         } else if (this.m_state === BlockExecutorRoutineState.init) {
-            this.m_state = BlockExecutorRoutineState.finished; 
+            this.m_state = BlockExecutorRoutineState.finished;
             return ;
         }
         this.m_cancelSet = true;

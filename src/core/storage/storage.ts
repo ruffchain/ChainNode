@@ -166,6 +166,9 @@ export abstract class Storage extends IReadWritableStorage {
         return this.m_filePath;
     }
 
+    public async freeze(): Promise<ErrorCode> {
+        return ErrorCode.RESULT_NOT_SUPPORT;
+    }
     public abstract get isInit(): boolean;
 
     public abstract init(readonly?: boolean): Promise<ErrorCode>;
