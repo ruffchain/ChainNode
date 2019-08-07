@@ -5,7 +5,7 @@ import { bLockBancorToken, fetchLockBancorTokenBalance } from "./common";
 export async function funcBuyLockBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  console.log('Yang-- buyBancorToken:', params);
+  context.logger.info('buyBancorToken:', JSON.stringify(params));
 
   // context.value has the money
   // 参数检查
@@ -14,26 +14,6 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   }
 
   let tokenIdUpperCase = params.tokenid.toUpperCase();
-
-  // If context.value lt sys value
-  // let syskv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbSystem, Chain.kvBalance);
-  // if (syskv.err) {
-  //   console.log('Yang-- not exist balance');
-  //   return syskv.err;
-  // }
-
-
-
-  // // find all valid bancortoken
-  // let fromTotalSys = await getTokenBalance(syskv.kv!, context.caller);
-
-  // let strAmount = context.value.toFixed(SYS_TOKEN_PRECISION);
-  // let amount = new BigNumber(strAmount);
-
-  // if (fromTotalSys.lt(amount)) {
-  //   console.log('Yang-- not enough balance');
-  //   return ErrorCode.RESULT_NOT_ENOUGH;
-  // }
 
   // get F
   let kvFactor = await context.storage.getReadableKeyValueWithDbname(Chain.dbBancor, Chain.kvFactor);
@@ -46,7 +26,7 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   }
 
   let F = new BigNumber(retFactor.value);
-  context.logger.info('Yang-- factor:', F);
+  context.logger.info('factor:', F);
 
   // get S
   let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
@@ -56,7 +36,7 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   if (retSupply.err) { return retSupply.err; }
 
   let S = new BigNumber(retSupply.value);
-  context.logger.info('Yang-- supply:', S);
+  context.logger.info('supply:', S);
 
   // get R
   let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
@@ -66,7 +46,7 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
   if (retReserve.err) { return retReserve.err; }
 
   let R = new BigNumber(retReserve.value);
-  context.logger.info('Yang-- reserve:', R);
+  context.logger.info('reserve:', R);
 
   // get nonliquidity
   let kvNonliquidity = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvNonliquidity);
@@ -98,8 +78,8 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
     out = out.multipliedBy(S);
   }
 
-  context.logger.info('Yang-- supply plus:', out.toString());
-  context.logger.info('Yang-- reserve plus:', e.toString());
+  context.logger.info('supply plus:', out.toString());
+  context.logger.info('reserve plus:', e.toString());
 
   // Update system R,S; Update User account
   R = R.plus(e);
@@ -113,20 +93,20 @@ export async function funcBuyLockBancorToken(context: DposTransactionContext, pa
 
   let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
   if (kvRet.err) {
-    context.logger.error('Yang-- update reserve failed')
+    context.logger.error('update reserve failed')
     return kvRet.err;
   }
 
   kvRet = await kvSupply.kv!.set(tokenIdUpperCase, S);
   if (kvRet.err) {
-    context.logger.error('Yang-- update supply failed')
+    context.logger.error('update supply failed')
     return kvRet.err;
   }
 
   // Update User account
   let kvToken = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, tokenIdUpperCase);
   if (kvToken.err) {
-    context.logger.error('Yang-- update user account failed')
+    context.logger.error('update user account failed')
     return kvToken.err;
   }
 

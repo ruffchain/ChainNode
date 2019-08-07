@@ -5,7 +5,7 @@ import { bLockBancorToken, fetchLockBancorTokenBalance } from "./common";
 export async function funcSellLockBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  context.logger.info('Yang-- params:', params);
+  context.logger.info('params:', JSON.stringify(params));
 
   // 参数检查
   if (!params.tokenid) {
@@ -48,7 +48,7 @@ export async function funcSellLockBancorToken(context: DposTransactionContext, p
   if (retReserve.err) { return retReserve.err; }
 
   let R = new BigNumber(retReserve.value);
-  context.logger.info('Yang-- R:', R.toString());
+  context.logger.info('R:', R.toString());
 
   // do computation
   let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
@@ -57,7 +57,7 @@ export async function funcSellLockBancorToken(context: DposTransactionContext, p
 
   // Dont know if it will happen ever
   if (S.lt(e)) {
-    context.logger.error('Yang-- supply not enough');
+    context.logger.error('supply not enough');
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 
@@ -77,8 +77,8 @@ export async function funcSellLockBancorToken(context: DposTransactionContext, p
   R = R.minus(out);
   S = S.minus(e);
 
-  context.logger.info('Yang-- reserve minus:', out.toString());
-  context.logger.info('Yang-- supply minus:', e.toString());
+  context.logger.info('reserve minus:', out.toString());
+  context.logger.info('supply minus:', e.toString());
 
   let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
   if (kvRet.err) { return kvRet.err; }
@@ -99,7 +99,7 @@ export async function funcSellLockBancorToken(context: DposTransactionContext, p
   let fromTotal = await fetchLockBancorTokenBalance(kvToken.kv!, context.caller);
 
   if (fromTotal.lt(new BigNumber(params.amount))) {
-    context.logger.info('Yang- less than token account', fromTotal.toNumber());
+    context.logger.info('less than token account', fromTotal.toNumber());
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 

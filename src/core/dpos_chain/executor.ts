@@ -16,17 +16,17 @@ export class DposBlockExecutor extends ValueBlockExecutor {
 
     public async executePostBlockEvent(): Promise<{ err: ErrorCode, receipt?: Receipt }> {
 
-        // this.m_logger.info(`Yang Jun: into executor.ts, before calling super BlockNumber: ${this.m_block.number}`)
+        // this.m_logger.info(`into executor.ts, before calling super BlockNumber: ${this.m_block.number}`)
 
         let ebr = await super.executePostBlockEvent();
 
-        // this.m_logger.info(`Yang Jun: ${ebr.err}`)
+        // this.m_logger.info(`${ebr.err}`)
 
         if (ebr.err) {
             return { err: ebr.err };
         }
 
-        // this.m_logger.info(`Yang Jun: into executor.ts, executePostBlockEvent: ${this.m_block.number}`)
+        // this.m_logger.info(`into executor.ts, executePostBlockEvent: ${this.m_block.number}`)
 
         if (this.m_block.number > 0) {
             let dbr = await this.m_storage.getReadWritableDatabase(Chain.dbSystem);
@@ -43,7 +43,7 @@ export class DposBlockExecutor extends ValueBlockExecutor {
 
             // 维护被禁用miner信息
             if (this.m_block.number % this.m_globalOptions.unbanBlocks === 0) {
-                this.m_logger.info(`Yang Jun timestamp: ${this.m_block.header.timestamp} , to unBanProducer`)
+                this.m_logger.info(`timestamp: ${this.m_block.header.timestamp} , to unBanProducer`)
                 await denv.unbanProducer(this.m_block.header.timestamp);
             }
 
@@ -52,7 +52,7 @@ export class DposBlockExecutor extends ValueBlockExecutor {
             let bReSelect = false;
 
             if (this.m_block.number % this.m_globalOptions.reSelectionBlocks === 0) {
-                this.m_logger.info('Yang Jun reselectionBlocks triggered')
+                this.m_logger.info('reselectionBlocks triggered')
                 // 先禁用那些超过最长时间不出块的miner
                 await denv.banProducer(this.m_block.header.timestamp);
                 // 更新选举结果

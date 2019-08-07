@@ -43,7 +43,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
         if (ret.err != ErrorCode.RESULT_OK) {
             return ret.err;
         }
-        let userCodeRet =  await context.storage.getReadWritableKeyValue('userCode');
+        let userCodeRet = await context.storage.getReadWritableKeyValue('userCode');
         if (userCodeRet.err != ErrorCode.RESULT_OK) {
             return userCodeRet.err;
         }
@@ -145,7 +145,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     //////////////////////
     handler.addTX('createBancorToken', funcCreateLockBancorToken, genChecker(createBancorTokenSchema));
     // Added by Yang Jun 2019-2-21
-    handler.addTX('transferBancorTokenTo', funcTransferLockBancorTokenTo,  genChecker(transferTokenSchema));
+    handler.addTX('transferBancorTokenTo', funcTransferLockBancorTokenTo, genChecker(transferTokenSchema));
 
     // Added by Yang Jun 2019-5-31
     handler.addTX('transferBancorTokenToMulti', funcTransferLockBancorTokenToMulti, genChecker(transferTokenToMultiAccoutSchema));
@@ -207,7 +207,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
 
     handler.addTX('mortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
-        console.log('Yang Jun - mortgage, handler.ts');
+        context.logger.info('mortgage, handler.ts');
 
         // if value is differnt from params
         if (!context.value.eq(new BigNumber(params))) {
@@ -224,10 +224,10 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     handler.addTX('unmortgage', async (context: DposTransactionContext, params: any): Promise<ErrorCode> => {
         context.cost(context.fee);
         // context.cost(SYSTEM_TX_FEE_BN);
-        console.log('Yang Jun - unmortgage, handler.ts');
+        context.logger.info('unmortgage, handler.ts');
         let strAmount = strAmountPrecision(params, SYS_MORTGAGE_PRECISION);
 
-        console.log('amount:', strAmount);
+        context.logger.info('amount:', strAmount);
         let bnAmount = new BigNumber(strAmount);
         let hret = await context.unmortgage(context.caller, bnAmount);
         if (hret) {
@@ -264,7 +264,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
             .transferTo(context.caller, new BigNumber(configObj.global.depositAmount));
 
         if (ret) {
-            console.log('unregister , transferTo failed');
+            context.logger.error('unregister , transferTo failed');
             return ret;
         }
 
