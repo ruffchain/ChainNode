@@ -71,7 +71,6 @@ describe('headerStorage', () => {
                 let start = Date.now();
                 assert(!(await headerStorage.saveHeader(h)), `${ix} save header err`);
                 let end = Date.now();
-                console.log('delta is', end - start);
                 assert(!(await headerStorage.changeBest(h)), `${ix} changeBest err`);
                 best = h.number;
                 let _hr = await headerStorage.getHeader(h.number);
@@ -81,7 +80,6 @@ describe('headerStorage', () => {
             let start = Date.now();
             let hr = await headerStorage.getHeader(best - 3);
             let end = Date.now();
-            console.log('delta is', end - start);
             assert(!hr.err, `get ${best - 3} header err`);
             let fork = hr.header!;
             ph = fork;

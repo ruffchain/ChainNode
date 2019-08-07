@@ -67,7 +67,9 @@ export class StorageManager {
         if (this.m_readonly) {
             return {err: ErrorCode.RESULT_NOT_SUPPORT};
         }
-        //await from.uninit();
+        if (remove) {
+            await from.uninit();
+        }
         let csr = await this.m_snapshotManager.createSnapshot(from, blockHash);
         if (csr.err) {
             return csr;
@@ -108,13 +110,14 @@ export class StorageManager {
                 err = ssr.err;
             } else {
                 //await ssr.storage!.uninit();
+                await ssr.storage!.freeze();
                 copyDBFileSync(ssr.storage!.filePath, storage.filePath);
-                this.releaseSnapshotView(from);
+                await this.releaseSnapshotView(from);
                 err = await storage.init();
             }
         } else if (from instanceof Storage) {
             this.m_logger.info(`create storage ${name} from snapshot ${storage.filePath}`);
-            //await from.uninit();
+            await from.freeze();
             copyDBFileSync(from.filePath, storage.filePath);
             err = await storage.init();
         } else {

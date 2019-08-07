@@ -89,6 +89,9 @@ export class HeaderStorage implements IHeaderStorage {
     public async init(): Promise<ErrorCode> {
         if (!this.m_readonly) {
             try {
+                this.m_db.pragma('locking_mode = EXCLUSIVE');
+                this.m_db.pragma('synchronous  = NORMAL');
+                this.m_db.pragma('journal_mode = WAL');
                 this.m_db.prepare(initHeaderSql).run();
                 this.m_db.prepare(initBestSql).run();
             } catch (e) {

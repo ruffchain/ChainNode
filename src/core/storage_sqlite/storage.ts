@@ -332,12 +332,13 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
 
     public async lpushx(key: string, value: any[]): Promise<{ err: ErrorCode; }> {
         try {
+            console.log('key is', key);
             assert(key);
             const len = value.length;
-            this.db.prepare(`UPDATE '${this.fullName}' SET field=field+? WHERE name=?`).run(len, key)
+            this.db.prepare(`UPDATE '${this.fullName}' SET field=field+${len} WHERE name=?`).run(key)
             for (let i = 0; i < len; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
-                this.db.prepare(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`).run(key, i, json);
+                this.db.prepare(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, CAST((?) as INTEGAR), ?)`).run(key, i, json);
             }
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
@@ -358,10 +359,10 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             } else {
                 const { err: err2, value } = await this.lindex(key, index);
-                let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
-                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`).run(key, index);
+                //let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
+                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field= CAST((?) as INTEGAR)`).run(key, index);
                 for (let i = index + 1; i < len!; i++) {
-                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field = ?`).run(key, i);
+                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =  CAST((?) as INTEGAR)`).run(key, i);
                 }
 
                 return { err: ErrorCode.RESULT_OK, value };
@@ -380,7 +381,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err };
             }
             const json = JSON.stringify(toStringifiable(value, true));
-            await this.db.prepare(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, ?, ?)`).run(key, len, json);
+            await this.db.prepare(`INSERT INTO '${this.fullName}' (name, field, value) VALUES (?, CAST((?) as INTEGAR), ?)`).run(key, len, json);
             return { err: ErrorCode.RESULT_OK };
         } catch (e) {
             this.logger.error(`rpush ${key} `, e);
@@ -398,7 +399,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
             for (let i = 0; i < value.length; i++) {
                 const json = JSON.stringify(toStringifiable(value[i], true));
                 this.db.prepare(`INSERT INTO '${this.fullName}' (name, field, value) \
-                    VALUES (?, ?, ?)`).run(key, len! + i, json);
+                    VALUES (?, CAST((?) as INTEGAR), ?)`).run(key, len! + i, json);
             }
 
             return { err: ErrorCode.RESULT_OK };
@@ -419,7 +420,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             } else {
                 const { err: err2, value } = await this.lindex(key, len! - 1);
-                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`).run(key, len! - 1);
+                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field=CAST((?) as INTEGAR)`).run(key, len! - 1);
                 return { err: ErrorCode.RESULT_OK, value };
             }
         } catch (e) {
@@ -439,7 +440,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return await this.lset(key, len!, value);
             } else {
                 for (let i = len! - 1; i >= index; i--) {
-                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field+1 WHERE name=? AND field = ?`).run(key, i);
+                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field+1 WHERE name=? AND field = CAST((?) as INTEGAR)`).run(key, i);
                 }
 
                 return await this.lset(key, index, value);
@@ -461,13 +462,13 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             } else {
                 const { err: err2, value } = await this.lindex(key, index);
-                let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
+                //let sql = `DELETE FROM '${this.fullName}' WHERE name='${key}' AND field='${index}'`;
                 // console.log('lremove', { sql });
-                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field=?`).run(key, index);
+                this.db.prepare(`DELETE FROM '${this.fullName}' WHERE name=? AND field=CAST((?) as INTEGAR)`).run(key, index);
                 for (let i = index + 1; i < len!; i++) {
                     // sql = `UPDATE '${this.fullName}' SET field=field-1 WHERE name='${key}' AND field = ${i}`;
                     // console.log({ sql });
-                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =?`).run(key, i);
+                    this.db.prepare(`UPDATE '${this.fullName}' SET field=field-1 WHERE name=? AND field =CAST((?) as INTEGAR)`).run(key, i);
                 }
 
                 return { err: ErrorCode.RESULT_OK, value };
@@ -612,6 +613,8 @@ export class SqliteReadWritableDatabase extends SqliteReadableDatabase implement
 export class SqliteStorage extends Storage {
     private m_db?: sqlite.Database;
     private m_isInit: boolean = false;
+    private m_isFreezed: boolean = false;
+    private m_isReadOnly: boolean = false;
     private m_transcation?: SqliteStorageTransaction;
 
     protected _createLogger(): JStorageLogger {
@@ -633,8 +636,10 @@ export class SqliteStorage extends Storage {
         try {
             if (readonly) {
                 this.m_db = new sqlite(this.m_filePath, {readonly: true});
+                this.m_isReadOnly = true;
             } else {
                 this.m_db = new sqlite(this.m_filePath);
+                //this.m_db = new sqlite(this.m_filePath, {verbose:console.log});
             }
         } catch (e) {
             this.m_logger.error(`open sqlite database file ${this.m_filePath} failed `, e);
@@ -646,11 +651,12 @@ export class SqliteStorage extends Storage {
         }
 
         try {
-            if (!readonly) {
+            if (this.m_isReadOnly) {
+                this.m_db!.pragma('journal_mode = WAL');
+                //this.m_db!.pragma('locking_mode = EXCLUSIVE');
+            } else {
                 this.m_db!.pragma('locking_mode = EXCLUSIVE');
                 this.m_db!.pragma('synchronous  = NORMAL');
-                this.m_db!.pragma('journal_mode = WAL');
-            } else {
                 this.m_db!.pragma('journal_mode = WAL');
             }
             //await this.m_db!.run('PRAGMA locking_mode = EXCLUSIVE');
@@ -670,11 +676,24 @@ export class SqliteStorage extends Storage {
         return err;
     }
 
+    public async freeze(): Promise<ErrorCode> {
+        if (!this.m_isFreezed) {
+            if (this.m_db && !this.m_isReadOnly) {
+                this.m_db.close();
+                this.m_db = new sqlite(this.m_filePath, {readonly: true});
+                this.m_isReadOnly = true;
+                this.m_db.pragma('journal_mode = WAL');
+                //this.m_db.pragma('locking_mode = EXCLUSIVE');
+            }
+            this.m_isFreezed = true;
+        }
+        return ErrorCode.RESULT_OK;
+    }
+
     public async uninit(): Promise<ErrorCode> {
         if (this.m_db) {
             await this.m_db.close();
             delete this.m_db;
-            this.m_isInit = false;
         }
 
         return ErrorCode.RESULT_OK;

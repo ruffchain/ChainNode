@@ -46,7 +46,7 @@ export class StorageDumpSnapshotManager implements IStorageSnapshotManager {
     public async createSnapshot(from: Storage, blockHash: string): Promise<{err: ErrorCode, snapshot?: StorageDumpSnapshot}> {
         this.m_logger.info(`creating snapshot ${blockHash}`);
         const snapshot = new StorageDumpSnapshot(blockHash, this.getSnapshotFilePath(blockHash));
-        //await from.uninit();
+        await from.freeze();
         copyDBFileSync(from.filePath, snapshot.filePath);
         return {err: ErrorCode.RESULT_OK, snapshot};
     }
