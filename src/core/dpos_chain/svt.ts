@@ -100,7 +100,7 @@ export class SVTContext {
 
     let curBlock = this.nGetCurBlock();
 
-    this.m_logger.info('Yang Jun -- unmortgage');
+    this.m_logger.info('unmortgage');
     this.m_logger.info('curBlock:', curBlock);
 
     let kvSvtVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
@@ -108,7 +108,7 @@ export class SVTContext {
     // check svt-vote table
     let stakeInfo = await kvSvtVote.hgetallbyname(from);
     if (stakeInfo.err) {
-      this.m_logger.info('Yang Jun -- hgetallbyname failed:', stakeInfo);
+      this.m_logger.info('hgetallbyname failed:', stakeInfo);
       return { err: stakeInfo.err };
     }
 
@@ -132,7 +132,7 @@ export class SVTContext {
       this.m_logger.info('amount:', amount.toString());
       // 
       if (effectiveAmount.lt(amount)) {
-        this.m_logger.info('Yang Jun -- effectiveAmount less than amount');
+        this.m_logger.info('effectiveAmount less than amount');
         return { err: ErrorCode.RESULT_OK, returnCode: ErrorCode.RESULT_TIME_NOT_DUE };
       }
 
@@ -145,7 +145,7 @@ export class SVTContext {
           continue;
         }
 
-        this.m_logger.info('Yang Jun -- stake:', stake.toString());
+        this.m_logger.info('stake:', stake.toString());
 
         let hret1;
 
@@ -184,7 +184,7 @@ export class SVTContext {
   async mortgage(from: string, amount: BigNumber): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
     assert(amount.gt(0), 'amount must positive');
 
-    this.m_logger.info('Yang Jun -- mortgage');
+    this.m_logger.info('mortgage');
     this.m_logger.info('curBlock:', this.nGetCurBlock());
 
     let dueBlock = this.nGetCurMortgageDueBlock();
@@ -235,7 +235,7 @@ export class SVTContext {
     if (voteeInfo.err === ErrorCode.RESULT_OK) {
       let producers = voteeInfo.value!;
       for (let p of producers) {
-        this.m_logger.info('Yang Jun -- _updatevotee');
+        this.m_logger.info('_updatevotee');
         this.m_logger.info(JSON.stringify(p));
         await kvVote.hdel(p.name, p.field);
       }
@@ -260,7 +260,7 @@ export class SVTContext {
       let producers = voterInfo.value!;
 
       for (let p of producers) {
-        this.m_logger.info('Yang Jun -- _updatedposvote');
+        this.m_logger.info('_updatedposvote');
         this.m_logger.info(JSON.stringify(p));
 
         let hret = await kvDpos.hexists('vote', p.field);
@@ -303,7 +303,7 @@ export class SVTContext {
       let producers = voterInfo.value!;
 
       for (let p of producers) {
-        this.m_logger.info('Yang Jun -- _updatevotevote');
+        this.m_logger.info('_updatevotevote');
         this.m_logger.info(JSON.stringify(p));
 
         let newvote: BigNumber = p.value.plus(amount);
@@ -337,7 +337,7 @@ export class SVTContext {
       return { err: retn.err, value: '' };
     }
     // Add by Yang Jun 2019-6-11
-    this.m_logger.info('Yang Jun --- _setSVTInfo()');
+    this.m_logger.info('_setSVTInfo()');
     for (let item of retn.value!) {
       this.m_logger.info('Item:', item.name);
       this.m_logger.info('Field:', item.field);
@@ -378,7 +378,7 @@ export class SVTContext {
     await kvDPos.hset('candidate', from, BanStatus.NoBan);
 
     // 在SVT-depoist里面添加, 不再检测是否存在
-    this.m_logger.info('Yang Jun -- register');
+    this.m_logger.info('egister');
     this.m_logger.info('curBlock:', this.nGetCurBlock());
 
     let dueBlock = this.nGetCurDepositDueBlock();
@@ -408,7 +408,7 @@ export class SVTContext {
     // 查看svt-deposit记录，看时间上是否到期
     let curBlock: number = this.nGetCurBlock();
 
-    this.m_logger.info('Yang Jun -- unregister');
+    this.m_logger.info('unregister');
     this.m_logger.info('curBlock:', curBlock);
 
     let kvSVTDeposit = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
@@ -530,13 +530,13 @@ export class SVTContext {
     return { err: ErrorCode.RESULT_OK, candidates: candidates! };
   }
   private async checkCandidateToDpos(candidates: string[]): Promise<{ err: ErrorCode, value?: boolean }> {
-    this.m_logger.info('Yang Jun -- checkCandidateToDpos');
+    this.m_logger.info('checkCandidateToDpos');
     let hcand = await this.getCandidates();
     if (hcand.err) {
       return { err: ErrorCode.RESULT_NOT_FOUND };
     }
     let alreadyCandidates = hcand.candidates;
-    this.m_logger.info('Yang Jun -- alreadycandidates');
+    this.m_logger.info('alreadycandidates');
     this.m_logger.info(JSON.stringify(alreadyCandidates));
 
     if (!SVTContext.bIncorporate(alreadyCandidates!, candidates)) {
@@ -548,7 +548,7 @@ export class SVTContext {
   }
 
   private async addVoteToDpos(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    this.m_logger.info('Yang Jun -- addVoteToDpos');
+    this.m_logger.info('addVoteToDpos');
     return this.updateVoteToDpos(from, true);
   }
   /// remove from 's vote from the list
@@ -579,7 +579,7 @@ export class SVTContext {
 
   }
   private async removeVoteFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    this.m_logger.info('Yang Jun -- removeVoteFromVote table');
+    this.m_logger.info('removeVoteFromVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hfind = await kvVoteVote.hgetallbyname(from);
@@ -596,7 +596,7 @@ export class SVTContext {
     return hret;
   }
   private async removeVoteeFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    this.m_logger.info('Yang Jun -- removeVoteeFromVote table');
+    this.m_logger.info('removeVoteeFromVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hfind = await kvVoteVote.hgetallbyfield(from);
@@ -615,7 +615,7 @@ export class SVTContext {
   // Added by Yang Jun , 2019-6-14
   // Only miner can run it after unregister( )
   private async removeDepositFromVote(from: string): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    this.m_logger.info('Yang Jun -- removeDepositFromVote table');
+    this.m_logger.info('removeDepositFromVote table');
     // if voted ever, update
     let amount = new BigNumber(VOTE_FROM_DEPOSIT);
 
@@ -663,7 +663,7 @@ export class SVTContext {
       return { err: hret.err, value: '' };
     }
 
-    this.m_logger.info('Yang Jun - checkVoteLasttime');
+    this.m_logger.info('checkVoteLasttime');
     this.m_logger.info(JSON.stringify(hret.value));
 
     if (hret.value!.length === 0) {
@@ -678,7 +678,7 @@ export class SVTContext {
 
   }
   private async addVoteToVote(from: string, votee: string[], amount: BigNumber[]): Promise<{ err: ErrorCode, returnCode?: ErrorCode }> {
-    this.m_logger.info('Yang Jun -- addVoteToVote table');
+    this.m_logger.info('addVoteToVote table');
     let kvVoteVote = (await this.m_voteDatabase.getReadWritableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteVote.hmset(from, votee, amount);
@@ -859,7 +859,7 @@ export class SVTViewContext {
       return { err: hret.err, value: '' };
     }
 
-    this.m_logger.info('Yang Jun - checkVoteLasttime');
+    this.m_logger.info('checkVoteLasttime');
     this.m_logger.info(JSON.stringify(hret.value));
 
     if (hret.value!.length === 0) {
@@ -875,7 +875,7 @@ export class SVTViewContext {
 
   }
   public async getTicket(address: string): Promise<{ err: ErrorCode, value?: any }> {
-    this.m_logger.info('Yang Jun -- into getTicket()');
+    this.m_logger.info('into getTicket()');
     let kvVoteVote = (await this.m_voteDatabase.getReadableKeyValue(SVTContext.kvVoteVote)).kv! as SqliteStorageKeyValue;
 
     let hret = await kvVoteVote.hgetallbyname(address);
@@ -912,7 +912,7 @@ export class SVTViewContext {
     return { err: ErrorCode.RESULT_OK, value: out };
   }
   public async getStake(address: string): Promise<{ err: ErrorCode, stake?: any }> {
-    this.m_logger.info('Yang Jun -- into svt::getStake()');
+    this.m_logger.info('into svt::getStake()');
     let curBlock = this.m_chain.tipBlockHeader!.number;
     let out = Object.create(null);
 
@@ -921,17 +921,17 @@ export class SVTViewContext {
     // get epoch_time
 
     const epochtime = this.m_chain.epochTime * 1000;
-    console.log('epochtime:', epochtime);
+    this.m_logger.info('epochtime:', epochtime);
 
     // get svt-deposit
     let kvSVTDeposit = (await this.m_svtDatabase.getReadableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
 
     let hdps = await kvSVTDeposit.hgetallbyname(address);
     if (hdps.err) {
-      console.log('search svt-deposit failed:', address);
+      this.m_logger.error('search svt-deposit failed:', address);
       return { err: hdps.err };
     }
-    console.log(hdps.value!);
+    this.m_logger.info(JSON.stringify(hdps.value!));
 
     out.deposit = [];
     for (let p of hdps.value!) {
@@ -948,11 +948,11 @@ export class SVTViewContext {
     // 如果投票者的权益不够，则返回
     let her = await kvSVTVote.hgetallbyname(address);
     if (her.err) {
-      console.log('search svt-vote faile:', address);
+      this.m_logger.error('search svt-vote faile:', address);
       return { err: her.err };
     }
 
-    console.log(her.value!);
+    this.m_logger.info(JSON.stringify(her.value!));
 
     out.vote = [];
     for (let p of her.value!) {
@@ -963,8 +963,8 @@ export class SVTViewContext {
       out.vote.push({ amount: parseInt(p.value), dueBlock: dueblock, dueTime: duetime });
     }
 
-    this.m_logger.info('Yang Jun -- getStake()');
-    console.log(out);
+    this.m_logger.info('getStake()');
+    this.m_logger.info(JSON.stringify(out));
 
     return { err: ErrorCode.RESULT_OK, stake: out };
   }
@@ -1000,7 +1000,7 @@ export class SVTViewContext {
     let kvDPos = (await this.m_systemDatabase.getReadableKeyValue(SVTContext.kvDpos)).kv! as SqliteStorageKeyValue;
 
 
-    this.m_logger.info('Yang Jun -- getCandidatesInfo');
+    this.m_logger.info('getCandidatesInfo');
 
     // check vote
     let gr = await kvDPos.hgetallbyname('vote');

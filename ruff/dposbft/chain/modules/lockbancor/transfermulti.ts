@@ -4,7 +4,7 @@ import { strAmountPrecision, BANCOR_TOKEN_PRECISION, MAX_TO_MULTI_NUM } from "..
 export async function funcTransferLockBancorTokenToMulti(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  context.logger.info('Yang-- ', params);
+  context.logger.info('transferLockBancorTokenToMulti:', JSON.stringify(params));
 
   let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
@@ -93,7 +93,7 @@ export async function funcTransferLockBancorTokenToMulti(context: DposTransactio
   }
 
   if (fromTotal.lt(neededAmount)) {
-    context.logger.info('Yang-- less than amount', neededAmount);
+    context.logger.info('less than amount:', neededAmount);
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 

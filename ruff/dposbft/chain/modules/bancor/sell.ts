@@ -23,7 +23,7 @@ export async function funcSellBancorToken(context: DposTransactionContext, param
         return retFactor.err;
     }
     let F = new BigNumber(retFactor.value);
-    console.log('F: ', F.toString());
+    context.logger.debug('F: ', F.toString());
 
     // get S
     let kvSupply = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvSupply);
@@ -33,7 +33,7 @@ export async function funcSellBancorToken(context: DposTransactionContext, param
     if (retSupply.err) { return retSupply.err; }
 
     let S = new BigNumber(retSupply.value);
-    console.log('S:', S.toString());
+    context.logger.debug('S:', S.toString());
 
     // get R
     let kvReserve = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbBancor, Chain.kvReserve);
@@ -43,7 +43,7 @@ export async function funcSellBancorToken(context: DposTransactionContext, param
     if (retReserve.err) { return retReserve.err; }
 
     let R = new BigNumber(retReserve.value);
-    console.log('Yang-- R:', R.toString());
+    context.logger.debug('R:', R.toString());
 
     // do computation
     let strAmount = strAmountPrecision(params.amount, BANCOR_TOKEN_PRECISION);
@@ -66,8 +66,8 @@ export async function funcSellBancorToken(context: DposTransactionContext, param
     R = R.minus(out);
     S = S.minus(e);
 
-    console.log('Yang-- reserve minus:', out.toString());
-    console.log('Yang-- supply minus:', e.toString());
+    context.logger.debug('reserve minus:', out.toString());
+    context.logger.debug('supply minus:', e.toString());
 
     let kvRet = await kvReserve.kv!.set(tokenIdUpperCase, R);
     if (kvRet.err) { return kvRet.err; }
@@ -81,7 +81,7 @@ export async function funcSellBancorToken(context: DposTransactionContext, param
 
     let fromTotal = await getTokenBalance(kvToken.kv!, context.caller);
     if (fromTotal.lt(new BigNumber(params.amount))) {
-        console.log('Yang- less than token account');
+        context.logger.error('less than token account');
         return ErrorCode.RESULT_NOT_ENOUGH;
     }
 

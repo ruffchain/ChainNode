@@ -4,7 +4,7 @@ import { strAmountPrecision, BANCOR_TOKEN_PRECISION } from "../scoop";
 export async function funcTransferLockBancorTokenTo(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  console.log('Yang-- ', params)
+  context.logger.info('TransferLockBancorTokento', JSON.stringify(params));
 
   let tokenkv = await context.storage.getReadWritableKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
 
@@ -15,16 +15,16 @@ export async function funcTransferLockBancorTokenTo(context: DposTransactionCont
   // check token type
   let rtnType = await tokenkv.kv!.get('type');
 
-  console.log(rtnType);
+  context.logger.info(JSON.stringify(rtnType));
 
   if (rtnType.err || rtnType.value !== 'lock_bancor_token') {
-    console.log('wrong type');
+    context.logger.error('wrong type');
     return ErrorCode.RESULT_NOT_SUPPORT;
   }
 
   let hret = await tokenkv.kv!.hgetall(context.caller);
   if (hret.err || hret.value!.length === 0) {
-    console.log('It is empty');
+    context.logger.error('It is empty');
     return ErrorCode.RESULT_DB_TABLE_FAILED;
   }
   let hret2 = context.getCurBlock();
@@ -35,8 +35,8 @@ export async function funcTransferLockBancorTokenTo(context: DposTransactionCont
 
   let fromTotal = new BigNumber(0);
   for (let p of hret.value!) {
-    console.log('item:')
-    console.log(p);
+    context.logger.debug('item:', JSON.stringify(p))
+
     let dueBlock = p.key;
     let value = p.value;
 
@@ -58,7 +58,7 @@ export async function funcTransferLockBancorTokenTo(context: DposTransactionCont
   }
 
   if (fromTotal.lt(amount)) {
-    console.log('Yang-- less than amount', amount);
+    context.logger.error('less than amount:', amount);
     return ErrorCode.RESULT_NOT_ENOUGH;
   }
 

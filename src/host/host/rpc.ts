@@ -228,7 +228,7 @@ export class ChainServer {
             let bftNum = tipState.getBftIRB();
             let proposedNum = tipState.getProposedIRB();
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
-            //console.log('Yang Jun --> ', num);
+            //console.log('--> ', num);
 
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());

@@ -6,38 +6,35 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
     // context.cost(context.fee);
     context.cost(context.fee);
 
-    // console.log('Yang-- received createBancorToken');
-    console.log(params);
+    context.logger.info('createBancoToken:', JSON.stringify(params));
 
     // 参数检查
     if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-        console.log('Yang-- quit becasue tokenid')
+        context.logger.error('quit becasue tokenid')
         return ErrorCode.RESULT_INVALID_PARAM;
     }
     if (!params.preBalances) {
-        console.log('Yang-- quit becasue preBalances')
+        context.logger.error('quit becasue preBalances')
         return ErrorCode.RESULT_INVALID_PARAM;
     }
 
     // supply has been incorporated into preBalances
     if (!params.factor || !bCheckBancorTokenFactor(params.factor)) {
-        console.log('Yang-- quit becasue factor')
+        context.logger.error('quit becasue factor')
         return ErrorCode.RESULT_INVALID_PARAM;
     }
-
-    // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
-    // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
 
     // put tokenid to uppercase
     let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
     if (kvRet.err) {
-        console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
+        context.logger.error('Quit for context.storage.createKeyValueWithDbname')
         return kvRet.err;
     }
 
     let kvCreator = await kvRet.kv!.set('creator', context.caller);
 
     if (kvCreator.err) {
+        context.logger.error('Set creator failure');
         return kvCreator.err;
     }
     await kvRet.kv!.set('type', 'lock_bancor_token');
@@ -46,35 +43,35 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
     if (params.preBalances) {
         for (let index = 0; index < params.preBalances.length; index++) {
             let item: IfBancorTokenItem = params.preBalances[index] as IfBancorTokenItem;
-            console.log('------ :', item);
+            context.logger.debug('------ :', item);
             // 按照address和amount预先初始化钱数
             if (item.amount === undefined
                 || item.address === undefined
                 || item.lock_amount === undefined
                 || item.time_expiration === undefined) {
-                console.log('undefined found!');
+                context.logger.error('undefined found!');
                 return ErrorCode.RESULT_WRONG_ARG;
             }
             if (!isANumber(item.amount)
                 || !isANumber(item.lock_amount)
                 || !isANumber(item.time_expiration)) {
-                console.log('Not a valid number');
+                context.logger.error('Not a valid number');
                 return ErrorCode.RESULT_WRONG_ARG;
             }
             let strAmount: string = strAmountPrecision(item.amount, BANCOR_TOKEN_PRECISION);
 
             // check address
             if (!isValidAddress(item.address)) {
-                console.log('Invalid address:', item.address);
+                context.logger.error('Invalid address:', item.address);
                 return ErrorCode.RESULT_CHECK_ADDRESS_INVALID;
             }
 
             let bnAmount = new BigNumber(strAmount);
-            console.log('bnAmount:', bnAmount);
+            context.logger.debug('bnAmount:', bnAmount);
             let hret = await kvRet.kv!.hset(item.address, '0', bnAmount);
 
             if (hret.err) {
-                console.log('set bnAmount fail');
+                context.logger.error('set bnAmount fail');
                 return hret.err;
             }
 
@@ -82,17 +79,17 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
             let strLockAmount: string = strAmountPrecision(item.lock_amount, BANCOR_TOKEN_PRECISION);
             //
             let bnLockAmount = new BigNumber(strLockAmount);
-            console.log('bnLockAmoutn: ', bnLockAmount);
+            context.logger.debug('bnLockAmoutn: ', bnLockAmount);
 
             if (!bnLockAmount.eq(0)) {
                 let curBlock = context.getCurBlock();
-                console.log('curBlock:', curBlock);
+                context.logger.debug('curBlock:', curBlock);
                 if (curBlock.eq(0)) {
                     return ErrorCode.RESULT_DB_RECORD_EMPTY;
                 }
                 let dueBlock: number = curBlock.toNumber() + parseInt(item.time_expiration) * 60 / configObj.global.blockInterval;
 
-                console.log('dueblock: ', dueBlock);
+                context.logger.debug('dueblock: ', dueBlock);
 
                 hret = await kvRet.kv!.hset(item.address, dueBlock.toString(), bnLockAmount);
 
@@ -105,7 +102,7 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
         }
     }
 
-    console.log('amountAll:', amountAll);
+    context.logger.debug('amountAll:', amountAll);
 
     // Setting bancor parameters
     // set Factor

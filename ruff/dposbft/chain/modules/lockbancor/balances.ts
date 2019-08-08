@@ -27,10 +27,10 @@ export async function funcGetLockBancorTokenBalances(context: DposViewContext, p
     // check token type
     let rtnType = await balancekv.kv!.get('type');
 
-    console.log(rtnType);
+    context.logger.info(JSON.stringify(rtnType));
 
     if (rtnType.err || rtnType.value !== 'lock_bancor_token') {
-        console.log('wrong type');
+        context.logger.error('wrong type');
         return {};
     }
     // addresses loop over
@@ -42,7 +42,7 @@ export async function funcGetLockBancorTokenBalances(context: DposViewContext, p
         // let dbToken = (await context.storage.getReadableDatabase(Chain.dbToken))
         let hret = await balancekv.kv!.hgetall(obj[i]);
         if (hret.err) {
-            console.log('It is empty');
+            context.logger.error('It is empty');
             return {};
         }
 
@@ -61,7 +61,7 @@ export async function funcGetLockBancorTokenBalances(context: DposViewContext, p
 
             let duetime = await context.getTimeFromBlock(parseInt(dueBlock));
             if (duetime < 0) {
-                console.log('get time from block fail');
+                context.logger.error('get time from block fail');
                 return {}
             }
 
