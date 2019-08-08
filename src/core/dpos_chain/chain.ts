@@ -101,7 +101,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             return hr.err;
         }
         this.m_epochTime = hr.header!.timestamp;
-        console.log('Yang Jun -- epochtime:', this.m_epochTime);
+        this.logger.info('epochtime:', this.m_epochTime);
         return ErrorCode.RESULT_OK;
     }
 
@@ -223,7 +223,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         // unmortgage
         externalContext.unmortgage = async (from: string, amount: BigNumber): Promise<ErrorCode> => {
             // let mr = await de.unmortgage(from, amount);
-            console.log('Yang Jun -- unmortgage dsvt');
+            this.logger.info('unmortgage dsvt');
             let mr = await dsvt.unmortgage(from, amount);
             if (mr.err) {
                 return mr.err;
@@ -260,45 +260,6 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         externalContext.getCurBlock = (): BigNumber => {
             return new BigNumber(this.tipBlockHeader!.number);
         }
-
-
-        /////////////////////////////////////////////
-
-        // externalContext.getVote = async (): Promise<Map<string, BigNumber>> => {
-        //     let gvr = await de.getVote();
-        //     if (gvr.err) {
-        //         throw new Error();
-        //     }
-        //     return gvr.vote!;
-        // };
-        // externalContext.getStake = async (address: string): Promise<BigNumber> => {
-        //     let gsr = await de.getStake(address);
-        //     // Add by Yang Jun 2019-5-21
-        //     console.log('Yang Jun --')
-        //     console.log('_newBlockExecutor getStake');
-        //     // let gsr = await dsvt.getStake(address);
-
-        //     if (gsr.err) {
-        //         throw new Error();
-        //     }
-        //     return gsr.stake!;
-        // };
-        // externalContext.getCandidates = async (): Promise<string[]> => {
-        //     let gc = await de.getCandidates();
-        //     if (gc.err) {
-        //         throw Error();
-        //     }
-        //     return gc.candidates!;
-        // };
-
-        // externalContext.getMiners = async (): Promise<string[]> => {
-        //     let gm = await de.getNextMiners();
-        //     if (gm.err) {
-        //         throw Error();
-        //     }
-
-        //     return gm.creators!;
-        // };
 
         let options: DposBlockExecutorOptions = {
             logger: this.logger,
@@ -337,7 +298,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             logger: this.m_logger,
             chain: this
         });
-        console.log('Yang Jun -- epochTime', this.epochTime);
+        this.logger.info('epochTime:', this.epochTime);
 
         ////////////////////////////
 
@@ -378,8 +339,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         externalContext.getStake = async (address: string): Promise<BigNumber> => {
             // let gsr = await de.getStake(address);
             // Add by Yang Jun 2019-5-21
-            console.log('Yang Jun --');
-            console.log('newViewExecutor getStake');
+            this.logger.info('newViewExecutor getStake');
 
             let gsr = await dsvt.getStake(address);
             if (gsr.err) {
@@ -393,7 +353,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             let gvr = await dsvt.getTicket(address);
             if (gvr.err) {
                 // throw new Error();
-                console.log('Error: getticket()', gvr.err);
+                this.logger.error('Error: getticket()', gvr.err);
             }
             return gvr.value!;
         };
@@ -537,7 +497,6 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         // Added by yang Jun 2019-3-30
         this.m_curMiner = this.chainTipState.getMiner();
         //
-        // this.logger.info('Yang Jun output:');
         // console.log('iRB: ', this.chainTipState.getIRB());
         // console.log('proposedIRB ', this.chainTipState.getProposedIRB());
         // console.log('bftirb ', (this.chainTipState as DposBftChainTipState).getBftIRB());

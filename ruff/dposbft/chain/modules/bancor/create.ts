@@ -4,32 +4,29 @@ import { bCheckTokenid, strAmountPrecision, BANCOR_TOKEN_PRECISION } from "../sc
 export async function funcCreateBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
-  // console.log('Yang-- received createBancorToken');
-  console.log(params);
+  context.logger.info('received createBancorToken:', JSON.stringify(params));
+
 
   // 参数检查
   if (!params.tokenid || !bCheckTokenid(params.tokenid)) {
-    // console.log('Yang-- quit becasue tokenid')
+    context.logger.error('quit becasue tokenid')
     return ErrorCode.RESULT_INVALID_PARAM;
   }
   if (!params.preBalances) {
-    // console.log('Yang-- quit becasue preBalances')
+    context.logger.error('quit becasue preBalances')
     return ErrorCode.RESULT_INVALID_PARAM;
   }
 
   // supply has been incorporated into preBalances
   if (!params.factor) {
-    // console.log('Yang-- quit becasue factor')
+    context.logger.error('quit becasue factor')
     return ErrorCode.RESULT_INVALID_PARAM;
   }
-
-  // console.log('Yang-- Before context.storage.createKeyValueWithDbname');
-  // console.log('Yang-- ', Chain.dbToken, ' ', params.tokenid);
 
   // put tokenid to uppercase
   let kvRet = await context.storage.createKeyValueWithDbname(Chain.dbToken, params.tokenid.toUpperCase());
   if (kvRet.err) {
-    console.log('Yang-- Quit for context.storage.createKeyValueWithDbname')
+    context.logger.error('Quit for context.storage.createKeyValueWithDbname')
     return kvRet.err;
   }
 

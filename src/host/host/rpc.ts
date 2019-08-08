@@ -68,7 +68,7 @@ export class ChainServer {
                     this.m_logger.debug(`rpc server txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
 
                     // Yang Jun added 2019-4-8
-                    // this.m_logger.info('Yang Jun tx.input');
+                    // this.m_logger.info('tx.input');
                     if (tx.input.tokenid) {
                         tx.input.tokenid = tx.input.tokenid.toUpperCase();
                     }
@@ -216,7 +216,6 @@ export class ChainServer {
         });
 
         this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
-            //console.log('Yang Jun --> m_chain');
             // Yang Jun 2019-3-18
             // let dChain = this.m_chain as DposChain;
             // let num = dChain.getCustomLIB();
