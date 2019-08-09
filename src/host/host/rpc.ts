@@ -148,13 +148,13 @@ export class ChainServer {
             await promisify(resp.end.bind(resp)());
         });
 
-        this.m_server!.on('getBlock', async (params: { which: number | string | 'latest', transactions?: boolean, eventLog?: boolean }, resp) => {
+        this.m_server!.on('getBlock', async (params: { which: number | string | 'latest', transactions?: boolean, eventLog?: boolean, receipts?: boolean }, resp) => {
             let hr = await this.m_chain.getHeader(params.which);
             if (hr.err) {
                 await promisify(resp.write.bind(resp)(JSON.stringify({ err: hr.err })));
             } else {
                 // 是否返回 block的transactions内容
-                if (params.transactions || params.eventLog) {
+                if (params.transactions || params.eventLog || params.receipts) {
                     let block = await this.m_chain.getBlock(hr.header!.hash);
                     if (block) {
                         // 处理block content 中的transaction, 然后再响应请求
@@ -164,6 +164,12 @@ export class ChainServer {
                         }
                         if (params.eventLog) {
                             res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
+                        }
+                        // Added by Yang Jun 2019-8-9
+                        if (params.receipts) {
+                            res.receipts = block.content.receipts.map((receipt: Receipt) => {
+                                receipt.stringify();
+                            });
                         }
                         await promisify(resp.write.bind(resp)(JSON.stringify(res)));
                     }
@@ -175,7 +181,7 @@ export class ChainServer {
         });
 
         // Yang Jun 2019-4-11
-        this.m_server!.on('getBlocks', async (params: { min: number, max: number, transactions?: boolean, eventLog?: boolean }, resp) => {
+        this.m_server!.on('getBlocks', async (params: { min: number, max: number, transactions?: boolean, eventLog?: boolean, receipts?: boolean }, resp) => {
             let output: any = { err: ErrorCode.RESULT_OK, blocks: [] };
 
             let max_num = (params.max - params.min) >= 50 ? 50 : (params.max - params.min);
@@ -196,6 +202,12 @@ export class ChainServer {
                             }
                             if (params.eventLog) {
                                 res.eventLogs = block.content.eventLogs.map((log: EventLog) => log.stringify());
+                            }
+                            // Added by Yang Jun 2019-8-9
+                            if (params.receipts) {
+                                res.receipts = block.content.receipts.map((receipt: Receipt) => {
+                                    receipt.stringify();
+                                });
                             }
                             output.blocks.push(res);
                         }
