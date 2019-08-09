@@ -112,8 +112,8 @@ const DB_NAME_MAX_LEN = 12;
 
 function containInvalidWord(name: string) {
   if (name.includes('COMMIT') ||
-      name.includes('BEGIN') ||
-      name.includes('ROLLBACK')) {
+    name.includes('BEGIN') ||
+    name.includes('ROLLBACK')) {
     return true;
   }
   return false;
@@ -173,40 +173,40 @@ export async function getTokenBalance(balanceKv: IReadableKeyValue, address: str
 }
 
 export interface IfConfigGlobal {
-    handler: string;
-    type: {
-        consensus: string;
-        features: any[]
-    };
+  handler: string;
+  type: {
+    consensus: string;
+    features: any[]
+  };
 
-    global: {
-        minCreateor: number;
-        maxCreateor: number;
-        reSelectionBlocks: number;
-        blockInterval: number;
-        timeOffsetToLastBlock: number;
-        timeBan: number;
-        unbanBlocks: number;
-        dposVoteMaxProducers: number;
-        maxBlockIntervalOffset: number;
-        depositAmount: number;
-        depositPeriod: number;
-        mortgagePeriod: number;
-        heightIntervalForUserCode: number;
-    };
+  global: {
+    minCreateor: number;
+    maxCreateor: number;
+    reSelectionBlocks: number;
+    blockInterval: number;
+    timeOffsetToLastBlock: number;
+    timeBan: number;
+    unbanBlocks: number;
+    dposVoteMaxProducers: number;
+    maxBlockIntervalOffset: number;
+    depositAmount: number;
+    depositPeriod: number;
+    mortgagePeriod: number;
+    heightIntervalForUserCode: number;
+  };
 }
 
 let configObj: IfConfigGlobal | any = { global: {} };
 
-export function readConfigFile() {
-  // Added by Yang Jun 2019-3-27
-  let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
-  try {
-    configObj = JSON.parse(configBuffer.toString())
-  } catch (e) {
-    throw new Error('handler.ts read ./config.json')
-  }
-}
+// export function readConfigFile() {
+//   // Added by Yang Jun 2019-3-27
+//   let configBuffer = fs.readFileSync('./dist/blockchain-sdk/ruff/dposbft/chain/config.json');
+//   try {
+//     configObj = JSON.parse(configBuffer.toString())
+//   } catch (e) {
+//     throw new Error('handler.ts read ./config.json')
+//   }
+// }
 
 export function getConfigObj(): IfConfigGlobal {
   return configObj;

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import * as process from 'process';
 import * as path from 'path';
-import {host as chainhost} from '../host';
-import {initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger} from '../common/';
+import { host as chainhost } from '../host';
+import { initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger } from '../common/';
+import { startMonitor } from '../../ruff/dposbft/chain/modules/monitor';
 
 Error.stackTraceLimit = 1000;
 
@@ -26,17 +27,21 @@ export async function run(argv: string[]) {
 
     if (command.options.has('dataDir')) {
         initUnhandledRejection(initLogger({
-            loggerOptions: {console: true, file: {root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log'}}
+            loggerOptions: { console: true, file: { root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log' } }
         }));
         if (command.options.has('vmLogLevel')) {
             process.env['RUFFVM_LOG_LEVEL'] = command.options.get('vmLogLevel').toUpperCase();
-            process.env['RUFFVM_LOG_FILE'] =  path.join(process.cwd(), command.options.get('dataDir'), 'vm.log');
+            process.env['RUFFVM_LOG_FILE'] = path.join(process.cwd(), command.options.get('dataDir'), 'vm.log');
         }
     }
     let exit: boolean = false;
     if (command.command === 'peer') {
+        // start performance monitor, by Yang Jun 2019-8-9
+        startPeerMonitor(command.options);
         exit = !(await chainhost.initPeer(command.options)).ret;
     } else if (command.command === 'miner') {
+        // start performance monitor
+        startMinerMonitor(command.options);
         exit = !(await chainhost.initMiner(command.options)).ret;
     } else if (command.command === 'create') {
         await chainhost.createGenesis(command.options);
