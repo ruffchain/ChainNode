@@ -167,9 +167,7 @@ export class ChainServer {
                         }
                         // Added by Yang Jun 2019-8-9
                         if (params.receipts) {
-                            res.receipts = block.content.receipts.map((receipt: Receipt) => {
-                                receipt.stringify();
-                            });
+                            res.receipts = block.content.getTxReceipts();
                         }
                         await promisify(resp.write.bind(resp)(JSON.stringify(res)));
                     }
@@ -205,9 +203,7 @@ export class ChainServer {
                             }
                             // Added by Yang Jun 2019-8-9
                             if (params.receipts) {
-                                res.receipts = block.content.receipts.map((receipt: Receipt) => {
-                                    receipt.stringify();
-                                });
+                                res.receipts = block.content.getTxReceipts();
                             }
                             output.blocks.push(res);
                         }

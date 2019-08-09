@@ -253,6 +253,22 @@ export class BlockContent implements Serializable {
         }
         return null;
     }
+    // Add by Yang Jun 2019-8-9
+    public getTxReceipts(): { hash: string, receipt: Receipt }[] {
+        let output: { hash: string, receipt: Receipt }[] = [];
+
+        this.m_txReceipts.forEach((receipt, key) => {
+            output.push(
+                {
+                    hash: key,
+                    receipt: receipt
+                }
+            );
+        });
+
+        return output;
+    }
+
 
     public getReceipt(options: string | { sourceType: ReceiptSourceType.preBlockEvent | ReceiptSourceType.postBlockEvent, eventIndex: number }): Receipt | undefined {
         if (isString(options)) {
