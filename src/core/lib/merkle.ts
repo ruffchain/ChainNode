@@ -51,7 +51,6 @@ export function createTree(leaves: Buffer[]): [Buffer[], boolean] {
                 right = nodes[i + nR];
                 hash = digest.root256(left, right);
             }
-
             nodes.push(hash);
         }
         i += size;
