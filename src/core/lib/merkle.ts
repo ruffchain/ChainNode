@@ -51,7 +51,7 @@ export function createTree(leaves: Buffer[]): [Buffer[], boolean] {
                 right = nodes[i + nR];
                 hash = digest.root256(left, right);
             }
-            console.log('');
+            //console.log('');
 
             nodes.push(hash);
         }
