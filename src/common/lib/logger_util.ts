@@ -7,7 +7,7 @@ const { LogShim } = require('./log_shim');
 
 export type LoggerOptions = {
     logger?: LoggerInstance;
-    loggerOptions?: { console: boolean, file?: { root: string, filename?: string }, level?: string };
+    loggerOptions?: { console: boolean, file?: { root: string, filename?: string }, level?: string, dumpStack?: boolean};
 };
 
 export function initLogger(options: LoggerOptions): LoggerInstance {
@@ -23,25 +23,7 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
                 humanReadableUnhandledException: true
             }));
         }
-        //if (options.loggerOptions.file) {
-        //    fs.ensureDirSync(options.loggerOptions.file.root);
-        //    loggerTransports.push(new transports.File({
-        //        json: false,
-        //        level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
-        //        timestamp: true,
-        //        filename: path.join(options.loggerOptions.file.root, options.loggerOptions.file.filename || 'info.log'),
-        //        datePattern: 'yyyy-MM-dd.',
-        //        prepend: true,
-        //        handleExceptions: true,
-        //        humanReadableUnhandledException: true
-        //    }));
-        //}
-        // Yang Jun 2019-3-15
-        //
-        //const logger = new Logger({
-        //    level: options.loggerOptions.level || 'info',
-        //    transports: loggerTransports
-        //});
+
         let logger: any;
         logger = new Logger({
             transports: []
@@ -63,7 +45,11 @@ export function initLogger(options: LoggerOptions): LoggerInstance {
             level: options.loggerOptions.level ? options.loggerOptions.level : 'info',
             transports: loggerTransports,
         });
-        return new LogShim(logger).log;
+        let shimOption = { enableGetStack: false}
+        if (options.loggerOptions.dumpStack) {
+            shimOption = { enableGetStack: true }
+        };
+        return new LogShim(logger, shimOption).log;
     } else {
         const loggerTransports = [];
         loggerTransports.push(new transports.Console({
