@@ -82,7 +82,6 @@ export const userCodeSchema = Joi.object().keys({
 export function genChecker(schema: BaseJoi.AnySchema): TxPendingChecker {
     return (tx: Transaction) => {
         if (schema.validate(tx.input).error) {
-            console.log(schema.validate(tx.input).error);
             return ErrorCode.RESULT_INVALID_PARAM;
         } else {
             return ErrorCode.RESULT_OK;
