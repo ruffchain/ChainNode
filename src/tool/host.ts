@@ -3,7 +3,7 @@ import * as process from 'process';
 import * as path from 'path';
 import { host as chainhost } from '../host';
 import { initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger } from '../common/';
-import { startMonitor } from '../../ruff/dposbft/chain/modules/monitor';
+import { startPeerMonitor, startMinerMonitor } from '../../ruff/dposbft/chain/modules/monitor';
 
 Error.stackTraceLimit = 1000;
 
