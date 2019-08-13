@@ -991,7 +991,7 @@ export class Chain extends EventEmitter implements IConsistency {
                 return { err: ErrorCode.RESULT_INVALID_BLOCK };
             }
             let saveRet = await this.m_headerStorage!.saveHeader(header);
-            if (saveRet) {
+            if (saveRet != ErrorCode.RESULT_OK) {
                 return { err: saveRet };
             }
         }
@@ -1091,6 +1091,7 @@ export class Chain extends EventEmitter implements IConsistency {
                     return await this._beginSyncWithConnection(connSync, hsr.header!.hash);
                 } else if (vsh.err) {
                     // TODO：本地出错，可以重新请求？
+                    this.m_logger.error(`vsh error ${vsh.err} when _verifyAndSaveHeaders`);
                     return vsh.err;
                 }
                 connSync!.lastRecvHeader = headers[headers.length - 1];
@@ -1130,7 +1131,12 @@ export class Chain extends EventEmitter implements IConsistency {
                     break;
                 }
                 assert(headerResult.header && headerResult.verified !== undefined);
-
+                let headerResult1 = await this.m_headerStorage!.getHeader(block.header.preBlockHash);
+                if (options && options.remote) {
+                    if (!headerResult1.err) {
+                        this.m_node!.requestBlocks(options.remote, { headers: [headerResult.header!] });
+                    }
+                }
                 if (headerResult.verified === VERIFY_STATE.verified
                     || headerResult.verified === VERIFY_STATE.invalid) {
                     this.m_logger.info(`ignore block for block has been verified as ${headerResult.verified}`);
@@ -1150,6 +1156,13 @@ export class Chain extends EventEmitter implements IConsistency {
                 assert(headerResult.header && headerResult.verified !== undefined);
                 if (headerResult.verified === VERIFY_STATE.notVerified) {
                     this.m_logger.info(`ignore block for previous header hash: ${block.header.preBlockHash} hasn't been verified`);
+                    if (options && options.remote) {
+                        this.m_logger.info(`before send request to ${options.remote} with block ${block.header.preBlockHash}`);
+                        let headerResult = await this.m_headerStorage!.getHeader(block.header.preBlockHash);
+                        if (!headerResult.err) {
+                            this.m_node!.requestBlocks(options.remote, { headers: [headerResult.header!] });
+                        }
+                    }
                     err = ErrorCode.RESULT_SKIPPED;
                     break;
                 } else if (headerResult.verified === VERIFY_STATE.invalid) {
@@ -1319,7 +1332,7 @@ export class Chain extends EventEmitter implements IConsistency {
     }
 
     protected async _addVerifiedBlock(block: Block, storage: StorageDumpSnapshot): Promise<ErrorCode> {
-        this.m_logger.info(`begin add verified block to chain`);
+        this.m_logger.info(`begin add verified block to chain ${block.number} ${block.hash}`);
         assert(this.m_headerStorage);
         assert(this.m_tip);
 
