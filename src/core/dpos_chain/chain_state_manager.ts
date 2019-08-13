@@ -107,10 +107,13 @@ export class DposChainTipStateManager {
         if (compareHeader.preBlockHash === tipHeader.hash) {
             return {err: ErrorCode.RESULT_OK, result: 0};
         }
-        assert(this.m_bestTipState!.tip === tipHeader, `best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
+        // Tope Add
         if (this.m_bestTipState!.tip !== tipHeader) {
-            return {err: ErrorCode.RESULT_NOT_FOUND};
+            this.m_logger.error(`#### best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
         }
+        //if (this.m_bestTipState!.tip !== tipHeader) {
+        //    return {err: ErrorCode.RESULT_NOT_FOUND};
+        //}
         const bestTipState = this.m_bestTipState!;
         // compareHeader没有和specilHeader在specil的lib处相交，那么compareHeader的lib一定小于specilHeader的
         let prev: string = compareHeader.hash;
@@ -122,6 +125,7 @@ export class DposChainTipStateManager {
             }
 
             if (prev === bestTipState!.IRB.hash) {
+                assert(n === bestTipState.IRB.number);
                 break;
             }
 
@@ -129,7 +133,8 @@ export class DposChainTipStateManager {
             n--;
         }
 
-        if (n > bestTipState.IRB.number) {
+        // Just ignore this block if the IRB number not meet
+        if (n < bestTipState.IRB.number) {
             return { err: ErrorCode.RESULT_OK, result: -1 };
         }
 
@@ -191,7 +196,7 @@ export class DposChainTipStateManager {
 
         if (!newState) {
             newState = this._newChainTipState(bestTipState.IRB);
-            this.m_logger.error('#### Set fromIndex to 1');
+            this.m_logger.error(`#### Set fromIndex to 1 bestTipState IRB is ${bestTipState.IRB.number} hash is ${bestTipState.IRB.hash}`);
             fromIndex = 1;
         } else {
             fromIndex += 1;

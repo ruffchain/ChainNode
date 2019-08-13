@@ -255,7 +255,7 @@ export class SqliteStorageKeyValue implements IReadWritableKeyValue {
     /////////////////////
 
     public async lindex(key: string, index: number): Promise<{ err: ErrorCode; value?: any; }> {
-        return this.hget(key, index.toString());
+        return await this.hget(key, index.toString());
     }
 
     public async lset(key: string, index: number, value: any): Promise<{ err: ErrorCode; }> {
@@ -562,8 +562,13 @@ export class SqliteReadWritableDatabase extends SqliteReadableDatabase implement
             err = ErrorCode.RESULT_ALREADY_EXIST;
         } else {
             err = ErrorCode.RESULT_OK;
-            await this.m_db!.prepare(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
-            (name TEXT, field TEXT, value TEXT, unique(name, field))`).run();
+            try {
+                this.m_db!.prepare(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
+                (name TEXT, field TEXT, value TEXT, unique(name, field))`).run();
+            } catch (e) {
+                this.logger.error(`Create table ${fullName} failed `, e);
+                return { err: ErrorCode.RESULT_EXCEPTION };
+            }
         }
         let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
         return { err, kv: tbl };
@@ -586,7 +591,7 @@ export class SqliteReadWritableDatabase extends SqliteReadableDatabase implement
         this.logger.info('Yang-- fullName is:', fullName);
 
         try {
-            let ret =this.m_db!.prepare(`SELECT COUNT(*) FROM sqlite_master where type='table' and name=?`).get(fullName);
+            let ret = this.m_db!.prepare(`SELECT COUNT(*) FROM sqlite_master where type='table' and name=?`).get(fullName);
             count = ret['COUNT(*)'];
         } catch (e) {
             this.logger.error(`select table name failed `, e);
@@ -597,8 +602,13 @@ export class SqliteReadWritableDatabase extends SqliteReadableDatabase implement
             return { err: ErrorCode.RESULT_ALREADY_EXIST };
         } else {
             err = ErrorCode.RESULT_OK;
-            await this.m_db!.exec(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
-                (name TEXT, field TEXT, value TEXT, unique(name, field))`);
+            try {
+                this.m_db!.prepare(`CREATE TABLE IF NOT EXISTS  '${fullName}'\
+                    (name TEXT, field TEXT, value TEXT, unique(name, field))`).run();
+            } catch (e) {
+                this.logger.error(`Create table ${fullName} failed `, e);
+                return { err: ErrorCode.RESULT_EXCEPTION };
+            }
         }
         let tbl = new SqliteStorageKeyValue(this.m_db!, fullName, this.logger);
         return { err: ErrorCode.RESULT_OK, kv: tbl };
@@ -692,7 +702,7 @@ export class SqliteStorage extends Storage {
 
     public async uninit(): Promise<ErrorCode> {
         if (this.m_db) {
-            await this.m_db.close();
+            this.m_db.close();
             delete this.m_db;
         }
 
