@@ -105,7 +105,7 @@ abstract class Monitor {
     private initNodeInfo(key: string, type: string, options: Map<string, any>): void {
         let o = this.nodeInfo as any;
         if (options.get(key)) {
-            o[key] = options.get(key);
+            o[key] = options.get(key)
         } else if (type === 'string') {
             o[key] = '';
         } else if (type === 'number') {
