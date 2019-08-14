@@ -76,7 +76,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
 
     handler.addViewMethod('getUserTableValue', getUserTableValue);
 
-    handler.addTX('runUserMethod', runUserMethod);
+    handler.addTX('runUserMethod', runUserMethod, genChecker());
 
     ////////////////
     // token about
