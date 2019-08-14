@@ -1,4 +1,5 @@
 import { TxPendingChecker, Transaction } from '../core/chain';
+import { ValueTransaction } from '../core/value_chain/transaction'
 import * as BaseJoi from '@hapi/joi';
 import { ErrorCode } from './error_code';
 import { BigNumberExtension } from './joi-extend';
@@ -79,13 +80,21 @@ export const userCodeSchema = Joi.object().keys({
     userCode: Joi.binary().max(100*1024).required()
 });
 
-export function genChecker(schema: BaseJoi.AnySchema): TxPendingChecker {
+export function genChecker(schema?: BaseJoi.AnySchema): TxPendingChecker {
     return (tx: Transaction) => {
-        if (schema.validate(tx.input).error) {
-            console.log(schema.validate(tx.input).error);
+        const valueTx = tx as ValueTransaction;
+        try {
+            let dp = valueTx.value.decimalPlaces();
+            if (dp >= 0 && dp <= 9) {
+                if (schema && schema.validate(tx.input).error) {
+                    return ErrorCode.RESULT_INVALID_PARAM;
+                }
+                return ErrorCode.RESULT_OK;
+            } else {
+                return ErrorCode.RESULT_INVALID_PARAM;
+            }
+        } catch(err) {
             return ErrorCode.RESULT_INVALID_PARAM;
-        } else {
-            return ErrorCode.RESULT_OK;
         }
     };
 }

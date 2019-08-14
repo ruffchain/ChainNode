@@ -1,5 +1,5 @@
 import {ErrorCode, Block, BlockHeader, Chain} from '../../core';
-import * as sqlite from 'sqlite';
+import * as sqlite from 'better-sqlite3';
 
 export type ElementOptions = {
     chain: Chain;

@@ -1,12 +1,14 @@
 import {ErrorCode, LoggerInstance, Chain, Transaction, Block} from '../../core';
 
 import {IElement, ElementOptions} from '../context/element';
-import * as sqlite from 'sqlite';
+import * as sqlite from 'better-sqlite3';
 const assert = require('assert');
 
-let initSql: string = 'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "address" CHAR(64) NOT NULL, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);';
-initSql += 'CREATE INDEX IF NOT EXISTS "index_blockheight" on "txview" ("blockheight")';
-initSql += 'CREATE INDEX IF NOT EXISTS "index_address" on "txview" ("address")';
+let initSql: string[] = [
+    'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "address" CHAR(64) NOT NULL, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);',
+    'CREATE INDEX IF NOT EXISTS "index_blockheight" on "txview" ("blockheight")',
+    'CREATE INDEX IF NOT EXISTS "index_address" on "txview" ("address")'
+];
 
 export class TxStorage implements IElement {
     private m_db?: sqlite.Database;
@@ -24,7 +26,12 @@ export class TxStorage implements IElement {
         this.m_db = db;
 
         try {
-            await this.m_db!.run(initSql);
+            this.m_db!.pragma('journal_mode = WAL');
+            this.m_db!.pragma('synchronous = NORMAL');
+            initSql.forEach(item => {
+                this.m_db!.prepare(item).run();
+            });
+            //await this.m_db!.prepare(initSql).run()
         } catch (e) {
             this.m_logger.error(`txstorage init failed e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -35,9 +42,11 @@ export class TxStorage implements IElement {
 
     public async addBlock(block: Block): Promise<ErrorCode> {
         try {
-            for (let tx of block.content.transactions) { 
-                await this.m_db!.run(`insert into txview (txhash, address, blockheight, blockhash) values ("${tx.hash}","${tx.address}", ${block.number}, "${block.hash}")`);
-            }    
+            for (let tx of block.content.transactions) {
+                this.m_db!
+                    .prepare(`insert into txview (txhash, address, blockheight, blockhash) values ("${tx.hash}","${tx.address}", ${block.number}, "${block.hash}")`)
+                    .run();
+            }
         } catch (e) {
             this.m_logger.error(`txstorage, add exception,error=${e},blockhash=${block.hash}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -48,7 +57,7 @@ export class TxStorage implements IElement {
 
     public async revertToBlock(num: number): Promise<ErrorCode> {
         try {
-            await this.m_db!.run(`delete from txview where blockheight > ${num}`);
+            this.m_db!.prepare(`delete from txview where blockheight > ${num}`).run();
         } catch (e) {
             this.m_logger.error(`txstorage,remove exception,error=${e},height=${num}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -59,8 +68,8 @@ export class TxStorage implements IElement {
 
     public async get(txHash: string): Promise<{err: ErrorCode, blockhash?: string}> {
         try {
-            let result = await this.m_db!.get(`select blockhash from txview where txhash="${txHash}"`);
-            if (!result || result.blockhash === undefined) { 
+            let result = this.m_db!.prepare(`select blockhash from txview where txhash="${txHash}"`).get();
+            if (!result || result.blockhash === undefined) {
                 return {err: ErrorCode.RESULT_NOT_FOUND};
             }
 
@@ -73,7 +82,7 @@ export class TxStorage implements IElement {
 
     public async getCountByAddress(address: string): Promise<{err: ErrorCode, count?: number}> {
         try {
-            let result = await this.m_db!.get(`select count(*) as value from txview where address="${address}"`);
+            let result = this.m_db!.prepare(`select count(*) as value from txview where address="${address}"`).get();
             if (!result || result.value === undefined) {
                 return {err: ErrorCode.RESULT_FAILED};
             }
@@ -87,7 +96,7 @@ export class TxStorage implements IElement {
 
     public async getTransactionByAddress(address: string): Promise<{err: ErrorCode, txs?: Transaction[]}> {
         try {
-            let result = await this.m_db!.all(`select txhash from txview where address="${address}"`);
+            let result = this.m_db!.prepare(`select txhash from txview where address="${address}"`).all();
             if (!result || result.length === 0) {
                 return {err: ErrorCode.RESULT_NOT_FOUND};
             }

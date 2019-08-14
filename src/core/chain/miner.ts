@@ -32,7 +32,7 @@ export class Miner extends EventEmitter {
         this.m_constructOptions = options;
         this.m_logger = options.logger!;
         this.m_state = MinerState.none;
-        
+
     }
 
     get chain(): Chain {
@@ -44,7 +44,7 @@ export class Miner extends EventEmitter {
         if (this.m_state > MinerState.none) {
             return ErrorCode.RESULT_OK;
         }
-        
+
         this.m_chain = this._chainInstance();
         let err = await this.m_chain!.initComponents();
         if (err) {
@@ -71,7 +71,7 @@ export class Miner extends EventEmitter {
     }
 
     public parseInstanceOptions(options: {
-        parsed: any, 
+        parsed: any,
         origin: Map<string, any>
     }): {err: ErrorCode, value?: any} {
         const chainRet = this.m_chain!.parseInstanceOptions(options);
@@ -161,7 +161,7 @@ export class Miner extends EventEmitter {
             return;
         }
         this.m_state = MinerState.idle;
-        delete this.m_stateContext; 
+        delete this.m_stateContext;
     }
 
     protected _checkCancel(name: string) {
@@ -171,8 +171,8 @@ export class Miner extends EventEmitter {
         if (this.m_state > MinerState.idle) {
             if (this.m_stateContext!.name !== name) {
                 return true;
-            } 
-        } 
+            }
+        }
         return false;
     }
 
@@ -181,7 +181,7 @@ export class Miner extends EventEmitter {
             if (context && context.routine) {
                 context.routine.cancel();
             }
-        } 
+        }
     }
 
     protected async _createExecuteRoutine(block: Block): Promise<{err: ErrorCode, routine?: BlockExecutorRoutine, next?: () => Promise<{err: ErrorCode, block?: Block}>}> {
@@ -194,7 +194,7 @@ export class Miner extends EventEmitter {
                     let state = this.m_state;
                     let context = this.m_stateContext;
                     this.m_state = MinerState.idle;
-                    delete this.m_stateContext; 
+                    delete this.m_stateContext;
                     this._onCancel(state, context);
                 }
             } else {
@@ -256,6 +256,7 @@ export class Miner extends EventEmitter {
                 await routine.storage!.remove();
                 return {err};
             }
+            //routine.storage.uninit();
             let ssr = await this.chain.storageManager.createSnapshot(routine.storage, routine.block.hash, true);
             if (ssr.err) {
                 return {err: ssr.err};
@@ -287,20 +288,20 @@ export class Miner extends EventEmitter {
     }
 
     /**
-     * virtual 
-     * @param chain 
-     * @param tipBlock 
+     * virtual
+     * @param chain
+     * @param tipBlock
      */
     protected async _onTipBlock(chain: Chain, tipBlock: BlockHeader): Promise<void> {
     }
 
     /**
      * virtual
-     * @param block 
+     * @param block
      */
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;
-    } 
+    }
 
     protected async _decorateBlock(block: Block): Promise<ErrorCode> {
         return ErrorCode.RESULT_OK;

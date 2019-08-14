@@ -61,26 +61,31 @@ describe('headerStorage', () => {
             let best = 0;
             let ph = gh;
             console.log(`save 10 headers`);
-            for (let ix = 0; ix < 10; ++ix) {
+            let count = 2000;
+            for (let ix = 0; ix < count; ++ix) {
                 let h = new BlockHeader();
                 h.setPreBlock(ph);
                 h.timestamp = ++t;
                 h.updateHash();
                 ph = h;
+                let start = Date.now();
                 assert(!(await headerStorage.saveHeader(h)), `${ix} save header err`);
+                let end = Date.now();
                 assert(!(await headerStorage.changeBest(h)), `${ix} changeBest err`);
                 best = h.number;
                 let _hr = await headerStorage.getHeader(h.number);
                 assert(!_hr.err, `${ix} getHeader err`);
                 assert(_hr.header!.hash === h.hash, `${ix} saveHeader value err`);
             }
+            let start = Date.now();
             let hr = await headerStorage.getHeader(best - 3);
+            let end = Date.now();
             assert(!hr.err, `get ${best - 3} header err`);
             let fork = hr.header!;
             ph = fork;
             let fh = [];
             console.log(`fork from ${best - 3}`);
-            for (let ix = 0; ix < 4; ++ix) {
+            for (let ix = 0; ix < 10; ++ix) {
                 let h = new BlockHeader();
                 h.setPreBlock(ph);
                 h.timestamp = ++t;

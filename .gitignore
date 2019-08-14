@@ -10,6 +10,7 @@ yarn.lock
 .projectile
 config.tar.gz
 distDocker/
-
+cscope.*
+tags*
 ruff/dposbft/*.sh
 !ruff/dposbft/create.sh

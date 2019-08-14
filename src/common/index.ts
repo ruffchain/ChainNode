@@ -9,5 +9,6 @@ export * from './lib/logger_util';
 export * from './schema';
 export {BigNumber} from 'bignumber.js';
 export * from './simple_command';
+export * from './wal_util';
 export {init as initUnhandledRejection} from './unhandled_rejection';
 export {rejectifyValue, rejectifyErrorCode} from './rejectify';

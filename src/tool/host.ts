@@ -27,7 +27,13 @@ export async function run(argv: string[]) {
 
     if (command.options.has('dataDir')) {
         initUnhandledRejection(initLogger({
-            loggerOptions: { console: true, file: { root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log' } }
+
+            loggerOptions: {
+                console: true,
+                file: { root: path.join(process.cwd(), command.options.get('dataDir')), filename: 'exception.log' },
+                dumpStack: true
+            }
+
         }));
         if (command.options.has('vmLogLevel')) {
             process.env['RUFFVM_LOG_LEVEL'] = command.options.get('vmLogLevel').toUpperCase();

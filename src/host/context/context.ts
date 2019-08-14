@@ -1,8 +1,7 @@
 import { Chain, LoggerInstance, ErrorCode, BlockHeader, stringifyErrorCode, EventLog, Block } from '../../core';
 import { isNullOrUndefined, isString, isObject } from 'util';
 import * as path from 'path';
-import * as sqlite from 'sqlite';
-import * as sqlite3 from 'sqlite3';
+import * as sqlite from 'better-sqlite3';
 import { ElementCreator, elementRegister as ElementRegister } from './element_creator';
 import { IElement, ElementOptions } from './element';
 import * as fs from 'fs-extra';
@@ -65,11 +64,14 @@ export class HostChainContext {
             }
         }
 
-        let sqliteOptions: any = {};
-        sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE;
+        //let sqliteOptions: any = {};
+        //sqliteOptions.mode = sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE;
         try {
-            this.m_db = await sqlite.open(dbpath, sqliteOptions);
-            await this.m_db!.run(initBlockTableSql);
+            this.m_db = new sqlite(dbpath);
+            this.m_db.pragma('locking_mode = EXCLUSIVE');
+            this.m_db.pragma('synchronous  = NORMAL');
+            this.m_db.pragma('journal_mode = WAL');
+            this.m_db!.prepare(initBlockTableSql).run();
         } catch (e) {
             this.m_logger.error(`HostChainContext init failed for open database failed, e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
@@ -92,7 +94,7 @@ export class HostChainContext {
     protected async _getLatestBlock(): Promise<{ err: ErrorCode, latest?: { number: number, hash: string } }> {
         let latest;
         try {
-            latest = await this.m_db!.get(`SELECT * FROM blocks ORDER BY number DESC`);
+            latest = this.m_db!.prepare(`SELECT * FROM blocks ORDER BY number DESC`).get();
         } catch (e) {
             this.m_logger.error('sql get latest block failed ', e);
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -106,7 +108,7 @@ export class HostChainContext {
     protected async _getBlockByNumber(num: number): Promise<{ err: ErrorCode, latest?: { number: number, hash: string } }> {
         let latest;
         try {
-            latest = await this.m_db!.get(`SELECT * FROM blocks where number=${num}`);
+            latest = this.m_db!.prepare(`SELECT * FROM blocks where number=${num}`).get();
         } catch (e) {
             this.m_logger.error('sql get latest block failed ', e);
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -120,7 +122,7 @@ export class HostChainContext {
 
     protected async _addBlockToElements(block: Block): Promise<{ err: ErrorCode, failedName?: string }> {
         try {
-            await this.m_db!.run(`INSERT INTO blocks (number, hash) VALUES (${block.number}, "${block.hash}")`);
+            this.m_db!.prepare(`INSERT INTO blocks (number, hash) VALUES (${block.number}, "${block.hash}")`).run();
         } catch (e) {
             this.m_logger.info(`HostChainContext, _addBlockToElements failed e=${e}`);
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -137,7 +139,7 @@ export class HostChainContext {
 
     protected async _revertToBlock(num: number): Promise<{ err: ErrorCode, failedName?: string }> {
         try {
-            await this.m_db!.run(`delete from blocks where number > ${num}`);
+            this.m_db!.prepare(`delete from blocks where number > ${num}`).run();
         } catch (e) {
             this.m_logger.info(`HostChainContext, _revertToBlock failed e=${e}`);
             return { err: ErrorCode.RESULT_EXCEPTION };
@@ -240,14 +242,14 @@ export class HostChainContext {
     }
 
     protected async _beginTranscation() {
-        await this.m_db!.run('BEGIN;');
+        this.m_db!.prepare('BEGIN;').run();
     }
 
     protected async _commit() {
-        await this.m_db!.run('COMMIT;');
+        this.m_db!.prepare('COMMIT;').run();
     }
 
     protected async _rollback() {
-        await this.m_db!.run('ROLLBACK;');
+        this.m_db!.prepare('ROLLBACK;').run();
     }
 }

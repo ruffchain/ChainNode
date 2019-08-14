@@ -12,7 +12,7 @@ import {TxStorage} from '../tx/element';
 
 export class ChainHost {
     constructor() {
-        
+
     }
 
     protected async _initContextServer(options: {chain: Chain, commandOptions: CommandOptions}): Promise<{err: ErrorCode, chainContext?: HostChainContext}> {
@@ -27,7 +27,7 @@ export class ChainHost {
             console.info('chain_host _initContextServer not need support');
             return {err: ErrorCode.RESULT_OK};
         }
-        
+
         let chainContext = new HostChainContext({chain: options.chain});
         const err = await chainContext.init(eNames);
         if (err) {
@@ -85,7 +85,7 @@ export class ChainHost {
         if (cr.err) {
             return {ret: false};
         }
-        
+
         let routineManagerType = this._parseExecutorRoutine(cr.chain!, commandOptions);
         if (!routineManagerType) {
             console.error('chain_host initMiner fail _parseExecutorRoutine');
@@ -119,7 +119,7 @@ export class ChainHost {
         let _package = commandOptions.get('package');
         if (!path.isAbsolute(_package)) {
             _package = path.join(process.cwd(), _package);
-        } 
+        }
         if (!commandOptions.get('dataDir')) {
             console.error(ChainHost.CREATE_TIP);
             return false;
@@ -154,11 +154,16 @@ export class ChainHost {
         let loggerOptions = Object.create(null);
         loggerOptions.console = false;
         loggerOptions.level = 'error';
+        loggerOptions.dumpStack = false;
+
         if (commandOptions.get('loggerConsole')) {
             loggerOptions.console = true;
         }
         if (commandOptions.get('loggerLevel')) {
             loggerOptions.level = commandOptions.get('loggerLevel');
+        }
+        if (commandOptions.get('loggerDumpStack')) {
+            loggerOptions.dumpStack = commandOptions.get('loggerDumpStack');
         }
         let loggerPath = path.join(dataDir, 'log');
         fs.ensureDir(loggerPath);
@@ -172,10 +177,10 @@ export class ChainHost {
                 return InprocessRoutineManager;
             } else if (commandOptions.get('executor') === 'interprocess') {
                 return InterprocessRoutineManager;
-            } 
+            }
         }
         return InprocessRoutineManager;
-    } 
+    }
 
     protected _parseDataDir(commandOptions: CommandOptions): string|undefined {
         let dataDir = commandOptions.get('dataDir');
@@ -186,9 +191,9 @@ export class ChainHost {
             dataDir = path.join(process.cwd(), dataDir);
         }
         if (commandOptions.has('forceClean')) {
-            fs.removeSync(dataDir); 
+            fs.removeSync(dataDir);
         }
-        
+
         if (Chain.dataDirValid(dataDir)) {
             return dataDir;
         } else {
@@ -203,8 +208,8 @@ export class ChainHost {
         if (!path.isAbsolute(_path)) {
             _path = path.join(process.cwd(), _path);
         }
-        fs.copySync(_path, dataDir);   
-        
+        fs.copySync(_path, dataDir);
+
         return dataDir;
     }
     protected m_server?: ChainServer;

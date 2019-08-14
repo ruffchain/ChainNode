@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import * as fs from 'fs-extra';
 const assert = require('assert');
 import { ErrorCode } from '../error_code';
-import { LoggerInstance } from '../lib/logger_util';
+import { LoggerInstance, remove_db_files } from '../../common/';
 import { StorageLogger, LoggedStorage } from './logger';
 import { BufferReader } from '../lib/reader';
 
@@ -166,6 +166,9 @@ export abstract class Storage extends IReadWritableStorage {
         return this.m_filePath;
     }
 
+    public async freeze(): Promise<ErrorCode> {
+        return ErrorCode.RESULT_NOT_SUPPORT;
+    }
     public abstract get isInit(): boolean;
 
     public abstract init(readonly?: boolean): Promise<ErrorCode>;
@@ -185,7 +188,7 @@ export abstract class Storage extends IReadWritableStorage {
         if (fs.existsSync(this.m_filePath)) {
             try {
                 this.m_logger.debug(`about to remove storage file `, this.m_filePath);
-                fs.unlinkSync(this.m_filePath);
+                remove_db_files(this.m_filePath);
             } catch (e) {
                 this.m_logger.error(`remove storage ${this.m_filePath} failed `, e);
                 return ErrorCode.RESULT_EXCEPTION;

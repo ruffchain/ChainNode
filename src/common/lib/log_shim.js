@@ -183,6 +183,7 @@ class LogShim {
 
     _defaultOptions() {
         return {
+            enableGetStack: true,
             pos: true,
             stack: false,
             fullpath: false,
@@ -191,6 +192,9 @@ class LogShim {
 
     _pos(frame) {
         assert(frame >= 1);
+        if (!this.m_options.enableGetStack) {
+            return `-stack:disabled-`;
+        }
         const info = {
             frame: frame,
             pos: this.m_options.pos,
@@ -198,7 +202,6 @@ class LogShim {
             stack: this.m_options.stack,
         };
         BLogStackHelper.getStack(info);
-
         const pos = info.pos;
         if (pos.file == null) {
             pos.file = '[unknown]';
