@@ -32,7 +32,7 @@ import { funcTransferTo } from './modules/sys/transfer';
 import { funcGetCandidateInfo } from './modules/vote/candidate';
 import { funcTransferLockBancorTokenToMulti } from './modules/lockbancor/transfermulti';
 import { funcGetLockBancorTokenBalances } from './modules/lockbancor/balances';
-import { getNodeInfo, getConnInfo, getProcessInfo, getContribInfo, startMonitor } from './modules/monitor';
+import { getNodeInfo, getConnInfo, getProcessInfo, getContribInfo } from './modules/monitor';
 
 
 export function registerHandler(handler: ValueHandler, globalOption: ChainGlobalOptions) {
@@ -66,7 +66,6 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     handler.addViewMethod('getConnInfo', getConnInfo);
     handler.addViewMethod('getProcessInfo', getProcessInfo);
     handler.addViewMethod('getContribInfo', getContribInfo);
-
 
 
     //////////////////
