@@ -3,7 +3,7 @@ import {Transaction} from '../block';
 import { isNullOrUndefined } from 'util';
 
 export type TxListener = (context: any, params: any) => Promise<ErrorCode>;
-export type TxPendingChecker = (tx: Transaction) => ErrorCode;
+export type TxPendingChecker = <T extends Transaction> (tx: T) => ErrorCode;
 export type BlockHeigthFilter = (height: number) => Promise<boolean>;
 export type BlockHeightListener = (context: any) => Promise<ErrorCode>;
 export type ViewListener = (context: any, params: any) => Promise<any>;
@@ -16,7 +16,7 @@ export class BaseHandler {
     protected m_viewListeners: Map<string, ViewListener> = new Map();
     protected m_preBlockListeners: {filter: BlockHeigthFilter, listener: BlockHeightListener}[] = [];
     protected m_postBlockListeners: {filter: BlockHeigthFilter, listener: BlockHeightListener}[] = [];
-    
+
     constructor() {
     }
 
@@ -27,7 +27,7 @@ export class BaseHandler {
             this.m_txListeners.set(name, {listener, checker});
         }
     }
-    
+
     public getTxListener(name: string): TxListener|undefined {
         const stub = this.m_txListeners.get(name);
         if (!stub) {
@@ -75,7 +75,7 @@ export class BaseHandler {
             let s = this.m_preBlockListeners[index];
             if (isNullOrUndefined(h) || s.filter(h)) {
                 listeners.push({listener: s.listener, index});
-            } 
+            }
         }
         return listeners;
     }
@@ -86,7 +86,7 @@ export class BaseHandler {
             let s = this.m_postBlockListeners[index];
             if (isNullOrUndefined(h) || s.filter(h)) {
                 listeners.push({listener: s.listener, index});
-            } 
+            }
         }
         return listeners;
     }
