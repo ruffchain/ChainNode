@@ -635,22 +635,25 @@ export class SqliteStorage extends Storage {
         return this.m_isInit;
     }
 
-    public async init(readonly?: boolean): Promise<ErrorCode> {
+    public async init(readonly?: boolean, verbose?: boolean): Promise<ErrorCode> {
+        let shouldVerbose = verbose || false;
+        let shouldReadonly = readonly || false;
         if (this.m_db) {
             return ErrorCode.RESULT_SKIPPED;
         }
         assert(!this.m_db);
-        //fs.ensureDirSync(path.dirname(this.m_filePath));
 
+        let options: sqlite.Options = Object.create(null);
+        options.readonly = shouldReadonly;
+        if (shouldVerbose) {
+            options.verbose = this.m_logger.info;
+        }
         let err = ErrorCode.RESULT_OK;
         try {
             if (readonly) {
-                this.m_db = new sqlite(this.m_filePath, {readonly: true});
                 this.m_isReadOnly = true;
-            } else {
-                this.m_db = new sqlite(this.m_filePath);
-                //this.m_db = new sqlite(this.m_filePath, {verbose:console.log});
             }
+            this.m_db = new sqlite(this.m_filePath, options);
         } catch (e) {
             this.m_logger.error(`open sqlite database file ${this.m_filePath} failed `, e);
             err = ErrorCode.RESULT_EXCEPTION;
@@ -663,7 +666,6 @@ export class SqliteStorage extends Storage {
         try {
             if (this.m_isReadOnly) {
                 this.m_db!.pragma('journal_mode = WAL');
-                //this.m_db!.pragma('locking_mode = EXCLUSIVE');
             } else {
                 this.m_db!.pragma('locking_mode = EXCLUSIVE');
                 this.m_db!.pragma('synchronous  = NORMAL');
@@ -686,6 +688,7 @@ export class SqliteStorage extends Storage {
         return err;
     }
 
+    // if this throws error then the SqliteLite doesn't work as expected, should just crash???
     public async freeze(): Promise<ErrorCode> {
         if (!this.m_isFreezed) {
             if (this.m_db && !this.m_isReadOnly) {
@@ -710,6 +713,7 @@ export class SqliteStorage extends Storage {
     }
 
     public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
+        await this.freeze();
         let buf = await fs.readFile(this.m_filePath);
         const sqliteHeaderSize: number = 100;
         if (buf.length < sqliteHeaderSize) {

@@ -36,7 +36,7 @@ class TestBlockHeader extends BlockHeader {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -146,7 +146,7 @@ class TestMiner extends Miner {
             this._createBlock(gh);
         }, 500);
     }
-    
+
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
         (block.header as TestBlockHeader).miner = this.m_miner!;
         block.header.updateHash();
@@ -163,7 +163,7 @@ describe('sync chain', () => {
     let chains: TestChain[] = [];
     let miners: TestMiner[] = [];
     const cc = initChainCreator({logger});
-    
+
     before((done) => {
         async function __test() {
             fs.removeSync(rootDir);
@@ -189,7 +189,7 @@ describe('sync chain', () => {
             {
                 const genesisDir = path.join(rootDir, `genesis`);
                 const genesisMiner = new TestMiner({networkCreator: cc.networkCreator, logger, dataDir: genesisDir, globalOptions: {txlivetime: 1000000, maxPengdingCount: 10000, warnPengdingCount: 5000}, handler: new BaseHandler(), miners: minerPeers, miner: 0});
-                
+
                 assert(!(await genesisMiner.initComponents()), `initComponets genesis err`);
                 assert(!(await genesisMiner.create({txlivetime: 1000000})), 'create genesis err');
                 await genesisMiner.uninitComponents();
@@ -239,14 +239,14 @@ describe('sync chain', () => {
     });
 
     // miner出一些块
-    it('miner create block', (done) => {
+    xit('miner create block', (done) => {
         async function __test() {
-            const createOp = []; 
+            const createOp = [];
 
             logger.info(`start miner 0`);
             assert(!(await miners[0].initialize({
                 networks: [miners[0].chain.newNetwork({node: nodes[0], minOutbound: 0}).network!],
-                initializePeerCount: 0, 
+                initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 0 initialize err');
             createOp.push(new Promise((resolve) => {
@@ -255,7 +255,7 @@ describe('sync chain', () => {
                         miners[0].chain.removeListener('tipBlock', onTip);
                         miners[0].stopMine();
                         resolve();
-                    }  
+                    }
                 }
                 miners[0].chain.prependListener('tipBlock', onTip);
             }));
@@ -263,7 +263,7 @@ describe('sync chain', () => {
 
             logger.info(`start miner 1`);
             assert(!(await miners[1].initialize({
-                networks: [miners[1].chain.newNetwork({node: nodes[1], minOutbound: 0}).network!], 
+                networks: [miners[1].chain.newNetwork({node: nodes[1], minOutbound: 0}).network!],
                 minOutbound: 0,
                 initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
@@ -274,7 +274,7 @@ describe('sync chain', () => {
                         miners[1].chain.removeListener('tipBlock', onTip);
                         miners[1].stopMine();
                         resolve();
-                    }  
+                    }
                 }
                 miners[1].chain.prependListener('tipBlock', onTip);
             }));
@@ -293,7 +293,7 @@ describe('sync chain', () => {
                         miners[2].stopMine();
                         assert(miners[2].chain.tipBlockHeader!.number === 30, '2 mine 30 block err');
                         resolve();
-                    }  
+                    }
                 }
                 miners[2].chain.prependListener('tipBlock', onTip);
             }));
@@ -313,12 +313,12 @@ describe('sync chain', () => {
                         miners[3].stopMine();
                         assert(miners[3].chain.tipBlockHeader!.number === 15, '3 mine 15 block err');
                         resolve();
-                    }  
+                    }
                 }
                 miners[3].chain.prependListener('tipBlock', onTip);
             }));
             miners[3].startMine();
-            
+
             await Promise.all(createOp);
 
             await new Promise((resolve) => {
@@ -331,7 +331,7 @@ describe('sync chain', () => {
             const otherTip = miners[0].chain.tipBlockHeader!;
             assert(otherTip.number === 5, '0 mine 5 seconds no enough block mined');
             assert(thisTip.hash !== otherTip.hash, `independed miners create save block`);
-                
+
             await miners[1].uninitialize();
             await miners[2].uninitialize();
             await miners[3].uninitialize();
@@ -340,7 +340,7 @@ describe('sync chain', () => {
     });
 
     // 单个peer从单个miner同步
-    it('1 peer from 1 miner sync', (done) => {
+    xit('1 peer from 1 miner sync', (done) => {
         async function __test() {
             logger.info(`start peer 2`);
             assert(!(await chains[miners.length + 0].initialize({
@@ -349,13 +349,13 @@ describe('sync chain', () => {
                 routineManagerType: InprocessRoutineManager,
             })), `chain ${miners.length + 0} initialize err`);
             assert(chains[miners.length + 0].tipBlockHeader!.number === miners[0].chain.tipBlockHeader!.number, `initialize peer ${miners.length + 0} tip err`);
-            
+
             logger.info(`0 continue mine and sync to peer ${miners.length + 0}`);
             miners[0].startMine();
             const checkTipInterval = setInterval(() => {
                 const offset = (chains[miners.length + 0].tipBlockHeader!.number - miners[0].chain.tipBlockHeader!.number);
                 assert(offset <= 1, `sync peer ${miners.length + 0} offset to miner 0 err`);
-            }, 1000); 
+            }, 1000);
             await new Promise((resolve) => {
                 function onTip(chain: Chain, header: BlockHeader) {
                     if (header.number === 10) {
@@ -372,7 +372,7 @@ describe('sync chain', () => {
     });
 
     // 单个peer从多个不一致的peer同步
-    it('1 peer from 2 peer sync', (done) => {
+    xit('1 peer from 2 peer sync', (done) => {
         async function __test() {
             assert(!(await chains[miners.length + 1].initialize({
                 networks: [chains[miners.length + 1].newNetwork({node: nodes[miners.length + 1], minOutbound: 5}).network!],
@@ -385,7 +385,7 @@ describe('sync chain', () => {
     });
 
     // 较短的fork从较长的tip合并，fork和tip差距在confirm depth以内
-    it('merge short(in comfirm depth) shorter fork', (done) => {
+    xit('merge short(in comfirm depth) shorter fork', (done) => {
         async function __test() {
             assert(!(await miners[1].initialize({
                 networks: [miners[1].chain.newNetwork({node: nodes[1], minOutbound: 5}).network!],
@@ -398,7 +398,7 @@ describe('sync chain', () => {
     });
 
      // 从较长的tip从较短的fork合并，fork和tip差距在confirm depth以内
-    it('merge short(in comfirm depth) longer fork', (done) => {
+    xit('merge short(in comfirm depth) longer fork', (done) => {
         async function __test() {
             let curTip = miners[3].chain.tipBlockHeader!;
             assert(!(await miners[3].initialize({
@@ -412,7 +412,7 @@ describe('sync chain', () => {
     });
 
     // 较长的tip上出块向外广播，较短的fork同步到tip，fork和tip差距在confirm depth以内
-    it('broadcast short(in comfirm depth) longer fork', (done) => {
+    xit('broadcast short(in comfirm depth) longer fork', (done) => {
         async function __test() {
             miners[3].startMine();
             await new Promise((resolve) => {
@@ -420,7 +420,7 @@ describe('sync chain', () => {
                     if (header.hash === miners[3].chain.tipBlockHeader!.hash) {
                         miners[3].stopMine();
                         chains[miners.length + 0].removeListener('tipBlock', onTip);
-                        resolve();         
+                        resolve();
                     } else {
                         const offset = miners[3].chain.tipBlockHeader!.number - header.number;
                         logger.info(`chain ${miners.length + 0}'s tip offset to miner 3 is ${offset} now`);
@@ -428,13 +428,13 @@ describe('sync chain', () => {
                 }
                 chains[miners.length + 0].prependListener('tipBlock', onTip);
             });
-            
+
         }
         __test().then(done);
     });
 
     // 合并两个长fork，fork之间的差距超过confirm depth
-    it('merge long(beyound comfirm depth) fork', (done) => {
+    xit('merge long(beyound comfirm depth) fork', (done) => {
         async function __test() {
             miners[0].startMine();
             await new Promise((resolve) => {
@@ -443,13 +443,13 @@ describe('sync chain', () => {
                         miners[0].chain.removeListener('tipBlock', onTip);
                         miners[0].stopMine();
                         resolve();
-                    }  
+                    }
                 }
                 miners[0].chain.prependListener('tipBlock', onTip);
             });
-            
+
             assert(!(await miners[2].initialize({
-                networks: [miners[2].chain.newNetwork({node: nodes[2], minOutbound: 5}).network!], 
+                networks: [miners[2].chain.newNetwork({node: nodes[2], minOutbound: 5}).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 2 initialize err');
@@ -459,7 +459,7 @@ describe('sync chain', () => {
     });
 
     // 不直接连接到miner的节点从miner同步
-    it(`sync with chain connection to miner`, (done) => {
+    xit(`sync with chain connection to miner`, (done) => {
         async function __test() {
             let initOp = [];
             initOp.push(chains[9].initialize({
@@ -483,7 +483,7 @@ describe('sync chain', () => {
     });
 
     // miner出块广播向外扩散
-    it(`broadcast from miner to chain connection`, (done) => {
+    xit(`broadcast from miner to chain connection`, (done) => {
         async function __test() {
             let ops = [];
             ops.push(new Promise((resolve) => {

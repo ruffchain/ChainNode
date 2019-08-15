@@ -80,12 +80,20 @@ export const userCodeSchema = Joi.object().keys({
     userCode: Joi.binary().max(100*1024).required()
 });
 
+function isPrecisionMeet(tx: ValueTransaction): boolean {
+    let valueDp = tx.value.decimalPlaces();
+    let feeDp = tx.fee.decimalPlaces();
+
+    if ((valueDp >= 0 && valueDp <= 9) && (feeDp >=0 && feeDp <= 9)) {
+        return true;
+    }
+    return false;
+}
+
 export function genChecker(schema?: BaseJoi.AnySchema): TxPendingChecker {
     return (tx: Transaction) => {
-        const valueTx = tx as ValueTransaction;
         try {
-            let dp = valueTx.value.decimalPlaces();
-            if (dp >= 0 && dp <= 9) {
+            if (isPrecisionMeet(tx as ValueTransaction)) {
                 if (schema && schema.validate(tx.input).error) {
                     return ErrorCode.RESULT_INVALID_PARAM;
                 }

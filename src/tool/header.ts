@@ -123,12 +123,17 @@ if (!command) {
     }
 
     if (dumpPath) {
-        let buf = fs.readFileSync(dumpPath);
-        const sqliteHeaderSize: number = 100;
-        const content = Buffer.from(buf.buffer as ArrayBuffer, sqliteHeaderSize, buf.length - sqliteHeaderSize);
-        let hash = digest.hash256(content).toString('hex');
-        //let hash = digest.hash256(buf).toString('hex');
-        console.log('dump snapshot', hash);
+        try {
+            let buf = fs.readFileSync(dumpPath);
+            const sqliteHeaderSize: number = 100;
+            const content = Buffer.from(buf.buffer as ArrayBuffer, sqliteHeaderSize, buf.length - sqliteHeaderSize);
+            let hash = digest.hash256(content).toString('hex');
+            //let hash = digest.hash256(buf).toString('hex');
+            console.log('dump snapshot', hash);
+        } catch(err) {
+            console.log('fail to read dump file', dumpPath);
+            console.log(err);
+        }
     }
 
     if (blockPath) {

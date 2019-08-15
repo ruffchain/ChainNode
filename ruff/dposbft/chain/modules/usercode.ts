@@ -51,6 +51,7 @@ export async function setUserCode(context: DposTransactionContext, params: any):
         return info.err;
     }
     const lastHeight = info.value;
+    context.logger.info('lastHeight is', lastHeight);
     if (lastHeight === -1 ||
         (context.height > lastHeight &&
         Math.floor((context.height / HeightIntervalForUserCode)) > Math.floor((lastHeight / HeightIntervalForUserCode)))) {
