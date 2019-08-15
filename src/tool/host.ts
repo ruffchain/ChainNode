@@ -3,7 +3,6 @@ import * as process from 'process';
 import * as path from 'path';
 import { host as chainhost } from '../host';
 import { initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger } from '../common/';
-import { startPeerMonitor, startMinerMonitor } from '../../ruff/dposbft/chain/modules/monitor';
 
 Error.stackTraceLimit = 1000;
 
@@ -42,13 +41,13 @@ export async function run(argv: string[]) {
     }
     let exit: boolean = false;
     if (command.command === 'peer') {
-        // start performance monitor, by Yang Jun 2019-8-9
-        startPeerMonitor(command.options);
+
         exit = !(await chainhost.initPeer(command.options)).ret;
+
     } else if (command.command === 'miner') {
-        // start performance monitor
-        startMinerMonitor(command.options);
+
         exit = !(await chainhost.initMiner(command.options)).ret;
+
     } else if (command.command === 'create') {
         await chainhost.createGenesis(command.options);
         exit = true;

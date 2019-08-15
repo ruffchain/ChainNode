@@ -2,6 +2,8 @@ import { EventEmitter } from 'events';
 import { ErrorCode } from '../../core';
 import * as http from 'http';
 
+import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
+
 // At first stage set max length to 300K
 const MAX_CONTENTY_LENGTH = 300 * 1024;
 
@@ -17,12 +19,12 @@ export class RPCServer extends EventEmitter {
 
     on(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
     on(event: string, listener: any): this {
-        async function wrapper(args: any, resp: http.ServerResponse):Promise<any> {
+        async function wrapper(args: any, resp: http.ServerResponse): Promise<any> {
             try {
                 await listener(args, resp);
             } catch (err) {
                 console.log('err is ', err);
-                resp.end(JSON.stringify({err: ErrorCode.RESULT_INVALID_FORMAT}));
+                resp.end(JSON.stringify({ err: ErrorCode.RESULT_INVALID_FORMAT }));
             }
         }
         return super.on(event, wrapper);
@@ -53,7 +55,7 @@ export class RPCServer extends EventEmitter {
             if (req.url === '/rpc' &&
                 req.method === 'POST' &&
                 contentType.indexOf('application/json') >= 0
-            )  {
+            ) {
                 let jsonData = '';
                 let isValidReq = true;
                 req.on('data', (chunk: any) => {
@@ -80,6 +82,8 @@ export class RPCServer extends EventEmitter {
                         resp.end();
                         return;
                     }
+                    // to count received rpc requests
+                    getMonitor()!.updateRecvRpcs();
 
                     if (!this.emit(reqObj.funName, reqObj.args, resp)) {
                         resp.writeHead(404);

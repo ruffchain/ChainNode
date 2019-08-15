@@ -62,10 +62,10 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     //////////////////
     // Get Monitor Info
     //////////////////
-    handler.addViewMethod('getNodeInfo', getNodeInfo);
-    handler.addViewMethod('getConnInfo', getConnInfo);
-    handler.addViewMethod('getProcessInfo', getProcessInfo);
-    handler.addViewMethod('getContribInfo', getContribInfo);
+    // handler.addViewMethod('getNodeInfo', getNodeInfo);
+    // handler.addViewMethod('getConnInfo', getConnInfo);
+    // handler.addViewMethod('getProcessInfo', getProcessInfo);
+    // handler.addViewMethod('getContribInfo', getContribInfo);
 
 
     //////////////////

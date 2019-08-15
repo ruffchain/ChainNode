@@ -11,6 +11,7 @@ import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
 
 import { INode, NodeConnection, PackageStreamWriter, Package, CMD_TYPE } from '../net';
+import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
 
 export enum SYNC_CMD_TYPE {
     getHeader = CMD_TYPE.userCmd + 0,
@@ -214,7 +215,11 @@ export class ChainNode extends EventEmitter {
                     this.logger.error(`encode header ${header.hash} failed`);
                     return err;
                 }
+
             }
+            // Yang Jun 2019-8-15
+            getMonitor()!.updateSendHeaders(content.length);
+
             let raw = hwriter.render();
             pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, { count: content.length }, raw.length);
             pwriter.writeData(raw);
@@ -227,7 +232,11 @@ export class ChainNode extends EventEmitter {
                     this.logger.error(`encode transaction ${tx.hash} failed`);
                     return err;
                 }
+
             }
+            // Yang Jun 2019-8-15
+            getMonitor()!.updateSendTxs(content.length);
+
             let raw = hwriter.render();
             pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.tx, { count: content.length }, raw.length);
             pwriter.writeData(raw);
@@ -263,6 +272,9 @@ export class ChainNode extends EventEmitter {
                         break;
                     }
                     txes.push(tx);
+
+                    // Yang Jun 2019-8-15
+                    getMonitor()!.updateRecvTxs(1);
                 }
                 if (err) {
                     network.banConnection(conn.remote!, BAN_LEVEL.forever);
@@ -304,6 +316,8 @@ export class ChainNode extends EventEmitter {
                             preHeader = header;
                         }
                         headers.push(header);
+                        // Yang Jun 2019-8-15
+                        getMonitor()!.updateRecvHeaders(1);
                     }
                     if (err) {
                         // 发错的header的peer怎么处理
@@ -408,6 +422,9 @@ export class ChainNode extends EventEmitter {
         }
         // 数据emit 到chain层
         this.emit('blocks', eventParams);
+
+        // Yang Jun 2018-9-15
+        getMonitor()!.updateRecvBlocks(1);
     }
 
     public requestHeaders(from: NodeConnection, options: { from?: string, limit?: number }): ErrorCode {
@@ -759,6 +776,9 @@ export class ChainNode extends EventEmitter {
         }
         let rawBlocks = bwriter.render();
 
+        // Yang JUn 2019-8-15
+        getMonitor()!.updateSendBlocks(1);
+
         let redoLogRaw;
         // 如果请求参数里设置了redoLog,  则读取redoLog, 合并在返回的包里
         if (req.redoLog === 1) {
@@ -860,6 +880,10 @@ export class ChainNode extends EventEmitter {
             let pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.header, { count: headerCount, request: req, error: respErr }, rawHeaders.length);
             pwriter.writeData(rawHeaders);
             conn.addPendingWriter(pwriter);
+
+            // Yang Jun
+            getMonitor()!.updateSendHeaders(rawHeaders.length);
+
             return ErrorCode.RESULT_OK;
         } else {
             return ErrorCode.RESULT_INVALID_PARAM;

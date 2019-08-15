@@ -1,38 +1,50 @@
-import { DposViewContext } from "../../../../../src/core";
+import { DposViewContext, LoggerInstance, Chain } from "../../../../../src/core";
 import { MinerMonitor, PeerMonitor, IfNodeInfo } from "./monitor";
 import { func } from "@hapi/joi";
 
 // make it accessible
-export let monitor: MinerMonitor | PeerMonitor | undefined = undefined;
+let monitor: MinerMonitor | PeerMonitor | undefined = undefined;
 
 export function getMonitor() {
     return monitor;
 }
 
-export function startMinerMonitor(options: Map<string, any>) {
-
-    monitor = new MinerMonitor(options);
+export function startMinerMonitor(logger: LoggerInstance, chain: Chain, options: Map<string, any>) {
+    logger.info('Monitor startMinerMonitor');
+    monitor = new MinerMonitor(logger, chain, options);
     monitor.start();
 }
 
-export function startPeerMonitor(options: Map<string, any>) {
-    monitor = new PeerMonitor(options);
+export function startPeerMonitor(logger: LoggerInstance, chain: Chain, options: Map<string, any>) {
+    logger.info('Monitor startPeerMonitor');
+    monitor = new PeerMonitor(logger, chain, options);
     monitor.start();
 }
 
-export async function getNodeInfo(context: DposViewContext, params: any): Promise<any> {
+export async function getNodeInfo(logger: LoggerInstance, params: any): Promise<any> {
     return monitor!.getNodeInfo();
 }
-export async function getConnInfo(context: DposViewContext, params: any): Promise<any> {
+export async function getConnInfo(logger: LoggerInstance, params: any): Promise<any> {
 
-    return monitor!.getConnInfo();
+    if (params.index === undefined || (typeof params.index) !== 'number') {
+        logger.error('wrong params.index');
+        return {};
+    }
+
+    return monitor!.getConnInfo(params.index);
 }
-export async function getProcessInfo(context: DposViewContext, params: any): Promise<any> {
-
-    return monitor!.getProcessInfo();
+export async function getProcessInfo(logger: LoggerInstance, params: any): Promise<any> {
+    if (params.index === undefined || (typeof params.index) !== 'number') {
+        logger.error('wrong params.index');
+        return {};
+    }
+    return monitor!.getProcessInfo(params.index);
 }
-export async function getContribInfo(context: DposViewContext, params: any): Promise<any> {
-
-    return monitor!.getContribInfo();
+export async function getContribInfo(logger: LoggerInstance, params: any): Promise<any> {
+    if (params.index === undefined || (typeof params.index) !== 'number') {
+        logger.error('wrong params.index');
+        return {};
+    }
+    return monitor!.getContribInfo(params.index);
 }
 

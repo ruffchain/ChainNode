@@ -20,6 +20,7 @@ import { PendingTransactions } from './pending';
 import { ChainNode, HeadersEventParams, BlocksEventParams } from './chain_node';
 import { IBlockExecutorRoutineManager, BlockExecutorRoutine } from './executor_routine';
 import { IConsistency } from '../block/consistency';
+import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
 
 export type ExecutorContext = {
     now: number;
@@ -766,7 +767,7 @@ export class Chain extends EventEmitter implements IConsistency {
 
             // Yang Jun remove it for BP restart infinite loop problem 2019-6-11
             this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
-            this.m_logger.debug('In morking loop, .pending ->',this.m_storageMorkRequests.pending);
+            this.m_logger.debug('In morking loop, .pending ->', this.m_storageMorkRequests.pending);
         }
     }
 
@@ -1111,6 +1112,9 @@ export class Chain extends EventEmitter implements IConsistency {
         assert(this.m_headerStorage);
         this.m_logger.info(`begin adding block number: ${block.number}  hash: ${block.hash} to chain `);
         let err = ErrorCode.RESULT_OK;
+
+        // Yang Jun 2018-8-15
+        getMonitor()!.updateBlock(block.content.transactions.length);
 
         if (options.storage) {
             // mine from local miner

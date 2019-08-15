@@ -8,6 +8,7 @@ import { ChainEventFilterStub } from '../event/stub';
 import { ChainEvent } from '../event/element';
 import { TxStorage } from '../tx/element';
 import { DposBftChainTipState } from '../../core/dpos_bft_chain/chain_state';
+import { getNodeInfo, getConnInfo, getProcessInfo, getContribInfo, getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
 
 function promisify(f: any) {
     return () => {
@@ -78,6 +79,7 @@ export class ChainServer {
                 }
             }
             await promisify(resp.end.bind(resp)());
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('getTransactionReceipt', async (params: { tx: string }, resp) => {
@@ -121,12 +123,14 @@ export class ChainServer {
                 }
             } while (false);
             await promisify(resp.end.bind(resp)());
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('getNonce', async (params: { address: string }, resp) => {
             let nonce = await this.m_chain.getNonce(params.address);
             await promisify(resp.write.bind(resp)(JSON.stringify(nonce)));
             await promisify(resp.end.bind(resp)());
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('view', async (params: { method: string, params: any, from?: number | string | 'latest' }, resp) => {
@@ -146,6 +150,7 @@ export class ChainServer {
                 await promisify(resp.write.bind(resp)(JSON.stringify(cr)));
             }
             await promisify(resp.end.bind(resp)());
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('getBlock', async (params: { which: number | string | 'latest', transactions?: boolean, eventLog?: boolean, receipts?: boolean }, resp) => {
@@ -176,6 +181,7 @@ export class ChainServer {
                 }
             }
             await promisify(resp.end.bind(resp))();
+            getMonitor()!.updateSendRpcs();
         });
 
         // Yang Jun 2019-4-11
@@ -214,6 +220,8 @@ export class ChainServer {
             }
             await promisify(resp.write.bind(resp)(JSON.stringify(output)));
             await promisify(resp.end.bind(resp))();
+
+            getMonitor()!.updateSendRpcs();
         });
 
 
@@ -221,6 +229,8 @@ export class ChainServer {
             let peers = this.m_chain.node.getNetwork()!.node.dumpConns();
             await promisify(resp.write.bind(resp)(JSON.stringify(peers)));
             await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('getLastIrreversibleBlockNumber', async (args, resp) => {
@@ -240,6 +250,8 @@ export class ChainServer {
 
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
         });
 
         this.m_server!.on('getEventLogs', async (params: { block: any, filters: object }, resp) => {
@@ -263,7 +275,53 @@ export class ChainServer {
                 }
             } while (false);
             await promisify(resp.end.bind(resp)());
+            getMonitor()!.updateSendRpcs();
         });
+
+        // Yang Jun 2019-8-15
+        this.m_server!.on('getNodeInfo', async (params: {}, resp) => {
+            this.m_logger.info('getNodeInfo');
+            let feedback = await getNodeInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getConnInfo', async (params: { index: number }, resp) => {
+            this.m_logger.info('getConnInfo');
+            this.m_logger.info(typeof params.index)
+            this.m_logger.info(params.index + '')
+
+            let feedback = await getConnInfo(this.m_logger, params);
+
+            console.log('feedback:')
+            console.log(feedback);
+
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getProcessInfo', async (params: { index: number }, resp) => {
+
+            let feedback = await getProcessInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getContribInfo', async (params: { index: number }, resp) => {
+
+            let feedback = await getContribInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+    }
+
+    public getLogger() {
+        return this.m_logger;
     }
 
     private m_chain: Chain;

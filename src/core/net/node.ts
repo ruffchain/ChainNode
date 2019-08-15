@@ -1,18 +1,18 @@
 import { ErrorCode } from '../error_code';
 import { IConnection } from './connection';
-import { Package } from './package'; 
+import { Package } from './package';
 import { PackageStreamWriter, WRITER_EVENT } from './writer';
 import { PackageStreamReader } from './reader';
 import { EventEmitter } from 'events';
 let assert = require('assert');
-import {Version} from './version';
+import { Version } from './version';
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
-import {LoggerOptions, LoggerInstance, initLogger} from '../lib/logger_util';
+import { LoggerOptions, LoggerInstance, initLogger } from '../lib/logger_util';
 import { isNullOrUndefined } from 'util';
 
 export enum CMD_TYPE {
-    version= 0x01,
+    version = 0x01,
     versionAck = 0x02,
     userCmd = 0x10,
 }
@@ -24,11 +24,11 @@ interface INodeConnection {
     version?: Version;
 }
 
-export type NodeConnection = INodeConnection & IConnection & {fullRemote: string};
+export type NodeConnection = INodeConnection & IConnection & { fullRemote: string };
 
 export class INode extends EventEmitter {
-    public async randomPeers(count: number, excludes: Set<string>): Promise<{err: ErrorCode, peers: string[]}> {
-        return {err: ErrorCode.RESULT_NO_IMP, peers: []};
+    public async randomPeers(count: number, excludes: Set<string>): Promise<{ err: ErrorCode, peers: string[] }> {
+        return { err: ErrorCode.RESULT_NO_IMP, peers: [] };
     }
 
     static isValidPeerid(peerid: string): boolean {
@@ -38,18 +38,18 @@ export class INode extends EventEmitter {
     static isValidNetwork(network: string): boolean {
         return -1 === network.indexOf('^');
     }
-    
+
     static fullPeerid(network: string, peerid: string): string {
         return `${network}^${peerid}`;
     }
 
-    static splitFullPeerid(fpeerid: string): undefined|{network: string, peerid: string} {
+    static splitFullPeerid(fpeerid: string): undefined | { network: string, peerid: string } {
         const spliter = fpeerid.indexOf('^');
         if (-1 === spliter) {
             return undefined;
         }
         const parts = fpeerid.split('^');
-        return {network: parts[0], peerid: parts[1]};
+        return { network: parts[0], peerid: parts[1] };
     }
 
     protected m_network: string;
@@ -62,7 +62,7 @@ export class INode extends EventEmitter {
     protected m_remoteMap: Map<string, NodeConnection> = new Map();
     protected m_logger: LoggerInstance;
 
-    constructor(options: {network: string, peerid: string} & LoggerOptions) {
+    constructor(options: { network: string, peerid: string } & LoggerOptions) {
         super();
         this.m_peerid = options.peerid;
         this.m_network = options.network;
@@ -103,6 +103,21 @@ export class INode extends EventEmitter {
 
         return ret;
     }
+    public dumpInConns(): string[] {
+        let ret: string[] = [];
+        this.m_inConn.forEach((element) => {
+            ret.push(`${element.remote!}`);
+        });
+        return ret;
+    }
+    public dumpOutConns(): string[] {
+        let ret: string[] = [];
+        this.m_outConn.forEach((element) => {
+            ret.push(`${element.remote!}`);
+        });
+
+        return ret;
+    }
 
     uninit(): Promise<any> {
         this.removeAllListeners('inbound');
@@ -128,13 +143,13 @@ export class INode extends EventEmitter {
         return ErrorCode.RESULT_NO_IMP;
     }
 
-    public async connectTo(peerid: string): Promise<{err: ErrorCode, peerid: string, conn?: NodeConnection}> {
+    public async connectTo(peerid: string): Promise<{ err: ErrorCode, peerid: string, conn?: NodeConnection }> {
         let result = await this._connectTo(peerid);
         if (!result.conn) {
-            return {err: result.err, peerid};
+            return { err: result.err, peerid };
         }
         let conn = result.conn;
-        
+
         conn.remote = peerid;
         conn.network = this.network;
         let ver: Version = new Version();
@@ -142,7 +157,7 @@ export class INode extends EventEmitter {
         if (!this.m_genesis || !this.m_peerid) {
             this.m_logger.error(`connectTo failed for genesis or peerid not set`);
             assert(false, `${this.m_peerid} has not set genesis`);
-            return {err: ErrorCode.RESULT_INVALID_STATE, peerid};
+            return { err: ErrorCode.RESULT_INVALID_STATE, peerid };
         }
         ver.genesis = this.m_genesis!;
         ver.peerid = this.m_peerid!;
@@ -171,26 +186,26 @@ export class INode extends EventEmitter {
             if (encodeErr) {
                 this.m_logger.error(`version instance encode failed `, ver);
                 resolve(encodeErr);
-                return ;
+                return;
             }
             let buf: Buffer = writer.render();
             let verWriter = PackageStreamWriter.fromPackage(CMD_TYPE.version, {}, buf.length).writeData(buf);
             conn.addPendingWriter(verWriter);
             let fn = (_conn: IConnection, _err: ErrorCode) => {
-                _conn.close(); 
+                _conn.close();
                 resolve(_err);
             };
             conn.once('error', fn);
         });
         if (err) {
-            return {err, peerid}; 
+            return { err, peerid };
         }
         let other = this.getConnection(peerid);
         if (other) {
             if (conn.version!.compare(other.version!) > 0) {
                 this.logger.warn(`close conn ${conn.id} to ${peerid} by already exist conn`);
                 conn.destroy();
-                return {err: ErrorCode.RESULT_ALREADY_EXIST, peerid};
+                return { err: ErrorCode.RESULT_ALREADY_EXIST, peerid };
             } else {
                 this.logger.warn(`close other conn ${conn.id} to ${peerid} by already exist conn`);
                 this.closeConnection(other, true);
@@ -202,47 +217,47 @@ export class INode extends EventEmitter {
             this.closeConnection(result.conn!);
             this.emit('error', result.conn, _err);
         });
-        return {err: ErrorCode.RESULT_OK, peerid, conn};
+        return { err: ErrorCode.RESULT_OK, peerid, conn };
     }
 
-    public async broadcast(writer: PackageStreamWriter, options?: {count?: number, filter?: (conn: NodeConnection) => boolean}): Promise<{err: ErrorCode, count: number}> {
+    public async broadcast(writer: PackageStreamWriter, options?: { count?: number, filter?: (conn: NodeConnection) => boolean }): Promise<{ err: ErrorCode, count: number }> {
         let nSend: number = 0;
         let nMax: number = 999999999;
         if (options && !isNullOrUndefined(options.count)) {
             if (!options.count) {
-                return {err: ErrorCode.RESULT_OK, count: 0};
+                return { err: ErrorCode.RESULT_OK, count: 0 };
             }
             nMax = options.count;
         }
-        
+
         let conns = this.m_inConn.slice(0);
         conns.push(...this.m_outConn);
         if (!conns.length) {
-            return {err: ErrorCode.RESULT_OK, count: 0};
+            return { err: ErrorCode.RESULT_OK, count: 0 };
         }
         let rstart = Math.floor(Math.random() * (conns.length - 1));
-        for (let i = rstart; i < conns.length ; ++i) {
+        for (let i = rstart; i < conns.length; ++i) {
             const conn = conns[i];
             if (nSend === nMax) {
-                return {err: ErrorCode.RESULT_OK, count: nSend};
+                return { err: ErrorCode.RESULT_OK, count: nSend };
             }
             if (!options || !options.filter || options!.filter!(conn)) {
                 conn.addPendingWriter(writer.clone());
                 nSend++;
             }
         }
-        for (let i = 0; i < rstart ; ++i) {
+        for (let i = 0; i < rstart; ++i) {
             const conn = conns[i];
             if (nSend === nMax) {
-                return {err: ErrorCode.RESULT_OK, count: nSend};
+                return { err: ErrorCode.RESULT_OK, count: nSend };
             }
             if (!options || !options.filter || options!.filter!(conn)) {
                 conn.addPendingWriter(writer.clone());
                 nSend++;
             }
         }
-        return {err: ErrorCode.RESULT_OK, count: nSend};
-    } 
+        return { err: ErrorCode.RESULT_OK, count: nSend };
+    }
 
     public isInbound(conn: NodeConnection): boolean {
         for (let c of this.m_inConn) {
@@ -267,7 +282,7 @@ export class INode extends EventEmitter {
         return this.m_outConn.length + this.m_inConn.length;
     }
 
-    public getConnection(remote: string): NodeConnection|undefined {
+    public getConnection(remote: string): NodeConnection | undefined {
         return this.m_remoteMap.get(remote);
     }
 
@@ -286,7 +301,7 @@ export class INode extends EventEmitter {
             this.closeConnection(conn, true);
         }
     }
-    
+
     public closeConnection(conn: NodeConnection, destroy = false): void {
         conn.removeAllListeners('error');
         conn.removeAllListeners('pkg');
@@ -343,7 +358,7 @@ export class INode extends EventEmitter {
                     return;
                 }
                 // 检查对方包里的genesis_hash是否对应得上
-                if ( ver.genesis !== this.m_genesis ) {
+                if (ver.genesis !== this.m_genesis) {
                     this.m_logger.warn(`recv version genesis ${ver.genesis} not match ${this.m_genesis} from ${inbound.remote!} `);
                     inbound.destroy();
                     return;
@@ -366,7 +381,7 @@ export class INode extends EventEmitter {
                     if (inbound.version!.compare(other.version!) > 0) {
                         this.m_logger.warn(`close inbound conn ${inbound.id} to ${inbound.fullRemote} by already exist`);
                         inbound.destroy();
-                        return ;
+                        return;
                     } else {
                         this.m_logger.warn(`close other conn ${inbound.id} to ${inbound.fullRemote} by already exist`);
                         this.closeConnection(other, true);
@@ -390,10 +405,10 @@ export class INode extends EventEmitter {
         inbound.once('error', fn);
     }
 
-    protected async _connectTo(peerid: string): Promise<{err: ErrorCode, conn?: NodeConnection}> {
-        return {err: ErrorCode.RESULT_NO_IMP};
+    protected async _connectTo(peerid: string): Promise<{ err: ErrorCode, conn?: NodeConnection }> {
+        return { err: ErrorCode.RESULT_NO_IMP };
     }
-    protected _connectionType(): new(...args: any[]) => IConnection {
+    protected _connectionType(): new (...args: any[]) => IConnection {
         return IConnection;
     }
     protected _nodeConnectionType() {
@@ -412,7 +427,7 @@ export class INode extends EventEmitter {
 
                 // 接收到 reader的传出来的error 事件后, emit ban事件, 给上层的chain_node去做处理
                 // 这里只需要emit给上层, 最好不要处理其他逻辑
-                this.m_reader.on('error', (err: ErrorCode, column: string ) => {
+                this.m_reader.on('error', (err: ErrorCode, column: string) => {
                     let remote = this.remote!;
                     thisNode.emit('ban', remote);
                 });
@@ -437,7 +452,7 @@ export class INode extends EventEmitter {
                     writer.on(WRITER_EVENT.finish, onFinish);
                     writer.on(WRITER_EVENT.error, onFinish);
                     writer.bind(this);
-                } 
+                }
                 this.m_pendingWriters.push(writer);
             }
 

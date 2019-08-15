@@ -1,13 +1,15 @@
-import {ErrorCode} from '../error_code';
+import { ErrorCode } from '../error_code';
 import { EventEmitter } from 'events';
 import { LoggerInstance } from '../lib/logger_util';
-import {SYNC_CMD_TYPE} from '../chain/chain_node';
-import {NodeConnection, PackageStreamWriter, Package, CMD_TYPE} from '../net';
-import {DposBftBlockHeaderSignature, DposBftBlockHeader} from './block';
-import {DposBftNetwork} from './network';
+import { SYNC_CMD_TYPE } from '../chain/chain_node';
+import { NodeConnection, PackageStreamWriter, Package, CMD_TYPE } from '../net';
+import { DposBftBlockHeaderSignature, DposBftBlockHeader } from './block';
+import { DposBftNetwork } from './network';
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
 import * as libAddress from '../address';
+import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
+
 
 export enum DPOS_BFT_SYNC_CMD_TYPE {
     tipSign = SYNC_CMD_TYPE.end + 1,
@@ -43,9 +45,23 @@ export class DposBftChainNode extends EventEmitter {
         initBound(connIn);
         this.m_network.on('inbound', (conn: NodeConnection) => {
             this._beginSyncWithNode(conn);
+
+            // Add by Yang Jun 2019-8-15
+            let conns = this.m_network.node.getInbounds();
+            getMonitor()!.updateInbounds(conns.map((conn) => {
+                return conn.fullRemote;
+            }));
+
         });
         this.m_network.on('outbound', (conn: NodeConnection) => {
             this._beginSyncWithNode(conn);
+
+            // Add by Yang Jun 2019-8-15
+            let conns = this.m_network.node.getOutbounds();
+            getMonitor()!.updateOutbounds(conns.map((conn) => {
+                return conn.fullRemote;
+            }))
+
         });
     }
     on(event: 'tipSign', listener: (sign: DposBftBlockHeaderSignature) => any): this;
@@ -56,7 +72,7 @@ export class DposBftChainNode extends EventEmitter {
     once(event: 'tipSign', listener: (sign: DposBftBlockHeaderSignature) => any): this;
     once(event: string, listener: any): this {
         return super.once(event, listener);
-    }   
+    }
 
     get logger(): LoggerInstance {
         return this.m_network.logger;
@@ -70,10 +86,10 @@ export class DposBftChainNode extends EventEmitter {
                     let pubkey = reader.readBytes(33);
                     let sign = reader.readBytes(64);
                     let hash = reader.readHash().toString('hex');
-                    this.emit('tipSign', {hash, pubkey, sign});
+                    this.emit('tipSign', { hash, pubkey, sign });
                 } catch (e) {
                     this.logger.error(`dpos_bft decode tipSign failed `, e);
-                    return ;
+                    return;
                 }
             }
         });
