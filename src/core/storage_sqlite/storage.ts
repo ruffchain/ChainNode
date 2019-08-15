@@ -688,6 +688,7 @@ export class SqliteStorage extends Storage {
         return err;
     }
 
+    // if this throws error then the SqliteLite doesn't work as expected, should just crash???
     public async freeze(): Promise<ErrorCode> {
         if (!this.m_isFreezed) {
             if (this.m_db && !this.m_isReadOnly) {
@@ -712,6 +713,7 @@ export class SqliteStorage extends Storage {
     }
 
     public async messageDigest(): Promise<{ err: ErrorCode, value?: ByteString }> {
+        await this.freeze();
         let buf = await fs.readFile(this.m_filePath);
         const sqliteHeaderSize: number = 100;
         if (buf.length < sqliteHeaderSize) {
