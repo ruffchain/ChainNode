@@ -18,6 +18,8 @@ describe('RandomNode', () => {
     const headerStorage = new FakeHeaderStorage();
     const rootDir = path.join(__dirname, '../../../../data/test/randomNode');
     before(() => {
+        //Disabled
+        return;
         fs.removeSync(rootDir);
         fs.ensureDirSync(rootDir);
         let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
@@ -41,7 +43,7 @@ describe('RandomNode', () => {
                 headerStorage,
                 blockHeaderType: BlockHeader,
                 transactionType: Transaction,
-                receiptType: Receipt, 
+                receiptType: Receipt,
             });
             nodes.push(network);
             network.setInstanceOptions({
@@ -59,7 +61,7 @@ describe('RandomNode', () => {
         return Promise.all(ops);
     });
 
-    it(`initial 1 outbounds`, (done) => {
+    xit(`initial 1 outbounds`, (done) => {
         async function __test() {
             assert(!(await nodes[0].init()), '0 init err');
             assert(!(await nodes[1].init()), '1 init err');
@@ -109,7 +111,7 @@ describe('RandomNode', () => {
         __test().then(done);
     });
 
-    it(`init 5 outbounds`, (done) => {
+    xit(`init 5 outbounds`, (done) => {
         async function __test() {
             assert(!(await nodes[2].initialOutbounds()), `2 initialOutbounds err`);
             logger.info('3--7 init, listen, initialOutbounds');

@@ -35,7 +35,7 @@ class TestBlockHeader extends BlockHeader {
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
         }
-        
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -145,7 +145,7 @@ class TestMiner extends Miner {
             this._createBlock(gh);
         }, 500);
     }
-    
+
     protected async _mineBlock(block: Block): Promise<ErrorCode> {
         (block.header as TestBlockHeader).miner = this.m_miner!;
         block.header.updateHash();
@@ -162,7 +162,7 @@ describe('2 networks', () => {
     let chains: TestChain[] = [];
     let miners: TestMiner[] = [];
     const cc = initChainCreator({logger});
-    
+
     before((done) => {
         async function __test() {
             fs.removeSync(rootDir);
@@ -201,7 +201,7 @@ describe('2 networks', () => {
             {
                 const genesisDir = path.join(rootDir, `genesis`);
                 const genesisMiner = new TestMiner({networkCreator: cc.networkCreator, logger, dataDir: genesisDir, globalOptions: {txlivetime: 1000000, maxPengdingCount: 10000, warnPengdingCount: 5000}, handler: new BaseHandler(), miners: minerPeers, miner: 0});
-                
+
                 assert(!(await genesisMiner.initComponents()), `initComponets genesis err`);
                 assert(!(await genesisMiner.create({txlivetime: 1000000})), 'create genesis err');
                 await genesisMiner.uninitComponents();
@@ -221,7 +221,7 @@ describe('2 networks', () => {
                 miners.push(miner);
                 chains.push(miner.chain);
             }
-            
+
             logger.info(`create peers`);
             for (let i = 1; i < 3; ++i) {
                 const mLogger = new LogShim(logger).bind(`[peer: ${i}]`, true).log;
@@ -235,14 +235,14 @@ describe('2 networks', () => {
     });
 
     // miner出一些块
-    it('miner create block', (done) => {
+    xit('miner create block', (done) => {
         async function __test() {
-            const createOp = []; 
+            const createOp = [];
 
             logger.info(`start miner 0`);
             assert(!(await miners[0].initialize({
                 networks: [miners[0].chain.newNetwork({node: nodes[0], minOutbound: 0}).network!],
-                initializePeerCount: 0, 
+                initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 0 initialize err');
             createOp.push(new Promise((resolve) => {
@@ -251,12 +251,12 @@ describe('2 networks', () => {
                         miners[0].chain.removeListener('tipBlock', onTip);
                         miners[0].stopMine();
                         resolve();
-                    }  
+                    }
                 }
                 miners[0].chain.prependListener('tipBlock', onTip);
             }));
             miners[0].startMine();
-            
+
             await Promise.all(createOp);
 
             await new Promise((resolve) => {
@@ -271,12 +271,12 @@ describe('2 networks', () => {
     });
 
     // 单个peer从单个miner同步
-    it('1 peer from 1 miner sync in 1 network', (done) => {
+    xit('1 peer from 1 miner sync in 1 network', (done) => {
         async function __test() {
             logger.info(`start peer 1`);
             assert(!(await chains[1].initialize({
                 networks: [
-                    chains[1].newNetwork({node: nodes[1], minOutbound: 5}).network!, 
+                    chains[1].newNetwork({node: nodes[1], minOutbound: 5}).network!,
                     chains[1].newNetwork({node: nodes[2], minOutbound: 0}).network!
                 ],
                 initializePeerCount: 1,
@@ -288,12 +288,12 @@ describe('2 networks', () => {
     });
 
     // 单个peer从另一个network同步
-    it('1 peer from 1 peer sync in 2 network', (done) => {
+    xit('1 peer from 1 peer sync in 2 network', (done) => {
         async function __test() {
             logger.info(`start peer 2`);
             assert(!(await chains[2].initialize({
                 networks: [
-                    chains[1].newNetwork({node: nodes[3], minOutbound: 5}).network!, 
+                    chains[1].newNetwork({node: nodes[3], minOutbound: 5}).network!,
                 ],
                 initializePeerCount: 1,
                 routineManagerType: InprocessRoutineManager,
