@@ -197,7 +197,7 @@ export class HostChainContext {
                 }
                 let frp = await this._findRevertPoint(lbr.latest!);
                 if (frp.err) {
-                    this.m_logger.error(`HostChainContext, _addBlock failed for find revert point failed ${stringifyErrorCode(lbr.err)}`);
+                    this.m_logger.error(`HostChainContext, _addBlock failed for find revert point failed ${stringifyErrorCode(frp.err)}`);
                     break;
                 }
                 beginAddNumber = frp.number!;
