@@ -5,9 +5,11 @@ import { ErrorCode } from './error_code';
 import { LoggerInstance, initLogger, LoggerOptions } from './lib/logger_util';
 import { BaseHandler, ChainGlobalOptions, ChainTypeOptions, Chain, Miner, NetworkCreator, BlockExecutorExternParamCreator } from './chain';
 
-export type ChainCreatorConfig = {handler: BaseHandler,
+export type ChainCreatorConfig = {
+    handler: BaseHandler,
     typeOptions: ChainTypeOptions,
-    globalOptions: ChainGlobalOptions};
+    globalOptions: ChainGlobalOptions
+};
 
 type ChainTypeInstance = {
     newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): BaseHandler;
@@ -20,7 +22,7 @@ export class ChainCreator {
     private m_instances: Map<string, ChainTypeInstance> = new Map();
     private m_networkCreator: NetworkCreator;
 
-    constructor(options: LoggerOptions & {networkCreator: NetworkCreator}) {
+    constructor(options: LoggerOptions & { networkCreator: NetworkCreator }) {
         this.m_logger = initLogger(options);
         this.m_networkCreator = options.networkCreator;
 
@@ -38,7 +40,7 @@ export class ChainCreator {
         return this.m_logger;
     }
 
-    protected _getTypeInstance(typeOptions: ChainTypeOptions): ChainTypeInstance|undefined {
+    protected _getTypeInstance(typeOptions: ChainTypeOptions): ChainTypeInstance | undefined {
         let ins = this.m_instances.get(typeOptions.consensus);
         if (!ins) {
             this.m_logger.error(`chain creator has no register consensus named ${typeOptions.consensus}`);
@@ -47,7 +49,7 @@ export class ChainCreator {
         return ins;
     }
 
-    public async createGenesis(packagePath: string, dataDir: string, genesisOptions: any, externalHandler = false): Promise<{err: ErrorCode, miner?: Miner}> {
+    public async createGenesis(packagePath: string, dataDir: string, genesisOptions: any, externalHandler = false): Promise<{ err: ErrorCode, miner?: Miner }> {
         if (!path.isAbsolute(dataDir)) {
             dataDir = path.join(process.cwd(), dataDir);
         }
@@ -60,7 +62,7 @@ export class ChainCreator {
             try {
                 let _config = fs.readJSONSync(configPath);
                 _config['handler'] = path.join(packagePath, _config['handler']);
-                fs.writeJSONSync(path.join(dataDir, 'config.json'), _config, {spaces: 4, flag: 'w'});
+                fs.writeJSONSync(path.join(dataDir, 'config.json'), _config, { spaces: 4, flag: 'w' });
             } catch (e) {
                 this.m_logger.error(`load ${configPath} failed for`, e);
             }
@@ -70,32 +72,32 @@ export class ChainCreator {
 
         let cmir = await this.createMinerInstance(dataDir);
         if (cmir.err) {
-            return {err: cmir.err};
+            return { err: cmir.err };
         }
         let lcr = this._loadConfig(dataDir);
         if (lcr.err) {
-            return {err: lcr.err};
+            return { err: lcr.err };
         }
         let err = await cmir.miner!.create(genesisOptions);
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, miner: cmir.miner};
+        return { err: ErrorCode.RESULT_OK, miner: cmir.miner };
     }
 
-    protected _loadConfig(dataDir: string): {err: ErrorCode, config?: {handler: BaseHandler, typeOptions: ChainTypeOptions, globalOptions: ChainGlobalOptions} } {
+    protected _loadConfig(dataDir: string): { err: ErrorCode, config?: { handler: BaseHandler, typeOptions: ChainTypeOptions, globalOptions: ChainGlobalOptions } } {
         let configPath = path.join(dataDir, 'config.json');
         let constConfig: any;
         try {
             constConfig = fs.readJsonSync(configPath);
         } catch (e) {
             this.m_logger.error(`can't get config from package ${dataDir} for ${e.message}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
 
         if (!constConfig['handler']) {
             this.m_logger.error(`can't get handler from package ${dataDir}/config.json`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
         let handlerPath = constConfig['handler'];
         if (!path.isAbsolute(handlerPath)) {
@@ -105,17 +107,34 @@ export class ChainCreator {
         let typeOptions = constConfig['type'];
         if (!typeOptions || !typeOptions.consensus || !typeOptions.features) {
             this.m_logger.error(`invalid type from package ${dataDir}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
 
         let globalOptions = constConfig['global'];
         if (!globalOptions) {
             globalOptions = {};
         }
+        // Yang Jun , 2019-8-16, give a chance to change global config by update ruff/
+        // let configPathRuff = path.join('./ruff/dposbft/chain', 'config.json');
+        // let constConfigRuff: any;
+        // try {
+        //     constConfigRuff = fs.readJsonSync(configPathRuff);
+        // } catch (e) {
+        //     this.m_logger.error(`can't get config from package ./ruff/dposbft/chain for ${e.message}`);
+        //     return { err: ErrorCode.RESULT_EXCEPTION };
+        // }
+        // let globalOptionsRuff = constConfigRuff['global'];
+        // if (!globalOptionsRuff) {
+        //     globalOptionsRuff = {};
+        // }
+        // better to put it in command line parameters!
+
+        ///////////////////////////////////////////////////
+
 
         let handler = this._loadHandler(handlerPath, typeOptions, globalOptions);
         if (!handler) {
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
 
         return {
@@ -128,7 +147,7 @@ export class ChainCreator {
         };
     }
 
-    protected _loadHandler(handlerPath: string, typeOptions: ChainTypeOptions, globalOptions: ChainGlobalOptions): BaseHandler|undefined {
+    protected _loadHandler(handlerPath: string, typeOptions: ChainTypeOptions, globalOptions: ChainGlobalOptions): BaseHandler | undefined {
         let instance = this._getTypeInstance(typeOptions);
         if (!instance) {
             return undefined;
@@ -162,39 +181,39 @@ export class ChainCreator {
         }
         let lcr = this._loadConfig(dataDir);
         if (lcr.err) {
-            return {err: lcr.err};
+            return { err: lcr.err };
         }
         let instance = this._getTypeInstance(lcr.config!.typeOptions);
         if (!instance) {
-            return {err: ErrorCode.RESULT_INVALID_TYPE};
+            return { err: ErrorCode.RESULT_INVALID_TYPE };
         }
         let miner = instance.newMiner(this, dataDir, lcr.config!);
         let err = await miner.initComponents();
         if (err) {
-            return {err};
+            return { err };
         }
-        return {err: ErrorCode.RESULT_OK, miner, globalOptions: lcr.config!.globalOptions};
+        return { err: ErrorCode.RESULT_OK, miner, globalOptions: lcr.config!.globalOptions };
     }
 
-    public async createChainInstance(dataDir: string, options: {readonly?: boolean, initComponents?: boolean}): Promise<{ err: ErrorCode, chain?: Chain}> {
+    public async createChainInstance(dataDir: string, options: { readonly?: boolean, initComponents?: boolean }): Promise<{ err: ErrorCode, chain?: Chain, globalOptions?: any }> {
         if (!path.isAbsolute(dataDir)) {
             dataDir = path.join(process.cwd(), dataDir);
         }
         let lcr = this._loadConfig(dataDir);
         if (lcr.err) {
-            return {err: lcr.err};
+            return { err: lcr.err };
         }
         let instance = this._getTypeInstance(lcr.config!.typeOptions);
         if (!instance) {
-            return {err: ErrorCode.RESULT_INVALID_TYPE};
+            return { err: ErrorCode.RESULT_INVALID_TYPE };
         }
         let chain = instance.newChain(this, dataDir, lcr.config!);
         if (options.initComponents) {
-            let err = await chain.initComponents({readonly: options.readonly});
+            let err = await chain.initComponents({ readonly: options.readonly });
             if (err) {
-                return {err};
+                return { err };
             }
         }
-        return {err: ErrorCode.RESULT_OK, chain};
+        return { err: ErrorCode.RESULT_OK, chain, globalOptions: lcr.config!.globalOptions };
     }
 }

@@ -45,9 +45,6 @@ export class ChainHost {
         }
         let logger = this._parseLogger(dataDir, commandOptions);
 
-
-
-
         let creator = initChainCreator({ logger });
         let cr = await creator.createMinerInstance(dataDir);
         if (cr.err) {
@@ -56,7 +53,7 @@ export class ChainHost {
         }
 
         // start performance monitor
-        startMinerMonitor(logger, cr.miner!.chain, commandOptions);
+        startMinerMonitor(logger, cr.miner!.chain, commandOptions, cr.globalOptions);
 
 
         let routineManagerType = this._parseExecutorRoutine(cr.miner!.chain, commandOptions);
@@ -101,7 +98,7 @@ export class ChainHost {
         }
 
         // start performance monitor, by Yang Jun 2019-8-9
-        startPeerMonitor(logger, cr.chain!, commandOptions);
+        startPeerMonitor(logger, cr.chain!, commandOptions, cr.globalOptions);
 
         let routineManagerType = this._parseExecutorRoutine(cr.chain!, commandOptions);
         if (!routineManagerType) {

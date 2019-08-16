@@ -1,7 +1,8 @@
-import { IFeedBack, ErrorCode, Chain } from "../../../../../src/core";
+import { IFeedBack, ErrorCode, Chain, ChainGlobalOptions } from "../../../../../src/core";
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 import { LoggerInstance } from "../../../../../src/core";
+const fs = require('fs-extra');
 
 export function DelayPromise(n: number) {
     return new Promise<IFeedBack>((resolv) => {
@@ -27,17 +28,20 @@ export interface IfNodeInfo {
 
     version: string;
     bootTime: number;
+
     name: string;
     location: string;
     url: string;
+
     osType: string; // ubuntu 16.04
     dockerVersion: string;
     cpuInfo: string;
+    memInfo: string;
 }
-export interface IfPeerInfo {
-    id: string;
-    ip: string;
-}
+// export interface IfPeerInfo {
+//     id: string;
+//     ip: string;
+// }
 export interface IfConnInfo {
     timestamp: number;
     timeDelta: number;
@@ -80,21 +84,25 @@ let counterSizeTx = 0;
 // base info
 abstract class Monitor {
     static MAX_PROCESS_INFO = 24;
-    static LOOP_INTERVAL = 1 * 60; // in seconds
-    static VERY_BIG = 1000000000;
+    static LOOP_INTERVAL = 10; // in minutes
+    // static VERY_BIG = 1000000000;
     protected nodeInfo: IfNodeInfo | {};
     protected connInfoLst: IfConnInfo[];
     protected processInfoLst: IfProcessInfo[];
     protected contribInfoLst: IfContribInfo[];
+
+
     public connInfo: IfConnInfo;
     public processInfo: IfProcessInfo;
     public contribInfo: IfContribInfo;
 
     public logger: LoggerInstance;
     public chain: Chain;
+    public commandOptions: any;
+    public globalOptions: any;
+    public genesisOptions: any;
 
-
-    constructor(m_logger: LoggerInstance, m_chain: Chain, options: Map<string, any>) {
+    constructor(m_logger: LoggerInstance, m_chain: Chain, options: Map<string, any>, global?: any) {
         this.nodeInfo = {};
         this.initNodeInfo('dataDir', 'string', options);
         this.initNodeInfo('peerid', 'string', options);
@@ -105,8 +113,6 @@ abstract class Monitor {
         this.initNodeInfo('sn', 'string', options);
         this.initNodeInfo('txServer', 'boolean', options);
 
-        (this.nodeInfo as IfNodeInfo).version = "v1.0";
-        (this.nodeInfo as IfNodeInfo).bootTime = new Date().getTime();
 
         this.connInfo = {
             timestamp: 0,
@@ -122,11 +128,11 @@ abstract class Monitor {
             timeDelta: 0,
             blocks: 0,
             blockSizeMax: 0,
-            blockSizeMin: Monitor.VERY_BIG,
+            blockSizeMin: 0,
             blockSizeAvg: 0,
             txs: 0,
             txSizeMax: 0,
-            txSizeMin: Monitor.VERY_BIG,
+            txSizeMin: 0,
             txSizeAvg: 0,
             errors: 0
         }
@@ -152,6 +158,8 @@ abstract class Monitor {
 
         this.logger = m_logger;
         this.chain = m_chain;
+        this.globalOptions = global;
+        this.commandOptions = options;
     }
     protected resetConnInfo() {
 
@@ -172,11 +180,11 @@ abstract class Monitor {
             timeDelta: 0,
             blocks: 0,
             blockSizeMax: 0,
-            blockSizeMin: Monitor.VERY_BIG,
+            blockSizeMin: 0,
             blockSizeAvg: 0,
             txs: 0,
             txSizeMax: 0,
-            txSizeMin: Monitor.VERY_BIG,
+            txSizeMin: 0,
             txSizeAvg: 0,
             errors: 0
         }
@@ -207,6 +215,25 @@ abstract class Monitor {
         if (lst.length > Monitor.MAX_PROCESS_INFO) {
             lst.shift();
         }
+    }
+    private async fillNodeInfo() {
+        // get version
+        (this.nodeInfo as IfNodeInfo).version = this.getVersionFromPackage();
+        (this.nodeInfo as IfNodeInfo).bootTime = new Date().getTime();
+
+        let name = this.commandOptions.get('nodeName');
+        (this.nodeInfo as IfNodeInfo).name = name === undefined ? 'Noname' : name;
+
+        let url = this.commandOptions.get('nodeUrl');
+        (this.nodeInfo as IfNodeInfo).url = url === undefined ? 'http://notsetyet.com' : url;
+
+        let location = this.commandOptions.get('nodeLocation');
+        (this.nodeInfo as IfNodeInfo).location = location === undefined ? 'No where, in space' : location;
+
+        (this.nodeInfo as IfNodeInfo).osType = await this.getOsType();
+        (this.nodeInfo as IfNodeInfo).dockerVersion = await this.getDockerVersion();
+        (this.nodeInfo as IfNodeInfo).cpuInfo = await this.getCpuInfo();
+        (this.nodeInfo as IfNodeInfo).memInfo = await this.getRamInfo();
     }
     private initNodeInfo(key: string, type: string, options: Map<string, any>): void {
         let o = this.nodeInfo as any;
@@ -270,7 +297,76 @@ abstract class Monitor {
             return { err: ErrorCode.RESULT_OK, data: nSize }
         }
     }
-    protected async loopWork(deltaSeconds: number) {
+    public getVersionFromPackage(): string {
+        let config = fs.readJSONSync('./package.json');
+        if (config) {
+            return config.version;
+        } else {
+            this.logger.warn('version not found in ./package.json');
+            return '';
+        }
+    }
+    private async getOsType(): Promise<string> {
+        const { stdout, stderr } = await exec(`uname -v`);
+        if (stderr) {
+            this.logger.warn('Run uname failed');
+            return '';
+        } else {
+            return stdout;
+        }
+    }
+    private async getDockerVersion(): Promise<string> {
+        const { stdout, stderr } = await exec(`docker --version`);
+        if (stderr) {
+            this.logger.warn('Run docker --version failed');
+            return '';
+        } else {
+            return stdout;
+        }
+    }
+
+    private async getCpuInfo(): Promise<string> {
+        try {
+            const { stdout, stderr } = await exec(`cat /proc/cpuinfo | grep "model name"`);
+            if (stderr) {
+                this.logger.warn('Get /proc/cpuinfo failed');
+                return '';
+            } else {
+                // how to get model name 
+                let strLst = stdout.split('\n');
+                let numCpu = 0;
+                for (let i = 0; i < strLst.length; i++) {
+                    if (strLst[i].length > 1) {
+                        numCpu++;
+                    }
+                }
+                let out = numCpu + ' core' + (numCpu > 1) ? 's ' : ' ' + strLst[0];
+                return out;
+            }
+        } catch (e) {
+            this.logger.error('Error getCpuInfo()');
+            return '';
+        }
+
+    }
+    private async getRamInfo(): Promise<string> {
+        try {
+            const { stdout, stderr } = await exec(`cat /proc/meminfo| grep "MemTotal"`);
+            if (stderr) {
+                this.logger.warn('Get /proc/meminfo failed');
+                return '';
+            } else {
+                // how to get model name 
+                let out = stdout;
+                return out;
+            }
+        } catch (e) {
+            this.logger.error('Error getRamInfo()');
+            return '';
+        }
+
+    }
+    protected async loopWork(deltaSeconds: number): Promise<IFeedBack> {
         this.logger.debug('Monitor loopWork');
         let timestamp = new Date().getTime();
 
@@ -305,21 +401,34 @@ abstract class Monitor {
 
         this.addToLst(this.contribInfoLst, this.contribInfo);
 
+        return { err: ErrorCode.RESULT_OK, data: null }
     }
     public async start() {
         this.logger.debug('Monitor start ...')
+        this.logger.debug('update nodeinfo')
+        await this.fillNodeInfo();
+
+        let cycleMinutes = Monitor.LOOP_INTERVAL;
+        this.logger.debug('MonitorReportCycle: ' + cycleMinutes);
+
+        let cycleMinutesPeriod: number = 0; // in minutes
+        if (cycleMinutes === undefined || cycleMinutes > 60 || cycleMinutes < 5) {
+            this.logger.warn('Wrong monitorReporCycle value: ' + cycleMinutes);
+            cycleMinutesPeriod = 60;
+        } else {
+            cycleMinutesPeriod = cycleMinutes;
+        };
+        this.logger.debug('cycleMinutesPeriod: ' + cycleMinutesPeriod);
 
         while (true) {
             let date = new Date();
             let minutes = date.getMinutes();
             let seconds = date.getSeconds();
-            // let delaySeconds: number = 3600 - 60 * minutes - seconds;
-            // delaySeconds = delaySeconds === 0 ? 3600 : delaySeconds;
 
-            let delayMinutes: number = minutes % 10;
-            let delaySeconds = (delayMinutes === 0) ? 60 * 10 : delayMinutes * 60;
+            let remainMinutes = minutes % cycleMinutesPeriod;
+
+            let delaySeconds = (remainMinutes === 0) ? (cycleMinutes * 60) : 60 * (cycleMinutesPeriod - remainMinutes);
             this.logger.debug('Monitor delay ' + delaySeconds);
-
 
             await DelayPromise(delaySeconds);
             await this.loopWork(delaySeconds);
@@ -344,6 +453,14 @@ abstract class Monitor {
 
         this.processInfo.blockSizeAvg = parseFloat((counterTx / this.processInfo.blocks).toFixed(2));
 
+        if (this.processInfo.blockSizeMax === 0) {
+            this.processInfo.blockSizeMax = txNum;
+        }
+
+        if (this.processInfo.blockSizeMin === 0) {
+            this.processInfo.blockSizeMin = txNum;
+        }
+
         if (txNum > this.processInfo.blockSizeMax) {
             this.processInfo.blockSizeMax = txNum;
         }
@@ -357,6 +474,14 @@ abstract class Monitor {
         counterSizeTx += txInputSize;
 
         this.processInfo.txSizeAvg = parseFloat((counterSizeTx / this.processInfo.txs).toFixed(2));
+
+        if (this.processInfo.txSizeMax === 0) {
+            this.processInfo.txSizeMax = txInputSize;
+        }
+
+        if (this.processInfo.txSizeMin === 0) {
+            this.processInfo.txSizeMin = txInputSize;
+        }
 
         if (txInputSize > this.processInfo.txSizeMax) {
             this.processInfo.txSizeMax = txInputSize;
@@ -429,15 +554,15 @@ abstract class Monitor {
 }
 // miner
 export class MinerMonitor extends Monitor {
-    constructor(logger: LoggerInstance, chain: Chain, options: Map<string, any>) {
-        super(logger, chain, options);
+    constructor(logger: LoggerInstance, chain: Chain, options: Map<string, any>, global?: any) {
+        super(logger, chain, options, global);
         (this.nodeInfo as IfNodeInfo).role = 'miner';
     }
 }
 // peer
 export class PeerMonitor extends Monitor {
-    constructor(logger: LoggerInstance, chain: Chain, options: Map<string, any>) {
-        super(logger, chain, options);
+    constructor(logger: LoggerInstance, chain: Chain, options: Map<string, any>, global?: any) {
+        super(logger, chain, options, global);
         (this.nodeInfo as IfNodeInfo).role = 'peer';
     }
 }

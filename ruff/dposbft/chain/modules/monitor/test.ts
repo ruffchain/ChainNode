@@ -1,11 +1,21 @@
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
+const fs = require('fs-extra');
 
 function bExactStandardHour(): boolean {
     let date = new Date();
     console.log(date.getMinutes())
 
     return true;
+}
+
+function getVersion() {
+    let config = fs.readJSONSync('./package.json');
+    if (config) {
+        return config.version;
+    } else {
+        return null;
+    }
 }
 
 async function main() {
@@ -23,6 +33,9 @@ async function main() {
     console.log(strMatch[0]);
 
     console.log('\n', bExactStandardHour());
+
+    console.log('\n', getVersion());
+
 }
 main();
 
