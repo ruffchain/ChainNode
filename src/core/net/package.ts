@@ -42,7 +42,7 @@ export class Package {
     }
 
     copyData(): Buffer {
-        let buffer = new Buffer(this.dataLength);
+        let buffer = Buffer.alloc(this.dataLength);
         let copyStart = 0;
         for (let data of this.data) {
             data.copy(buffer, copyStart);
