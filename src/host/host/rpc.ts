@@ -164,6 +164,7 @@ export class ChainServer {
                     if (block) {
                         // 处理block content 中的transaction, 然后再响应请求
                         let res: any = { err: ErrorCode.RESULT_OK, block: hr.header!.stringify() };
+
                         if (params.transactions) {
                             res.transactions = block.content.transactions.map((tr: Transaction) => tr.stringify());
                         }
@@ -172,7 +173,11 @@ export class ChainServer {
                         }
                         // Added by Yang Jun 2019-8-9
                         if (params.receipts) {
-                            res.receipts = block.content.getTxReceipts();
+                            // res.receipts = block.content.getTxReceipts();
+                            res.receipts = block.content.transactions.map((tr: Transaction) => {
+                                let receipt: Receipt | undefined = block!.content.getReceipt(tr.hash);
+                                return receipt!.stringify();
+                            });
                         }
                         await promisify(resp.write.bind(resp)(JSON.stringify(res)));
                     }
