@@ -214,7 +214,10 @@ export class ChainServer {
                             }
                             // Added by Yang Jun 2019-8-9
                             if (params.receipts) {
-                                res.receipts = block.content.getTxReceipts();
+                                res.receipts = block.content.transactions.map((tr: Transaction) => {
+                                    let receipt: Receipt | undefined = block!.content.getReceipt(tr.hash);
+                                    return receipt!.stringify();
+                                });
                             }
                             output.blocks.push(res);
                         }
