@@ -665,7 +665,8 @@ export class SqliteStorage extends Storage {
 
         try {
             if (this.m_isReadOnly) {
-                this.m_db!.pragma('journal_mode = WAL');
+                this.m_db!.pragma('journal_mode = MEMORY');
+                this.m_db!.pragma('locking_mode = EXCLUSIVE');
             } else {
                 this.m_db!.pragma('locking_mode = EXCLUSIVE');
                 this.m_db!.pragma('synchronous  = NORMAL');
@@ -692,11 +693,12 @@ export class SqliteStorage extends Storage {
     public async freeze(): Promise<ErrorCode> {
         if (!this.m_isFreezed) {
             if (this.m_db && !this.m_isReadOnly) {
+                this.m_db.pragma('journal_mode = DELETE');
                 this.m_db.close();
                 this.m_db = new sqlite(this.m_filePath, {readonly: true});
                 this.m_isReadOnly = true;
-                this.m_db.pragma('journal_mode = WAL');
-                //this.m_db.pragma('locking_mode = EXCLUSIVE');
+                this.m_db.pragma('locking_mode = EXCLUSIVE');
+                this.m_db.pragma('journal_mode = MEMORY');
             }
             this.m_isFreezed = true;
         }
@@ -705,6 +707,9 @@ export class SqliteStorage extends Storage {
 
     public async uninit(): Promise<ErrorCode> {
         if (this.m_db) {
+            if (!this.m_isFreezed && !this.m_isReadOnly) {
+                this.m_db.pragma('journal_mode = DELETE');
+            }
             this.m_db.close();
             delete this.m_db;
         }
