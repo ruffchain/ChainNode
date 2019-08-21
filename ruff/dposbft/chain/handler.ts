@@ -98,6 +98,7 @@ export function registerHandler(handler: ValueHandler, globalOption: ChainGlobal
     // sys about
     /////////////
     handler.defineEvent('transfer', { indices: ['from', 'to'] });
+    handler.defineEvent('setUserCode', { indices: ['from'] });
     handler.addTX('transferTo', funcTransferTo, genChecker(transferToSchema));
 
     handler.addViewMethod('getBalance', async (context: DposViewContext, params: any): Promise<BigNumber> => {

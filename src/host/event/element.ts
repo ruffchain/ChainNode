@@ -5,6 +5,8 @@ import { isNullOrUndefined, isNull, isString, isObject } from 'util';
 const assert = require('assert');
 import {ChainEventFilterStub} from './stub';
 
+const IGNORE_EMPTY_EVENTS: boolean = true;
+
 export class ChainEvent implements IElement {
     private m_chain: Chain;
     private m_logger: LoggerInstance;
@@ -36,27 +38,28 @@ export class ChainEvent implements IElement {
         const receipts = block.content.receipts;
         let eventIndex = 0;
         let sqls = [];
-        for (const name of this.m_eventDefinations.keys()) {
-            // 这里为block在每个event table中加入一条index 为 -1的记录；
-            // 当查询某个block的event时，为了区分block不存在和block中没有event的情况
-            // block通过addBlock加入到event table之后，select from event table至少会返回index 为-1这条记录；
-            // block没有通过addBlock加入到event table的话， select会返回无记录
-            let rlog = new EventLog();
-            rlog.name = name;
-            const sr = this._sqlAddEvent(block.number, -1, rlog);
-            if (sr.err) {
-                this.m_logger.error(`add replaceholder event sql for block hash: ${block.hash} number: ${block.number} on event ${name} failed ${stringifyErrorCode(sr.err)}`);
-                return ErrorCode.RESULT_EXCEPTION;
-            }
-            sqls.push(sr.sql!);
-        }
+        // IGNORE_EMPTY_EVENTS
+        //for (const name of this.m_eventDefinations.keys()) {
+        //    // 这里为block在每个event table中加入一条index 为 -1的记录；
+        //    // 当查询某个block的event时，为了区分block不存在和block中没有event的情况
+        //    // block通过addBlock加入到event table之后，select from event table至少会返回index 为-1这条记录；
+        //    // block没有通过addBlock加入到event table的话， select会返回无记录
+        //    let rlog = new EventLog();
+        //    rlog.name = name;
+        //    const sr = this._sqlAddEvent(block.number, -1, rlog);
+        //    if (sr.err) {
+        //        this.m_logger.error(`add replaceholder event sql for block hash: ${block.hash} number: ${block.number} on event ${name} failed ${stringifyErrorCode(sr.err)}`);
+        //        return ErrorCode.RESULT_EXCEPTION;
+        //    }
+        //    sqls.push(sr.sql!);
+        //}
         for (let i = 0; i < receipts.length; ++i) {
             let r = receipts[i];
             if (r.sourceType === ReceiptSourceType.preBlockEvent
                 || r.sourceType === ReceiptSourceType.transaction
                 || r.sourceType === ReceiptSourceType.postBlockEvent) {
                 for (let l of r.eventLogs) {
-                    const sr = this._sqlAddEvent(block.number, eventIndex, l);
+                    const sr = this._sqlAddEvent(block.number, block.hash, eventIndex, l);
                     if (sr.err) {
                         this.m_logger.error(`add event sql for block hash: ${block.hash} number: ${block.number} on event ${eventIndex} failed ${stringifyErrorCode(sr.err)}`);
                         return ErrorCode.RESULT_EXCEPTION;
@@ -69,9 +72,11 @@ export class ChainEvent implements IElement {
                 return ErrorCode.RESULT_EXCEPTION;
             }
         }
-        const runOps = sqls.map((sql) => this.m_db!.prepare(sql).run);
         try {
-            await Promise.all(runOps);
+            sqls.forEach((sql) => {
+                console.log(sql);
+                this.m_db!.prepare(sql).run()
+            });
         } catch (e) {
             this.m_logger.error(`sql add block failed for `, e);
             return ErrorCode.RESULT_EXCEPTION;
@@ -171,6 +176,7 @@ export class ChainEvent implements IElement {
             sqlGet += ` ORDER BY "index" `;
             let records;
             try {
+                console.log(sqlGet);
                 records = this.m_db!.prepare(sqlGet).all();
             } catch (e) {
                 this.m_logger.error(`sql get events of ${hash} failed e=${e}, sql=${sqlGet}`, e);
@@ -194,18 +200,43 @@ export class ChainEvent implements IElement {
         return {err: ErrorCode.RESULT_OK, events};
     }
 
-    private _sqlAddEvent(blockNumber: number, eventIndex: number, log: EventLog): {err: ErrorCode, sql?: string} {
+    async getEventsByName(event: string, blockNumber: number | string | 'latest', offset: number):  Promise<{err: ErrorCode, events?: any[]}> {
+        let querySql;
+        let limit = Math.min(100, Math.abs(offset));
+
+        if (typeof blockNumber === 'string' && blockNumber === 'latest') {
+            querySql = `select * from ${this._eventTblName(event)} order by block_number desc limit ${limit}`;
+        } else if (typeof blockNumber === 'number'){
+            if (blockNumber < 0) {
+                return { err: ErrorCode.RESULT_INVALID_PARAM };
+            }
+            if (offset >= 0) {
+                querySql = `select * from ${this._eventTblName(event)} where block_number >= ${blockNumber} order by block_number asc limit ${limit}`;
+            } else {
+                querySql = `select * from ${this._eventTblName(event)} where block_number <= ${blockNumber} order by block_number desc limit ${limit}`;
+            }
+        } else {
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
+        }
+        try {
+            let ret = this.m_db!.prepare(querySql).all();
+            return {err: ErrorCode.RESULT_OK, events: ret};
+        } catch (e) {
+            return { err: ErrorCode.RESULT_EXCEPTION }
+        }
+    }
+    private _sqlAddEvent(blockNumber: number, blockHash: string, eventIndex: number, log: EventLog): {err: ErrorCode, sql?: string} {
         const def = this.m_eventDefinations.get(log.name);
         if (!def) {
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        let sql = `INSERT INTO ${this._eventTblName(log.name)} ("index", "block_number"`;
+        let sql = `INSERT INTO ${this._eventTblName(log.name)} ("index", "block_number", "block_hash"`;
         const param = isNullOrUndefined(log.param) ? {} : log.param;
         if (def.indices) {
             for (const index of def.indices) {
-                sql += `, ${this._indexColName(index)}`;
+                sql += `, ${this._indexColName(index, null)}`;
             }
-            sql += `) VALUES (${eventIndex}, ${blockNumber}`;
+            sql += `) VALUES (${eventIndex}, ${blockNumber}, "${blockHash}"`;
             for (const index of def.indices) {
                 const indexValue = JSON.stringify(param[index]);
                 sql += `, '${indexValue}'`;
@@ -220,17 +251,23 @@ export class ChainEvent implements IElement {
         const tblName = this._eventTblName(name);
         if (def.indices) {
             for (let index of def.indices) {
-                const colName = this._indexColName(index);
+                const colName = this._indexColName(index, null);
                 sqlCreateIndex += `, ${colName} MULTICHAR NOT NULL`;
             }
             sqlCreateIndex += ');';
             for (let index of def.indices) {
-                const colName = this._indexColName(index);
-                sqlCreateIndex += `CREATE INDEX ${colName} ON ${tblName}(${colName});`;
+                const colName = this._indexColName(index, null);
+                const indexName = this._indexColName(index, name);
+                sqlCreateIndex += `CREATE INDEX ${indexName} ON ${tblName}(${colName});`;
             }
         }
-        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL` + sqlCreateIndex;
+        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL, "block_hash" CHAR(64) NOT NULL` + sqlCreateIndex;
         try {
+            let table = this.m_db!.prepare(`SELECT name FROM sqlite_master WHERE name= ${tblName}`).get();
+            console.log(table);
+            if (table && (table.name === tblName.slice(1, -1))) {
+                return ErrorCode.RESULT_OK;
+            }
             console.log('sqlCreate string', sqlCreate);
             this.m_db!.exec(sqlCreate);
         } catch (e) {
@@ -244,7 +281,11 @@ export class ChainEvent implements IElement {
         return `"event@${name}"`;
     }
 
-    private _indexColName(index: string): string {
-        return `"index@${index}"`;
+    private _indexColName(index: string, event: string | null): string {
+        if (event) {
+            return `"index@${index}@${event}"`;
+        } else {
+            return `"index@${index}"`;
+        }
     }
 }

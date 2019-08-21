@@ -262,20 +262,14 @@ export class ChainServer {
             getMonitor()!.updateSendRpcs();
         });
 
-        this.m_server!.on('getEventLogs', async (params: { block: any, filters: object }, resp) => {
+        this.m_server!.on('getEventsByName', async (params: { block: any, event: string }, resp) => {
             do {
                 if (!this.m_chainContext || !this.m_chainContext.getElement(ChainEvent.ElementName)) {
                     await promisify(resp.write.bind(resp)(JSON.stringify({ err: ErrorCode.RESULT_NOT_SUPPORT })));
                     break;
                 }
-                let stub: ChainEventFilterStub = new ChainEventFilterStub(params.filters);
-                let err = stub.init();
-                if (err) {
-                    await promisify(resp.write.bind(resp)(JSON.stringify({ err })));
-                    break;
-                }
                 let element: ChainEvent = this.m_chainContext.getElement(ChainEvent.ElementName)! as ChainEvent;
-                let hr = await element.getEventByStub(params.block, stub);
+                let hr = await element.getEventsByName(params.event, params.block.from, params.block.offset);
                 if (hr.err) {
                     await promisify(resp.write.bind(resp)(JSON.stringify({ err: hr.err })));
                 } else {
