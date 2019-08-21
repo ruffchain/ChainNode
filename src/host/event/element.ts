@@ -74,7 +74,6 @@ export class ChainEvent implements IElement {
         }
         try {
             sqls.forEach((sql) => {
-                console.log(sql);
                 this.m_db!.prepare(sql).run()
             });
         } catch (e) {
@@ -176,7 +175,6 @@ export class ChainEvent implements IElement {
             sqlGet += ` ORDER BY "index" `;
             let records;
             try {
-                console.log(sqlGet);
                 records = this.m_db!.prepare(sqlGet).all();
             } catch (e) {
                 this.m_logger.error(`sql get events of ${hash} failed e=${e}, sql=${sqlGet}`, e);
@@ -264,11 +262,9 @@ export class ChainEvent implements IElement {
         const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL, "block_hash" CHAR(64) NOT NULL` + sqlCreateIndex;
         try {
             let table = this.m_db!.prepare(`SELECT name FROM sqlite_master WHERE name= ${tblName}`).get();
-            console.log(table);
             if (table && (table.name === tblName.slice(1, -1))) {
                 return ErrorCode.RESULT_OK;
             }
-            console.log('sqlCreate string', sqlCreate);
             this.m_db!.exec(sqlCreate);
         } catch (e) {
             this.m_logger.error(`init event ${name} table failed `, e);
