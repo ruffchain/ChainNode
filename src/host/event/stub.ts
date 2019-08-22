@@ -16,8 +16,8 @@ export class ChainEventFilterStub {
     }
 
     init(): ErrorCode {
-        if (!this.m_filters 
-            || !isObject(this.m_filters) 
+        if (!this.m_filters
+            || !isObject(this.m_filters)
             || !Object.keys(this.m_filters).length) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
@@ -25,10 +25,11 @@ export class ChainEventFilterStub {
         let filterFuncs = new Map();
         for (let [event, filter] of Object.entries(this.m_filters)) {
             if (!filter || !Object.keys(filter).length) {
-                filterFuncs.set(name, (log: EventLog): boolean => {
+                filterFuncs.set(event, (log: EventLog): boolean => {
                     return true;
                 });
                 querySql.set(event, null);
+                return ErrorCode.RESULT_OK;
             }
             let pfr = ChainEventFilterStub._parseFilter(filter, (op, ...opr: any[]): string => {
                 if (op === 'and') {
@@ -51,7 +52,7 @@ export class ChainEventFilterStub {
                     let sql = `e."index@${opr[0]}" IN [`;
                     if (opr[1].length) {
                         sql += `'${JSON.stringify(opr[1][0])}'`;
-                    } 
+                    }
                     for (let v of opr[1]) {
                         sql += `,'${JSON.stringify(opr[1][0])}'`;
                     }
@@ -63,7 +64,7 @@ export class ChainEventFilterStub {
             });
             if (pfr.err) {
                 return pfr.err;
-            } 
+            }
             querySql.set(event, pfr.value!);
 
             pfr = ChainEventFilterStub._parseFilter(filter, (op, ...opr: any[]): string => {
@@ -91,7 +92,7 @@ export class ChainEventFilterStub {
             });
             if (pfr.err) {
                 return pfr.err;
-            } 
+            }
             let _func;
             let funcDef = '_func = (l) => { return ' + pfr.value! + ';};';
             try {
@@ -101,7 +102,7 @@ export class ChainEventFilterStub {
             }
             filterFuncs.set(event, _func);
         }
-        
+
         this.m_querySql = querySql;
         this.m_filterFunc = (log: EventLog): boolean => {
             if (!filterFuncs.has(log.name)) {
@@ -125,7 +126,7 @@ export class ChainEventFilterStub {
             let exp = filter['$and'];
             if (!isArray(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
-            } 
+            }
             if (exp.length > 2) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
             }
@@ -148,7 +149,7 @@ export class ChainEventFilterStub {
             let exp = filter['$or'];
             if (!isArray(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
-            } 
+            }
             if (exp.length > 2) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
             }
@@ -171,7 +172,7 @@ export class ChainEventFilterStub {
             let exp = filter['$eq'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
-            } 
+            }
             const _keys = Object.keys(exp);
             if (_keys.length !== 1) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
@@ -188,7 +189,7 @@ export class ChainEventFilterStub {
             let exp = filter['$neq'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
-            } 
+            }
             const _keys = Object.keys(exp);
             if (_keys.length !== 1) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
@@ -205,7 +206,7 @@ export class ChainEventFilterStub {
             let exp = filter['$in'];
             if (!isObject(exp)) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
-            } 
+            }
             const _keys = Object.keys(exp);
             if (_keys.length !== 1) {
                 return {err: ErrorCode.RESULT_INVALID_FORMAT};
