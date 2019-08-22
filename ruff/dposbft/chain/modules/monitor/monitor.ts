@@ -350,7 +350,7 @@ abstract class Monitor {
                     }
                 }
                 let out = numCpu + ' core' + (numCpu > 1) ? 's ' : ' ' + strLst[0];
-                return out.trim();
+                return out;
             }
         } catch (e) {
             this.logger.error('Error getCpuInfo()');
@@ -366,7 +366,7 @@ abstract class Monitor {
                 return '';
             } else {
                 // how to get model name 
-                let out = stdout.trim();
+                let out = stdout;
                 return out;
             }
         } catch (e) {
