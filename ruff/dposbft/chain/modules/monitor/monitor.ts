@@ -206,8 +206,11 @@ abstract class Monitor {
     protected addToLst(lst: IfConnInfo[] | IfProcessInfo[] | IfContribInfo[], item: IfConnInfo | IfProcessInfo | IfContribInfo) {
         let obj: any = {}
         let itemAny: any = item as any;
+
+        this.logger.debug('\n');
         for (let key of Object.keys(itemAny)) {
             obj[key] = itemAny[key]
+            this.logger.debug(key + ' ' + obj[key]);
         }
         console.log(obj);
         (lst as Array<any>).push(obj);
@@ -316,13 +319,19 @@ abstract class Monitor {
         }
     }
     private async getDockerVersion(): Promise<string> {
-        const { stdout, stderr } = await exec(`docker --version`);
-        if (stderr) {
-            this.logger.warn('Run docker --version failed');
-            return '';
-        } else {
-            return stdout;
+        try {
+            const { stdout, stderr } = await exec(`docker --version`);
+            if (stderr) {
+                this.logger.warn('Run docker --version failed');
+                return '';
+            } else {
+                return stdout;
+            }
+        } catch (e) {
+            this.logger.error('Error, getDockerVersion()');
+            return 'known';
         }
+
     }
 
     private async getCpuInfo(): Promise<string> {
@@ -341,7 +350,7 @@ abstract class Monitor {
                     }
                 }
                 let out = numCpu + ' core' + (numCpu > 1) ? 's ' : ' ' + strLst[0];
-                return out;
+                return out.trim();
             }
         } catch (e) {
             this.logger.error('Error getCpuInfo()');
@@ -357,7 +366,7 @@ abstract class Monitor {
                 return '';
             } else {
                 // how to get model name 
-                let out = stdout;
+                let out = stdout.trim();
                 return out;
             }
         } catch (e) {
@@ -384,7 +393,7 @@ abstract class Monitor {
         this.connInfo.inbound = this.chain.node.getNetwork()!.node.dumpInConns();
         this.connInfo.outbound = this.chain.node.getNetwork()!.node.dumpOutConns();
 
-        this.logger.debug('connInfo');
+        // this.logger.debug('connInfo');
         // console.log(this.connInfo);
 
         this.addToLst(this.connInfoLst, this.connInfo);
