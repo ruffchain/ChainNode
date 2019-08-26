@@ -342,14 +342,15 @@ abstract class Monitor {
                 return '';
             } else {
                 // how to get model name 
-                let strLst = stdout.split('\n');
-                let numCpu = 0;
-                for (let i = 0; i < strLst.length; i++) {
-                    if (strLst[i].length > 1) {
-                        numCpu++;
-                    }
-                }
-                let out = numCpu + ' core' + (numCpu > 1) ? 's ' : ' ' + strLst[0];
+                // let strLst = stdout.split('\n');
+                // let numCpu = 0;
+                // for (let i = 0; i < strLst.length; i++) {
+                //     if (strLst[i].length > 1) {
+                //         numCpu++;
+                //     }
+                // }
+                // let out = numCpu + ' core' + (numCpu > 1) ? 's ' : ' ' + strLst[0];
+                let out = stdout;
                 return out;
             }
         } catch (e) {

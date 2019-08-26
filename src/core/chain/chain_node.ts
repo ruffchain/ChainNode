@@ -12,6 +12,7 @@ import { BufferWriter } from '../lib/writer';
 
 import { INode, NodeConnection, PackageStreamWriter, Package, CMD_TYPE } from '../net';
 import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
+import { TxBuffer } from './tx_buffer';
 
 export enum SYNC_CMD_TYPE {
     getHeader = CMD_TYPE.userCmd + 0,
@@ -70,6 +71,9 @@ export class ChainNode extends EventEmitter {
         this.m_reqTimeoutTimer = setInterval(() => {
             this._onReqTimeoutTimer(Date.now() / 1000);
         }, 1000);
+
+        this.m_txBuffer = new TxBuffer(options.logger, this);
+        this.m_txBuffer.start();
     }
 
     private m_logger: LoggerInstance;
@@ -77,6 +81,8 @@ export class ChainNode extends EventEmitter {
     private m_blockStorage: BlockStorage;
     private m_storageManager: StorageManager;
     private m_blockWithLog: boolean;
+    // Yang Jun 2019-8-26
+    private m_txBuffer: TxBuffer;
 
     on(event: 'blocks', listener: (params: BlocksEventParams) => any): this;
     on(event: 'headers', listener: (params: HeadersEventParams) => any): this;
@@ -148,6 +154,11 @@ export class ChainNode extends EventEmitter {
             uninits.push(network.uninit());
         }
         return Promise.all(uninits);
+    }
+
+    // Add by Yang Jun 2019-8-27
+    public get txBuffer(): TxBuffer {
+        return this.m_txBuffer;
     }
 
     public get logger(): LoggerInstance {
@@ -285,7 +296,10 @@ export class ChainNode extends EventEmitter {
                             hashs.push(tx.hash);
                         }
                         this.logger.debug(`receive transaction from ${conn.fullRemote} ${JSON.stringify(hashs)}`);
-                        this.emit('transactions', conn, txes);
+
+                        // Yang Jun 2019-8-27
+                        // this.emit('transactions', conn, txes);
+                        this.m_txBuffer.addTxes(conn, txes);
                     }
                 }
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.header) {
@@ -356,11 +370,21 @@ export class ChainNode extends EventEmitter {
                 }
                 this.emit('headers', { from: conn.fullRemote, headers, request: pkg.body.request, error: pkg.body.error });
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.getHeader) {
+                // Add by Yang Jun 2019-8-27
+                this.txBuffer.beginGetHeader();
+
                 this._responseHeaders(conn, pkg.body);
+
+                this.txBuffer.endGetHeader();
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.block) {
                 this._handlerBlockPackage(network, conn, pkg);
             } else if (pkg.header.cmdType === SYNC_CMD_TYPE.getBlock) {
+                // Add by Yang Jun 2019-8-27
+                this.txBuffer.beginGetBlock();
+
                 this._responseBlocks(conn, pkg.body);
+
+                this.txBuffer.endGetBlock();
             }
         });
     }
@@ -889,5 +913,7 @@ export class ChainNode extends EventEmitter {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
     }
+
+
 
 }

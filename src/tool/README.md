@@ -28,6 +28,8 @@ node ./dist/blockchain-sdk/src/tool/restore_storage.js restore --dataDir ${path1
 ```
 node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner2
 
+node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner1
+
 We found the tip of node is 1000. A recommended trim point is height< 1000, for example 995, or smaller,  will be good.
 
 

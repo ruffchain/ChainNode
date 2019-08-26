@@ -1,13 +1,13 @@
-import {ErrorCode} from '../error_code';
-import {DposMiner, DposMinerInstanceOptions} from '../dpos_chain';
-import {DposBftChain, DposBftMinerChain} from './chain';
-import {DposBftChainNode} from './dpos_bft_node';
-import {DposBftNetwork} from './network';
-import {DposBftBlockHeaderSignature, DposBftBlockHeader} from './block';
+import { ErrorCode } from '../error_code';
+import { DposMiner, DposMinerInstanceOptions } from '../dpos_chain';
+import { DposBftChain, DposBftMinerChain } from './chain';
+import { DposBftChainNode } from './dpos_bft_node';
+import { DposBftNetwork } from './network';
+import { DposBftBlockHeaderSignature, DposBftBlockHeader } from './block';
 import * as libAddress from '../address';
-import {DposBftChainTipState} from './chain_state';
-import {DposBftChainTipStateManager} from './chain_state_manager';
-import {Block} from '../block';
+import { DposBftChainTipState } from './chain_state';
+import { DposBftChainTipStateManager } from './chain_state_manager';
+import { Block } from '../block';
 
 export type DposBftSignEntry = {
     number: number,
@@ -29,7 +29,7 @@ export class DposBftMiner extends DposMiner {
         return new DposBftBlockHeader();
     }
 
-    protected async _createBlock(header: DposBftBlockHeader): Promise<{err: ErrorCode, block?: Block}> {
+    protected async _createBlock(header: DposBftBlockHeader): Promise<{ err: ErrorCode, block?: Block }> {
         let cts: DposBftChainTipState = this.chain.chainTipState as DposBftChainTipState;
         if (cts.IRB.number >= cts.bftIRB.number) {
             header.bftSigns = cts.bftSigns;
@@ -88,7 +88,7 @@ export class DposBftMiner extends DposMiner {
         if (err) {
             this.m_logger.error(`dbft miner super initialize failed, errcode ${err}`);
             return err;
-        } 
+        }
 
         this.m_pubkey = libAddress.publicKeyFromSecretKey(this.m_secret!)!;
         this.m_bftNode = new DposBftChainNode({
@@ -98,9 +98,12 @@ export class DposBftMiner extends DposMiner {
         });
 
         this.m_bftNode.on('tipSign', async (sign: DposBftBlockHeaderSignature) => {
+            // Add by Yang Jun 2019-8-27
+            this.m_chain!.node.txBuffer.beginTipSign();
+
             let address = libAddress.addressFromPublicKey(sign.pubkey)!;
             this.m_logger.info(`===============tipSign from ${address} hash=${sign.hash}`);
-            let entry: DposBftSignEntry = {number: -1, bInBestChain: false, sign};
+            let entry: DposBftSignEntry = { number: -1, bInBestChain: false, sign };
             let hr = await this.chain.getHeader(sign.hash);
             if (!hr.err) {
                 if (hr.header!.number <= (this.chain.chainTipState as DposBftChainTipState).bftIRB.number) {
@@ -114,6 +117,8 @@ export class DposBftMiner extends DposMiner {
             }
             this.m_minerSigns.set(address, entry);
             this.maybeNewBftIRB();
+
+            this.m_chain!.node.txBuffer.endTipSign();
         });
 
         return ErrorCode.RESULT_OK;
@@ -121,7 +126,7 @@ export class DposBftMiner extends DposMiner {
 
     protected async sendSign() {
         if (this.chain.tipBlockHeader!.hash === this.chain.chainTipState.IRB.hash) {
-            return ;
+            return;
         }
         let hr = await this.chain.getHeader(this.chain.chainTipState.IRB.number + 1);
         if (hr.err) {
