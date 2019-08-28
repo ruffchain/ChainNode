@@ -59,7 +59,7 @@ export class ChainEvent implements IElement {
                 || r.sourceType === ReceiptSourceType.transaction
                 || r.sourceType === ReceiptSourceType.postBlockEvent) {
                 for (let l of r.eventLogs) {
-                    const sr = this._sqlAddEvent(block.number, block.hash, eventIndex, l);
+                    const sr = this._sqlAddEvent(block.number, r.transactionHash, eventIndex, l);
                     if (sr.err) {
                         this.m_logger.error(`add event sql for block hash: ${block.hash} number: ${block.number} on event ${eventIndex} failed ${stringifyErrorCode(sr.err)}`);
                         return ErrorCode.RESULT_EXCEPTION;
@@ -223,18 +223,18 @@ export class ChainEvent implements IElement {
             return { err: ErrorCode.RESULT_EXCEPTION }
         }
     }
-    private _sqlAddEvent(blockNumber: number, blockHash: string, eventIndex: number, log: EventLog): {err: ErrorCode, sql?: string} {
+    private _sqlAddEvent(blockNumber: number, txHash: string, eventIndex: number, log: EventLog): {err: ErrorCode, sql?: string} {
         const def = this.m_eventDefinations.get(log.name);
         if (!def) {
             return {err: ErrorCode.RESULT_EXCEPTION};
         }
-        let sql = `INSERT INTO ${this._eventTblName(log.name)} ("index", "block_number", "block_hash"`;
+        let sql = `INSERT INTO ${this._eventTblName(log.name)} ("index", "block_number", "tx_hash"`;
         const param = isNullOrUndefined(log.param) ? {} : log.param;
         if (def.indices) {
             for (const index of def.indices) {
                 sql += `, ${this._indexColName(index, null)}`;
             }
-            sql += `) VALUES (${eventIndex}, ${blockNumber}, "${blockHash}"`;
+            sql += `) VALUES (${eventIndex}, ${blockNumber}, "${txHash}"`;
             for (const index of def.indices) {
                 const indexValue = JSON.stringify(param[index]);
                 sql += `, '${indexValue}'`;
@@ -259,7 +259,7 @@ export class ChainEvent implements IElement {
                 sqlCreateIndex += `CREATE INDEX ${indexName} ON ${tblName}(${colName});`;
             }
         }
-        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL, "block_hash" CHAR(64) NOT NULL` + sqlCreateIndex;
+        const sqlCreate = `CREATE TABLE IF NOT EXISTS ${tblName} ("index" INTEGER NOT NULL, "block_number" INTERGER NOT NULL, "tx_hash" CHAR(64) NOT NULL` + sqlCreateIndex;
         try {
             let table = this.m_db!.prepare(`SELECT name FROM sqlite_master WHERE name= ${tblName}`).get();
             if (table && (table.name === tblName.slice(1, -1))) {
