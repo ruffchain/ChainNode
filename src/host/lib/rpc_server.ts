@@ -3,6 +3,8 @@ import { ErrorCode } from '../../core';
 import * as http from 'http';
 
 import { getMonitor } from '../../../ruff/dposbft/chain/modules/monitor';
+import { string, any } from '@hapi/joi';
+import { TxBuffer } from '../../core/chain/tx_buffer';
 
 // At first stage set max length to 300K
 const MAX_CONTENTY_LENGTH = 300 * 1024;
@@ -11,10 +13,15 @@ export class RPCServer extends EventEmitter {
     private m_addr: string;
     private m_port: number;
     private m_server?: http.Server;
-    constructor(listenaddr: string, port: number) {
+    private m_txBuffer: TxBuffer;
+
+    constructor(listenaddr: string, port: number, txBuffer: TxBuffer) {
         super();
         this.m_addr = listenaddr;
         this.m_port = port;
+        // Add for rpc flow control
+        this.m_txBuffer = txBuffer;
+        this.m_txBuffer.addRpcIf(this);
     }
 
     on(funcName: string, listener: (args: any, resp: http.ServerResponse) => void): this;
@@ -85,7 +92,9 @@ export class RPCServer extends EventEmitter {
                     // to count received rpc requests
                     getMonitor()!.updateRecvRpcs();
 
-                    if (!this.emit(reqObj.funName, reqObj.args, resp)) {
+                    // Change by Yang Jun 2019-8-29
+                    // if (!this.emit(reqObj.funName, reqObj.args, resp)) {
+                    if (!this.m_txBuffer.addRpc(reqObj.funName, reqObj.args, resp)) {
                         resp.writeHead(404);
                         resp.end();
                     }
@@ -99,7 +108,7 @@ export class RPCServer extends EventEmitter {
         this.m_server.listen(this.m_port, this.m_addr);
     }
 
-    stop() {
+    public stop() {
         if (this.m_server) {
             this.m_server.close();
             delete this.m_server;

@@ -29,11 +29,13 @@ function promisify(f: any) {
 export class ChainServer {
     private m_logger: LoggerInstance;
     private m_chainContext?: HostChainContext;
+
     constructor(logger: LoggerInstance, chain: Chain, chainContext?: HostChainContext, miner?: Miner) {
         this.m_chain = chain;
         this.m_miner = miner;
         this.m_logger = logger;
         this.m_chainContext = chainContext;
+
     }
 
     init(commandOptions: CommandOptions): boolean {
@@ -45,9 +47,11 @@ export class ChainServer {
         if (!port) {
             return false;
         }
-        this.m_server = new RPCServer(host, parseInt(port, 10));
+        // Modify by Yang Jun 2019-8-29
+        this.m_server = new RPCServer(host, parseInt(port, 10), this.m_chain.node.txBuffer);
         this._initMethods();
         this.m_server.start();
+
         return true;
     }
 

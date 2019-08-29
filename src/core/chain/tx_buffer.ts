@@ -3,10 +3,16 @@ import { NodeConnection } from "../net";
 import { DelayPromise } from "../../../ruff/dposbft/chain/modules/monitor/monitor";
 import { ErrorCode, LoggerInstance, Transaction } from "../../host";
 import { ChainNode } from "./chain_node";
+import { RPCServer } from "../../host/lib/rpc_server";
 
 export interface IfTxBufferItem {
     conn: NodeConnection;
     transactions: Transaction[];
+}
+export interface IfRpcBufferItem {
+    func: string;
+    args: any;
+    resp: any;
 }
 
 export class TxBuffer extends EventEmitter {
@@ -16,6 +22,12 @@ export class TxBuffer extends EventEmitter {
     static MIN_LOAD_TAP: number = 1;
     static TAP_BOUNCE_BACK: number = 2;
     static ENABLE_TAP: boolean = true;
+    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 2000;
+    static ENABLE_RPC_TAP: boolean = true;
+
+    static MAX_RPC_LOAD_TAP: number = 100;
+    static MIN_RPC_LOAD_TAP: number = 1;
+
 
     static TAP_HEADERS: number = 80;
     static TAP_GETHEADER: number = 80;
@@ -23,13 +35,27 @@ export class TxBuffer extends EventEmitter {
     static TAP_GETBLOCK: number = 80;
     static TAP_TIPSIGN: number = 80;
 
+    static RPC_TAP_HEADERS: number = 80;
+    static RPC_TAP_GETHEADER: number = 80;
+    static RPC_TAP_BLOCK: number = 80;
+    static RPC_TAP_GETBLOCK: number = 80;
+    static RPC_TAP_TIPSIGN: number = 80;
+
     private m_buffer: IfTxBufferItem[] = [];
     private m_timer?: NodeJS.Timer;
     private m_logger: LoggerInstance;
     private m_sliceCounter: number = 0;
     private m_slices: number[] = [];
     private m_loadTap: number;
+
     private m_node?: ChainNode;
+
+    private m_rpcServer?: RPCServer;
+    private m_rpcBuffer: IfRpcBufferItem[] = [];
+    private m_rpcLoadTap: number;
+    private m_rpcCounter: number = 0;
+    private m_rpcSlices: number[] = [];
+
 
     constructor(logger: LoggerInstance, chainnode?: ChainNode) {
         super();
@@ -45,6 +71,12 @@ export class TxBuffer extends EventEmitter {
 
         this.m_loadTap = TxBuffer.MAX_LOAD_TAP;
         this.updatePattern(this.m_loadTap);
+
+        for (let i = 0; i < TxBuffer.MAX_TIME_SLICE; i++) {
+            this.m_rpcSlices.push(0);
+        }
+        this.m_rpcLoadTap = TxBuffer.MAX_RPC_LOAD_TAP;
+        this.updateRpcPattern(this.m_rpcLoadTap);
     }
     /**
      * 
@@ -61,6 +93,17 @@ export class TxBuffer extends EventEmitter {
             this.m_slices[i] += 1;
         }
     }
+    private updateRpcPattern(tap: number) {
+        // design 100 pattern according to tap 
+        let div = Math.floor(tap / TxBuffer.MAX_TIME_SLICE);
+        let remai = tap % TxBuffer.MAX_TIME_SLICE;
+        for (let i = 0; i < TxBuffer.MAX_TIME_SLICE; i++) {
+            this.m_rpcSlices[i] = div;
+        }
+        for (let i = 0; i < remai; i++) {
+            this.m_rpcSlices[i] += 1;
+        }
+    }
     private addLoadTap(delta: number) {
         this.m_loadTap += delta;
         if (this.m_loadTap > TxBuffer.MAX_LOAD_TAP) {
@@ -71,6 +114,18 @@ export class TxBuffer extends EventEmitter {
         this.m_loadTap -= delta;
         if (this.m_loadTap < TxBuffer.MIN_LOAD_TAP) {
             this.m_loadTap = TxBuffer.MIN_LOAD_TAP;
+        }
+    }
+    private addRpcLoadTap(delta: number) {
+        this.m_rpcLoadTap += delta;
+        if (this.m_rpcLoadTap > TxBuffer.MAX_RPC_LOAD_TAP) {
+            this.m_rpcLoadTap = TxBuffer.MAX_RPC_LOAD_TAP;
+        }
+    }
+    private subRpcLoadTap(delta: number) {
+        this.m_rpcLoadTap -= delta;
+        if (this.m_rpcLoadTap < TxBuffer.MIN_RPC_LOAD_TAP) {
+            this.m_rpcLoadTap = TxBuffer.MIN_RPC_LOAD_TAP;
         }
     }
     private getTxNumToSend(): number {
@@ -84,6 +139,17 @@ export class TxBuffer extends EventEmitter {
 
         return this.m_slices[out];
     }
+    private getRpcNumToSend(): number {
+        let out = this.m_rpcCounter;
+        if ((1 + this.m_rpcCounter) >= TxBuffer.MAX_TIME_SLICE) {
+            this.m_rpcCounter = 0;
+            this.updateRpcPattern(this.m_rpcLoadTap);
+        } else {
+            this.m_rpcCounter++;
+        }
+
+        return this.m_rpcSlices[out];
+    }
     private sendTx() {
         // num to be sent in this time slice
         let num = this.getTxNumToSend();
@@ -96,70 +162,141 @@ export class TxBuffer extends EventEmitter {
             }
         }
     }
+    private sendRpc() {
+        let num = this.getRpcNumToSend();
+
+        for (let i = 0; i < num; i++) {
+            let item = this.m_rpcBuffer.shift();
+            if (item) {
+                this.m_logger.info('RpcBuffer emit: ', + i + ' rpcLoadTap:' + this.m_rpcLoadTap + ' num:' + num);
+                this.m_rpcServer!.emit(item.func, item.args, item.resp);
+            }
+        }
+    }
 
     public async start(): Promise<ErrorCode> {
         // this.m_logger.info('TxBuffer trigure ->' + new Date().getTime())
         // check 
         this.sendTx();
 
-        await DelayPromise(TxBuffer.TIME_INTERVAL / 1000);
+        await DelayPromise(TxBuffer.DELAY_UNIT);
+
+        this.sendRpc();
+
+        await DelayPromise(TxBuffer.DELAY_UNIT);
+
         this.start();
         return ErrorCode.RESULT_OK;
     }
+
+    public addRpcIf(server: RPCServer) {
+        this.m_rpcServer = server;
+    }
+
     public addTxes(connection: NodeConnection, txs: Transaction[]) {
         this.m_buffer.push({
             conn: connection,
             transactions: txs
         })
     }
+    public addRpc(funName: string, args: any, resp: any): boolean {
+        this.m_rpcBuffer.push({
+            func: funName,
+            args: args,
+            resp: resp
+        })
+        return true;
+        // if don't want any rpc handling, return false
+    }
+    // flow control methods
     public beginHeaders() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.subLoadTap(TxBuffer.TAP_HEADERS);
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.subRpcLoadTap(TxBuffer.RPC_TAP_HEADERS);
     }
     public endHeaders() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.addLoadTap(TxBuffer.TAP_HEADERS + TxBuffer.TAP_BOUNCE_BACK)
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.addRpcLoadTap(TxBuffer.RPC_TAP_HEADERS + TxBuffer.TAP_BOUNCE_BACK);
     }
     public beginGetHeader() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.subLoadTap(TxBuffer.TAP_GETHEADER);
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.subRpcLoadTap(TxBuffer.RPC_TAP_GETHEADER);
     }
     public endGetHeader() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.addLoadTap(TxBuffer.TAP_GETHEADER + TxBuffer.TAP_BOUNCE_BACK)
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.addRpcLoadTap(TxBuffer.RPC_TAP_GETHEADER + TxBuffer.TAP_BOUNCE_BACK);
     }
     public beginBlock() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.subLoadTap(TxBuffer.TAP_BLOCK);
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.subRpcLoadTap(TxBuffer.RPC_TAP_BLOCK);
     }
     public endBlock() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.addLoadTap(TxBuffer.TAP_BLOCK + TxBuffer.TAP_BOUNCE_BACK)
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.addRpcLoadTap(TxBuffer.RPC_TAP_BLOCK + TxBuffer.TAP_BOUNCE_BACK);
     }
     public beginGetBlock() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.subLoadTap(TxBuffer.TAP_GETBLOCK);
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.subRpcLoadTap(TxBuffer.RPC_TAP_GETBLOCK);
     }
     public endGetBlock() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.addLoadTap(TxBuffer.TAP_GETBLOCK + TxBuffer.TAP_BOUNCE_BACK)
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.addRpcLoadTap(TxBuffer.RPC_TAP_GETBLOCK + TxBuffer.TAP_BOUNCE_BACK);
     }
     public beginTipSign() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.subLoadTap(TxBuffer.TAP_TIPSIGN);
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.subRpcLoadTap(TxBuffer.RPC_TAP_TIPSIGN);
     }
     public endTipSign() {
         if (!TxBuffer.ENABLE_TAP)
             return;
         this.addLoadTap(TxBuffer.TAP_TIPSIGN + TxBuffer.TAP_BOUNCE_BACK)
+
+        if (!TxBuffer.ENABLE_RPC_TAP)
+            return;
+        this.addRpcLoadTap(TxBuffer.RPC_TAP_TIPSIGN + TxBuffer.TAP_BOUNCE_BACK);
     }
 }
