@@ -17,7 +17,7 @@ const preBalancesBancorSchema = Joi.array().max(50).items(Joi.object().keys({
     address: accountSchema,
     amount: amountSchema,
     lock_amount: amountSchema,
-    time_expiration: Joi.number().integer().min(1).required(),
+    time_expiration: Joi.number().integer().min(0).required(),
 })).required();
 
 const precisionSchema = Joi.number().integer().min(0).max(9).required();
@@ -77,14 +77,14 @@ export const voteScheme = Joi.array().min(1).max(7).items(accountSchema).require
 export const mortgageSchema = amountSchema;
 
 export const userCodeSchema = Joi.object().keys({
-    userCode: Joi.binary().max(100*1024).required()
+    userCode: Joi.binary().max(100 * 1024).required()
 });
 
 function isPrecisionMeet(tx: ValueTransaction): boolean {
     let valueDp = tx.value.decimalPlaces();
     let feeDp = tx.fee.decimalPlaces();
 
-    if ((valueDp >= 0 && valueDp <= 9) && (feeDp >=0 && feeDp <= 9)) {
+    if ((valueDp >= 0 && valueDp <= 9) && (feeDp >= 0 && feeDp <= 9)) {
         return true;
     }
     return false;
@@ -101,7 +101,7 @@ export function genChecker(schema?: BaseJoi.AnySchema): TxPendingChecker {
             } else {
                 return ErrorCode.RESULT_INVALID_PARAM;
             }
-        } catch(err) {
+        } catch (err) {
             return ErrorCode.RESULT_INVALID_PARAM;
         }
     };
