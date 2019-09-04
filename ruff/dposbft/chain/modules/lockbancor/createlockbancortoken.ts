@@ -1,5 +1,5 @@
 import { ErrorCode, DposTransactionContext, Chain, BigNumber, isValidAddress } from "../../../../../src/core";
-import { bCheckTokenid, IfBancorTokenItem, isANumber, strAmountPrecision, BANCOR_TOKEN_PRECISION, bCheckBancorTokenFactor, getConfigObj, IfConfigGlobal } from "../scoop";
+import { bCheckTokenid, IfBancorTokenItem, isANumber, strAmountPrecision, BANCOR_TOKEN_PRECISION, bCheckBancorTokenFactor, getConfigObj, IfConfigGlobal, bCheckRedundantAddr } from "../scoop";
 
 export async function funcCreateLockBancorToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
     const configObj: IfConfigGlobal = getConfigObj();
@@ -41,6 +41,11 @@ export async function funcCreateLockBancorToken(context: DposTransactionContext,
 
     let amountAll = new BigNumber(0);
     if (params.preBalances) {
+        // if redundant names
+        if (!bCheckRedundantAddr(params.preBalances)) {
+            return ErrorCode.RESULT_WRONG_ARG;
+        }
+
         for (let index = 0; index < params.preBalances.length; index++) {
             let item: IfBancorTokenItem = params.preBalances[index] as IfBancorTokenItem;
             context.logger.debug('------ :', item);

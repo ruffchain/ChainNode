@@ -224,3 +224,18 @@ export function bCheckBancorTokenFactor(factor: string): boolean {
   }
   return bn.isLessThanOrEqualTo(1) && bn.isGreaterThan(0);
 }
+
+export function bCheckRedundantAddr(preBalances: any[]): boolean {
+  let addrs: string[] = [];
+
+  for (let i = 0; i < preBalances.length; i++) {
+    let addr = preBalances[i].address;
+    if (addrs.indexOf(addr) === -1) {
+      addrs.push(addr);
+    } else {
+      return false;
+    }
+  }
+  return true;
+
+}

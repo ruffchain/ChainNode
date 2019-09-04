@@ -1,10 +1,13 @@
 import { DposTransactionContext, ErrorCode, Chain, isValidAddress, BigNumber } from '../../../../../src/core';
-import { bCheckTokenid, bCheckTokenPrecision, strAmountPrecision, SYS_TOKEN_PRECISION } from '../scoop';
+import { bCheckTokenid, bCheckTokenPrecision, strAmountPrecision, SYS_TOKEN_PRECISION, bCheckRedundantAddr } from '../scoop';
 
 export async function funcCreateToken(context: DposTransactionContext, params: any): Promise<ErrorCode> {
   context.cost(context.fee);
 
   // 这里是不是会有一些检查什么的，会让任何人都随便创建Token么?
+
+  // return fail if redundant addresses in prebalances
+
 
   // 必须要有tokenid，一条链上tokenid不能重复
   if (!params.tokenid || !bCheckTokenid(params.tokenid)
@@ -24,6 +27,11 @@ export async function funcCreateToken(context: DposTransactionContext, params: a
   await kvRet.kv!.set('precision', parseInt(params.precision).toString());
 
   if (params.preBalances) {
+    // if redundant names
+    if (!bCheckRedundantAddr(params.preBalances)) {
+      return ErrorCode.RESULT_WRONG_ARG;
+    }
+
     for (let index = 0; index < params.preBalances.length; index++) {
       // 按照address和amount预先初始化钱数
       let strAmount: string = strAmountPrecision(params.preBalances[index].amount, SYS_TOKEN_PRECISION);

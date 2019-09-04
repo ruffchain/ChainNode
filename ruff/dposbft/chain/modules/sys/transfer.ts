@@ -15,10 +15,10 @@ export async function funcTransferTo(context: DposTransactionContext, params: an
   const err = await context.transferTo(params.to, val);
 
   if (!err) {
-    context.emit('transfer', { from: context.caller, to: params.to, value: val });
+    context.emit('transfer', { from: context.caller, to: params.to, value: val })
   }
   if (Date.now() - start >= 10) {
-      context.logger.info('Transfer take', Date.now() - start);
+    context.logger.info('Transfer take', Date.now() - start);
   }
   return err;
 }
