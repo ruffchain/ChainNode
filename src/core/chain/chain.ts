@@ -1538,6 +1538,8 @@ export class Chain extends EventEmitter implements IConsistency {
         let err = await this.m_headerStorage!.saveHeader(block.header);
         if (!err) {
             this._addPendingBlocks({ block, storage });
+            // Add by Yang Jun 2019-9-3
+            getMonitor()!.updateBlocksMined(1);
         }
     }
 

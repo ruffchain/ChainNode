@@ -53,6 +53,7 @@ export interface IfConnInfo {
 export interface IfProcessInfo {
     timestamp: number;
     timeDelta: number;
+    blocksMined: number;
     blocks: number;
     blockSizeMax: number;
     blockSizeMin: number;
@@ -126,6 +127,7 @@ abstract class Monitor {
         this.processInfo = {
             timestamp: 0,
             timeDelta: 0,
+            blocksMined: 0,
             blocks: 0,
             blockSizeMax: 0,
             blockSizeMin: 0,
@@ -178,6 +180,7 @@ abstract class Monitor {
         this.processInfo = {
             timestamp: 0,
             timeDelta: 0,
+            blocksMined: 0,
             blocks: 0,
             blockSizeMax: 0,
             blockSizeMin: 0,
@@ -456,6 +459,10 @@ abstract class Monitor {
         this.logger.debug('Monitor updateInbounds');
         // this.connInfo.inbound = remoteLst;
     }
+    public updateBlocksMined(num: number) {
+        this.logger.debug('Monitor updateBlocksMined ' + num);
+        this.processInfo.blocksMined++;
+    }
     public updateBlock(txNum: number) {
         this.logger.debug('Monitor updateBlock : ' + txNum);
         counterTx += txNum;
@@ -500,6 +507,7 @@ abstract class Monitor {
             this.processInfo.txSizeMin = txInputSize;
         }
     }
+
     public updateRecvBlocks(num: number) {
         this.logger.debug('Monitor updateRecvBlocks');
 
