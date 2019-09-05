@@ -321,6 +321,11 @@ export async function runUserMethod(context: DposTransactionContext, params: any
             .setOption({ cpuCount: 256, memSizeKB: 256 })
             .runAsync();
         context.logger.info('after ruffvm runAsync', ret);
+        context.emit('transfer', {
+                        'from': context.caller,
+                        'to': params.to,
+                        'value': context.value
+                    });
         return ErrorCode.RESULT_OK;
     } catch (err) {
         context.logger.error('ruffvm runAsync error', err);
