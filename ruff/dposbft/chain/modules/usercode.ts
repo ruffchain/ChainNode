@@ -151,8 +151,9 @@ export async function runUserMethod(context: DposTransactionContext, params: any
         return ErrorCode.RESULT_NOT_FOUND;
     }
 
+    const totalValue = context.value.decimalPlaces(SYS_TOKEN_PRECISION, 1); // ROUND_DOWN
+
     let code = rawCode.toString();
-    const totalValue = context.value;
     const receiver = params.to;
     let usedValue = new BigNumber(0);
 
@@ -176,7 +177,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
                     context.logger.error('exceed the amount');
                     return (resolver(false));
                 }
-                let toValuePrecision = toValue.toFixed(SYS_TOKEN_PRECISION);
+                let toValuePrecision = toValue.decimalPlaces(SYS_TOKEN_PRECISION, 1);
                 const ret = await context
                     .transferTo(to, new BigNumber(toValuePrecision));
                 if (ret === ErrorCode.RESULT_OK) {
@@ -321,12 +322,25 @@ export async function runUserMethod(context: DposTransactionContext, params: any
             .setOption({ cpuCount: 256, memSizeKB: 256 })
             .runAsync();
         context.logger.info('after ruffvm runAsync', ret);
-        context.emit('transfer', {
-                        'from': context.caller,
-                        'to': params.to,
-                        'value': context.value
-                    });
-        return ErrorCode.RESULT_OK;
+
+        const leftValue = totalValue.minus(usedValue).decimalPlaces(SYS_TOKEN_PRECISION, 1);
+        let err = ErrorCode.RESULT_OK;
+
+        if (leftValue.isNegative()) {
+            // why this happlen???
+            return ErrorCode.RESULT_EXCEPTION;
+        }
+        if (leftValue.isPositive()) {
+            err = await context.transferTo(params.to, leftValue);
+        }
+        if (!err) {
+            context.emit('transfer', {
+                'from': context.caller,
+                'to': params.to,
+                'value': totalValue
+            });
+        }
+        return err;
     } catch (err) {
         context.logger.error('ruffvm runAsync error', err);
         return ErrorCode.RESULT_FAILED;
