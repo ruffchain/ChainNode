@@ -776,7 +776,7 @@ export class Chain extends EventEmitter implements IConsistency {
             delete this.m_storageMorkRequests.morking;
 
             // Yang Jun remove it for BP restart infinite loop problem 2019-6-11
-            this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
+            // this.m_storageMorkRequests.morking = this.m_storageMorkRequests.pending;
             this.m_logger.debug('In morking loop, .pending ->', this.m_storageMorkRequests.pending);
         }
     }
