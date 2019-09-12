@@ -1,11 +1,11 @@
-import {ErrorCode, stringifyErrorCode} from '../error_code';
-import {LRUCache} from '../lib/LRUCache';
+import { ErrorCode, stringifyErrorCode } from '../error_code';
+import { LRUCache } from '../lib/LRUCache';
 import { LoggerInstance } from '../lib/logger_util';
 
 import { IHeaderStorage, BlockHeader } from '../chain';
 
-import {DposChainTipState, DposChainTipStateOptions} from './chain_state';
-import {DposBlockHeader} from './block';
+import { DposChainTipState, DposChainTipStateOptions } from './chain_state';
+import { DposBlockHeader } from './block';
 const assert = require('assert');
 
 export type StorageIrbEntry = {
@@ -15,13 +15,13 @@ export type StorageIrbEntry = {
 };
 export interface IChainStateStorage {
     saveIRB(header: DposBlockHeader, irbHeader: DposBlockHeader): Promise<ErrorCode>;
-    getIRB(blockHash: string): Promise<{err: ErrorCode, irb?: StorageIrbEntry}>;
+    getIRB(blockHash: string): Promise<{ err: ErrorCode, irb?: StorageIrbEntry }>;
 }
 
 export type DposChainTipStateManagerOptions = {
     logger: LoggerInstance,
     headerStorage: IHeaderStorage,
-    getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
+    getMiners: (header: DposBlockHeader) => Promise<{ err: ErrorCode, creators?: string[] }>;
     globalOptions: any;
     stateStorage: IChainStateStorage;
 };
@@ -31,9 +31,9 @@ export class DposChainTipStateManager {
     protected m_headerStorage: IHeaderStorage;
     protected m_logger: LoggerInstance;
     protected m_globalOptions: any;
-    protected m_getMiners: (header: DposBlockHeader) => Promise<{err: ErrorCode, creators?: string[]}>;
+    protected m_getMiners: (header: DposBlockHeader) => Promise<{ err: ErrorCode, creators?: string[] }>;
     protected m_tipStateCache: LRUCache<string, DposChainTipState> = new LRUCache(DposChainTipStateManager.cacheSize);
-    protected m_bestTipState?: DposChainTipState ;
+    protected m_bestTipState?: DposChainTipState;
     protected m_prevBestIRB?: BlockHeader;
     protected m_storage: IChainStateStorage;
 
@@ -75,6 +75,7 @@ export class DposChainTipStateManager {
     async onUpdateTip(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
         if (this.m_bestTipState!.IRB.number === 0 && header.number > 1) {
             // 可能是第一次初始化
+            this.m_logger.info('onUpdateTip, maybe the 1st time init')
             let gi = await this.m_storage.getIRB('latest');
             if (!gi.err) {
                 let gh = await this.m_headerStorage.getHeader(gi.irb!.irbHash);
@@ -97,15 +98,15 @@ export class DposChainTipStateManager {
         this.m_bestTipState = hr.state!;
         let err = await this._onUpdateBestIRB();
         if (err) {
-            return {err};
+            return { err };
         }
 
         return hr;
     }
 
-    async compareIRB(compareHeader: DposBlockHeader, tipHeader: DposBlockHeader): Promise<{err: ErrorCode, result?: number}> {
+    async compareIRB(compareHeader: DposBlockHeader, tipHeader: DposBlockHeader): Promise<{ err: ErrorCode, result?: number }> {
         if (compareHeader.preBlockHash === tipHeader.hash) {
-            return {err: ErrorCode.RESULT_OK, result: 0};
+            return { err: ErrorCode.RESULT_OK, result: 0 };
         }
         // Tope Add
         if (this.m_bestTipState!.tip !== tipHeader) {
@@ -158,33 +159,70 @@ export class DposChainTipStateManager {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _getState(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+    // Add by Yang Jun 2019-9-12
+    protected async _newGetState(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+        let newState: DposChainTipState | undefined;
+
         let s = this.m_tipStateCache.get(header.hash);
         if (s) {
-            return {err: ErrorCode.RESULT_OK, state: s};
+            return { err: ErrorCode.RESULT_OK, state: s };
         }
         // 分支一定是从当前链的最后一个不可逆点或者它之后的点开始复制的，否则不需要创建
         const bestTipState = this.m_bestTipState!;
         if (header.number < bestTipState!.IRB.number) {
             this.m_logger.error(`_getState failed, for the fork and best's crossed block number is less than the best's irreversible`);
-            return {err: ErrorCode.RESULT_OUT_OF_LIMIT};
+            return { err: ErrorCode.RESULT_OUT_OF_LIMIT };
         }
-        this.m_logger.debug(`IRB number: ${bestTipState.IRB.number}`);
+
+        this.m_logger.debug(`New IRB number: ${bestTipState.IRB.number}`);
+
+        // Get all headers from headers storage
         const hr = await this.m_headerStorage.getHeader(header, bestTipState.IRB.number - header.number);
         if (hr.err) {
             this.m_logger.error(`_getState getHeader of ${header.number} ${header.hash} on irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash} failed for ${stringifyErrorCode(hr.err)}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
+
         if (hr.header!.hash !== bestTipState.IRB.hash) {
             this.m_logger.error(`_getState failed, for header ${header.number} ${header.hash} not fork from irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash}`);
-            return {err: ErrorCode.RESULT_OUT_OF_LIMIT};
+            return { err: ErrorCode.RESULT_OUT_OF_LIMIT };
         }
-        let newState: DposChainTipState|undefined;
+
+        return { err: ErrorCode.RESULT_OK, state: newState };
+    }
+
+    protected async _getState(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+        let s = this.m_tipStateCache.get(header.hash);
+        if (s) {
+            return { err: ErrorCode.RESULT_OK, state: s };
+        }
+        // 分支一定是从当前链的最后一个不可逆点或者它之后的点开始复制的，否则不需要创建
+        const bestTipState = this.m_bestTipState!;
+        if (header.number < bestTipState!.IRB.number) {
+            this.m_logger.error(`_getState failed, for the fork and best's crossed block number is less than the best's irreversible`);
+            return { err: ErrorCode.RESULT_OUT_OF_LIMIT };
+        }
+
+        this.m_logger.debug(`IRB number: ${bestTipState.IRB.number}`);
+
+        // Get all headers from headers storage
+        const hr = await this.m_headerStorage.getHeader(header, bestTipState.IRB.number - header.number);
+        if (hr.err) {
+            this.m_logger.error(`_getState getHeader of ${header.number} ${header.hash} on irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash} failed for ${stringifyErrorCode(hr.err)}`);
+            return { err: ErrorCode.RESULT_EXCEPTION };
+        }
+
+        if (hr.header!.hash !== bestTipState.IRB.hash) {
+            this.m_logger.error(`_getState failed, for header ${header.number} ${header.hash} not fork from irb ${bestTipState.IRB.number} ${bestTipState.IRB.hash}`);
+            return { err: ErrorCode.RESULT_OUT_OF_LIMIT };
+        }
+        let newState: DposChainTipState | undefined;
         let fromIndex = hr.headers!.length - 1;
+        // Remove every hash already are IRB
         for (; fromIndex >= 0; --fromIndex) {
             const thisHeader = hr.headers![fromIndex];
             let cacheState: DposChainTipState | null = this.m_tipStateCache.get(thisHeader.hash);
-            if (cacheState ) {
+            if (cacheState) {
                 newState = cacheState;
                 this.m_tipStateCache.remove(thisHeader.hash);
                 this.m_logger.debug(`Find cache for hash: ${thisHeader.hash} number: ${thisHeader.number}`);
@@ -202,7 +240,10 @@ export class DposChainTipStateManager {
             fromIndex += 1;
         }
         this.m_logger.debug(`fromIndex is ${fromIndex}, length is ${hr.headers!.length}`);
+
         const passedHeaders = hr.headers!.slice(fromIndex);
+
+        // remove header 0, In fact , it will only update 2* MAX_CREATORS
         for (let h of passedHeaders) {
             this.m_logger.debug(`update tip for ${h.number} hash ${h.hash}`);
             let err = await newState.updateTip(h as DposBlockHeader);
@@ -212,7 +253,8 @@ export class DposChainTipStateManager {
             }
         }
 
+        // Update, 
         this.m_tipStateCache.set(header.hash, newState);
-        return { err: ErrorCode.RESULT_OK, state: newState};
+        return { err: ErrorCode.RESULT_OK, state: newState };
     }
 }

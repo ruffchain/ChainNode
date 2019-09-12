@@ -110,6 +110,7 @@ export class LRUCache<TKey, TValue> {
     protected m_maxCount: number;
     protected m_memValue: Map<TKey, [TValue, LRUNode<TKey>]>;
     protected m_link: DLink<TKey>;
+
     constructor(maxCount: number) {
         this.m_maxCount = maxCount;
         this.m_memValue = new Map<TKey, [TValue, LRUNode<TKey>]>();
