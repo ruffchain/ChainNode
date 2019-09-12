@@ -441,10 +441,10 @@ abstract class Monitor {
             let remainMinutes = minutes % cycleMinutesPeriod;
 
             let delaySeconds = (remainMinutes === 0) ? (cycleMinutes * 60) : 60 * (cycleMinutesPeriod - remainMinutes);
-            this.logger.debug('Monitor delay ' + delaySeconds);
+            this.logger.debug('Monitor delay ' + (delaySeconds - seconds));
 
-            await DelayPromise(delaySeconds);
-            await this.loopWork(delaySeconds);
+            await DelayPromise(delaySeconds - seconds);
+            await this.loopWork(delaySeconds - seconds);
 
             this.resetConnInfo();
             this.resetProcessInfo();
