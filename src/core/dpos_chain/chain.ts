@@ -13,6 +13,7 @@ import { DposBftChainTipState } from '../dpos_bft_chain/chain_state';
 import { SVTContext, SVTViewContext } from './svt';
 import { SqliteReadWritableDatabase, SqliteReadableDatabase, SqliteStorageKeyValue } from '../storage_sqlite/storage';
 import { IfRegisterOption } from '../../../ruff/dposbft/chain/modules/scoop';
+import { timingSafeEqual } from 'crypto';
 
 export type DposTransactionContext = {
     vote: (from: string, candiates: string) => Promise<ErrorCode>;
@@ -493,7 +494,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (hr.err) {
             return hr.err;
         }
-        this.logger.debug(`==========dpos chain state=${this.chainTipState.dump()}`);
+        this.logger.debug(`==========dpos chain state==========${this.chainTipState.dump()}`);
         // Added by yang Jun 2019-3-30
         this.m_curMiner = this.chainTipState.getMiner();
         //
@@ -527,13 +528,19 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         try {
             let gh: any;
             if (blockHash === 'latest') {
+                this.m_logger.debug('getIRB() latest');
                 gh = this.m_db!.prepare(getLatestIrbSql).get();
             } else {
                 gh = this.m_db!.prepare(getIrbSql).get({ hash: blockHash });
             }
-            if (!gh || !gh.irb || !gh.irbhash.length || gh.irb.irbheight === -1) {
+            //if (!gh || !gh.irb || !gh.irbhash.length || gh.irb.irbheight === -1) {
+            // Modify by Yang Jun 2019-9-16
+            this.m_logger.debug(gh);
+            if (!gh || !gh.irbhash.length || gh.irbheight === -1) {
+
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             }
+            ////////////////////////////////
 
             let entry: StorageIrbEntry = { tipHash: gh.hash, irbHash: gh.irbhash, irbHeight: gh.irbheight };
             this.m_cacheIRB.set(blockHash, entry);

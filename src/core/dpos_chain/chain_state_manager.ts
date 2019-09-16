@@ -73,6 +73,7 @@ export class DposChainTipStateManager {
     }
 
     async onUpdateTip(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+        // IRB.number why it always equals 0, best tip state
         if (this.m_bestTipState!.IRB.number === 0 && header.number > 1) {
             // 可能是第一次初始化
             this.m_logger.info('onUpdateTip, maybe the 1st time init')
@@ -87,8 +88,11 @@ export class DposChainTipStateManager {
                 this.m_bestTipState = this._newChainTipState(gh.header! as DposBlockHeader);
                 this.m_tipStateCache.set(header.hash, this.m_bestTipState);
                 this.m_prevBestIRB = gh.header!;
+            } else {
+                this.m_logger.error('getIRB("latest") error: ' + gi.err)
             }
         }
+        this.m_logger.debug('bestTipState: ' + this.m_bestTipState!.IRB.number);
         // 可能分叉了 已经切换分支了，所以需要从fork上去bulid
         let hr = await this._getState(header);
         if (hr.err) {
@@ -257,4 +261,19 @@ export class DposChainTipStateManager {
         this.m_tipStateCache.set(header.hash, newState);
         return { err: ErrorCode.RESULT_OK, state: newState };
     }
+
+    // Add by Yang Jun 2019-9-16
+    // protected async _getStateNew(header: DposBlockHeader): Promise<{ err: ErrorCode, state?: DposChainTipState }> {
+    //     let s = this.m_tipStateCache.get(header.hash);
+    //     if (s) {
+    //         return { err: ErrorCode.RESULT_OK, state: s };
+    //     }
+
+
+
+
+    //     // Update, 
+    //     this.m_tipStateCache.set(header.hash, newState);
+    //     return { err: ErrorCode.RESULT_OK, state: newState };
+    // }
 }
