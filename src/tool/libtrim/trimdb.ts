@@ -43,6 +43,33 @@ export class TrimDataBase {
         return this.db.close();
     }
 
+    public async getFromBestTable(): Promise<IFeedBack> {
+        let sql = `select * from best order by height desc limit 10;`;
+
+        return this.getBySQL(sql);
+    }
+    public async getFromHeadersTable(): Promise<IFeedBack> {
+        let sql = `select * from headers limit 10;`;
+
+        return this.getBySQL(sql);
+    }
+    public async getFromMinersTable(): Promise<IFeedBack> {
+        let sql = `select * from miners order by irbheight desc limit 10;`;
+
+        return this.getBySQL(sql);
+    }
+
+    public async getFromBlocksTable(): Promise<IFeedBack> {
+        let sql = `select * from blocks order by number desc limit 10;`;
+
+        return this.getBySQL(sql);
+    }
+    public async getFromTxviewTable(): Promise<IFeedBack> {
+        let sql = `select * from txview order by blockheight desc limit 10;`;
+
+        return this.getBySQL(sql);
+    }
+
     public async getTable(table: string): Promise<IFeedBack> {
         let sql = `select * from ${table};`
         let hret = await this.db.getAllRecords(sql);

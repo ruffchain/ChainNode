@@ -50,6 +50,9 @@ export type DposViewContext = {
 } & ValueViewContext;
 
 const initMinersSql = 'CREATE TABLE IF NOT EXISTS "miners"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "miners" TEXT NOT NULL default \'[]\', "irbhash" CHAR(64) default \'\', "irbheight" INTEGER NOT NULL default -1)';
+// Yang Jun 2019-9-16
+const indexMinersSql = 'CREATE INDEX IF NOT EXISTS "index_irbheight" on "miners" ("irbheight");';
+///////////////////////
 const updateMinersSql = 'REPLACE INTO miners (hash, miners) values ($hash, $miners)';
 const getMinersSql = 'SELECT miners FROM miners WHERE hash=$hash';
 const saveIrbSqlUpdate = 'update "miners" set irbhash=$irbhash, irbheight=$irbheight where hash=$hash';
@@ -116,6 +119,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (!readonly) {
             try {
                 this.m_db!.prepare(initMinersSql).run();
+                this.m_db!.prepare(indexMinersSql).run();
             } catch (e) {
                 this.logger.error(e);
                 return ErrorCode.RESULT_EXCEPTION;

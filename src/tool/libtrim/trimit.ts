@@ -39,7 +39,7 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     let trimItemLst: IfBestItem[] = [];
     async function fetchTrimItemsLst(mDb: TrimDataBase): Promise<IFeedBack> {
         console.log('\n--------------------------------')
-        let retrn = await mDb.getBySQL(`select * from best where height > ${height}`);
+        let retrn = await mDb.getBySQL(`select * from best where height > ${height}  order by height asc;`);
         if (retrn.err) {
             logger.error('query best for height failed');
             return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] }
@@ -92,13 +92,13 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
         logger.error('generate storage/dump 3 NOK'); return -1;
     }
 
+    result = await trimBlockDir(trimItemLst, logger, path);
+    if (result !== 0) { logger.error('trim Block/ failed'); return -1; }
+
     // delete from best table
     console.log('\nClear best table');
     let hret = await trimDatabaseBest(height, logger, path);
     if (hret !== 0) { return -1; }
-
-    result = await trimBlockDir(trimItemLst, logger, path);
-    if (result !== 0) { logger.error('trim Block/ failed'); return -1; }
 
     console.log('===================');
     console.log('    End of Trim    ')
@@ -121,19 +121,41 @@ async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, 
 }
 async function trimDatabaseHeaders(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
     let flag = 0;
+    let numBatch = 50;
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
-        itemLst.forEach(async (item: IfBestItem) => {
-            let hash = item.hash;
+        // itemLst.forEach(async (item: IfBestItem) => {
+        //     let hash = item.hash;
 
-            let retn = await mDb.runBySQL(`delete from headers where hash ="${hash}";`);
-            if (retn.err) {
-                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
-                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
-            } else {
-                console.log(`[${item.height}] ` + 'header deleted :', hash);
+        //     let retn = await mDb.runBySQL(`delete from headers where hash ="${hash}";`);
+        //     if (retn.err) {
+        //         flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        //         return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+        //     } else {
+        //         console.log(`[${item.height}] ` + 'header deleted :', hash);
+        //     }
+        // });
+        for (let i = 0; i < itemLst.length; i) {
+            let start = i;
+            let end = (i + numBatch) > itemLst.length ? itemLst.length : (i + numBatch);
+            logger.debug('delete ' + start + ' to ' + end);
+            await mDb.runBySQL('BEGIN;');
+
+            for (let j = start; j < end; j++) {
+                let hash = itemLst[j].hash;
+
+                await mDb.runBySQL(`delete from headers where hash ="${hash}";`);
             }
-        });
 
+            let hret = await mDb.runBySQL('COMMIT;')
+
+            if (hret.err) {
+                await mDb.runBySQL('ROLLBACK;');
+                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+                break;
+            }
+
+            i = i + numBatch;
+        }
         return { err: flag, data: null };
     }
     let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
@@ -144,17 +166,25 @@ async function trimDatabaseHeaders(itemLst: IfBestItem[], logger: winston.Logger
 async function trimDatabaseMiners(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         let flag = 0;
-        itemLst.forEach(async (item: IfBestItem) => {
-            let height = item.height;
+        // itemLst.forEach(async (item: IfBestItem) => {
+        //     let height = item.height;
 
-            let retn = await mDb.runBySQL(`delete from miners where irbheight ="${height}";`);
-            if (retn.err) {
-                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
-                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
-            } else {
-                console.log(`[${item.height}] ` + 'header deleted :', height);
-            }
-        });
+        //     let retn = await mDb.runBySQL(`delete from miners where irbheight ="${height}";`);
+        //     if (retn.err) {
+        //         flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        //         return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+        //     } else {
+        //         console.log(`[${item.height}] ` + 'header deleted :', height);
+        //     }
+        // });
+
+        let min = itemLst[0];
+        let retn = await mDb.runBySQL(`delete from miners where irbheight >="${min.height}";`);
+        if (retn.err) {
+            flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        } else {
+            console.log(`[${min.height}] ` + 'header deleted :', min);
+        }
 
         return { err: flag, data: null };
     }
@@ -187,17 +217,26 @@ async function trimDatabase(itemLst: IfBestItem[], logger: winston.LoggerInstanc
 async function trimTxviewBlocks(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         let flag = 0;
-        itemLst.forEach(async (item: IfBestItem) => {
-            let height = item.height;
+        // itemLst.forEach(async (item: IfBestItem) => {
+        //     let height = item.height;
 
-            let retn = await mDb.runBySQL(`delete from blocks where number ="${height}";`);
-            if (retn.err) {
-                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
-                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
-            } else {
-                console.log(`[${item.height}] ` + 'block deleted :', height);
-            }
-        });
+        //     let retn = await mDb.runBySQL(`delete from blocks where number ="${height}";`);
+        //     if (retn.err) {
+        //         flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        //         return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+        //     } else {
+        //         console.log(`[${item.height}] ` + 'block deleted :', height);
+        //     }
+        // });
+        let min = itemLst[0];
+
+        let retn = await mDb.runBySQL(`delete from blocks where number >="${min.height}";`);
+        if (retn.err) {
+            flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        } else {
+            console.log(`[${min.height}] ` + 'block deleted :', min);
+        }
+
         return { err: flag, data: null };
     }
     let result = await runMethodOnDb({ dbname: "txview", logger: logger, path: path, method: funcMethod });
@@ -208,17 +247,25 @@ async function trimTxviewBlocks(itemLst: IfBestItem[], logger: winston.LoggerIns
 async function trimTxviewTxview(itemLst: IfBestItem[], logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         let flag = 0;
-        itemLst.forEach(async (item: IfBestItem) => {
-            let height = item.height;
+        // itemLst.forEach(async (item: IfBestItem) => {
+        //     let height = item.height;
 
-            let retn = await mDb.runBySQL(`delete from txview where blockheight ="${height}";`);
-            if (retn.err) {
-                flag = ErrorCode.RESULT_DB_TABLE_FAILED;
-                return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
-            } else {
-                console.log(`[${item.height}] ` + 'block deleted :', height);
-            }
-        });
+        //     let retn = await mDb.runBySQL(`delete from txview where blockheight ="${height}";`);
+        //     if (retn.err) {
+        //         flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        //         return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
+        //     } else {
+        //         console.log(`[${item.height}] ` + 'block deleted :', height);
+        //     }
+        // });
+        let min = itemLst[0]
+        let retn = await mDb.runBySQL(`delete from txview where blockheight >="${min.height}";`);
+        if (retn.err) {
+            flag = ErrorCode.RESULT_DB_TABLE_FAILED;
+        } else {
+            console.log(`[${min.height}] ` + 'block deleted :', min);
+        }
+
         return { err: flag, data: null };
     }
     let result = await runMethodOnDb({ dbname: "txview", logger: logger, path: path, method: funcMethod });
@@ -244,11 +291,15 @@ async function trimStorageDump(itemLst: IfBestItem[], logger: winston.LoggerInst
     console.log('\nDelete databases')
     itemLst.forEach((item: IfBestItem) => {
         let filename = path.join(dumpPath, item.hash);
-        console.log('Delete ' + item.height + ' : ' + filename);
-        try {
-            fs.unlinkSync(filename);
-        } catch (e) {
-            console.log('Failed delete')
+        console.log('Delete dump ' + item.height + ' : ' + filename);
+        if (fs.existsSync(filename)) {
+            try {
+                fs.unlinkSync(filename);
+            } catch (e) {
+                console.log('Failed delete')
+            }
+        } else {
+            logger.debug('Not exist')
         }
     });
 
@@ -265,6 +316,9 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
             await fs.unlinkSync(FILE);
             console.log('Delete ', FILE);
         }
+        else {
+            logger.debug('Not exist')
+        }
     });
     return 0;
 }
@@ -275,10 +329,14 @@ async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInsta
     itemLst.forEach((item: IfBestItem) => {
         let filename = path.join(logPath, item.hash + '.redo');
         console.log('Delete ' + item.height + ' : ' + filename);
-        try {
-            fs.unlinkSync(filename);
-        } catch (e) {
-            console.log('Failed delete.', e)
+        if (fs.existsSync(filename)) {
+            try {
+                fs.unlinkSync(filename);
+            } catch (e) {
+                console.log('Failed delete.', e)
+            }
+        } else {
+            logger.debug('Not exist')
         }
     });
 

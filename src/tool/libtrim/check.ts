@@ -8,7 +8,7 @@ export async function checkDatabaseBest(logger: winston.LoggerInstance, path: st
     async function checkBest(mDb: TrimDataBase): Promise<IFeedBack> {
         // check best table
         console.log('\n----------------------')
-        let retrn = await mDb.getTable("best");
+        let retrn = await mDb.getFromBestTable();
         if (retrn.err) {
             logger.error('Fetch best failed');
             return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
@@ -39,7 +39,7 @@ async function checkDatabaseHeaders(logger: winston.LoggerInstance, path: string
         // check headers table
         console.log('\n----------------------------------------------')
         logger.info('Read headers table:')
-        let hret2 = await mDb.getTable("headers");
+        let hret2 = await mDb.getFromHeadersTable();
         if (hret2.err) {
             logger.error('query headers failed');
             return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
@@ -59,7 +59,7 @@ async function checkDatabaseMiners(logger: winston.LoggerInstance, path: string)
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         // check miners table
         console.log('\n----------------------------------------------')
-        let hret3 = await mDb.getTable("Miners");
+        let hret3 = await mDb.getFromMinersTable();
         if (hret3.err) {
             logger.error('query miners failed');
             return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
@@ -94,7 +94,7 @@ async function checkDatabase(logger: winston.LoggerInstance, path: string): Prom
 async function checkTxviewBlocks(logger: winston.LoggerInstance, path: string): Promise<IFeedBack> {
     let mData;
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
-        let retrn = await mDb.getTable("blocks");
+        let retrn = await mDb.getFromBlocksTable();
         if (retrn.err) {
             logger.error('Fetch blocks failed');
             return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };
@@ -122,7 +122,7 @@ async function checkTxviewTxview(logger: winston.LoggerInstance, path: string): 
     let mData;
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         console.log('\n----------------------')
-        let retrn = await mDb.getTable("txview");
+        let retrn = await mDb.getFromTxviewTable();
         if (retrn.err) {
             logger.error('Fetch blocks failed');
             return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null };

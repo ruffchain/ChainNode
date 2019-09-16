@@ -1,13 +1,13 @@
-import {ErrorCode, LoggerInstance, Chain, Transaction, Block} from '../../core';
+import { ErrorCode, LoggerInstance, Chain, Transaction, Block } from '../../core';
 
-import {IElement, ElementOptions} from '../context/element';
+import { IElement, ElementOptions } from '../context/element';
 import * as sqlite from 'better-sqlite3';
 const assert = require('assert');
 
 let initSql: string[] = [
     'CREATE TABLE IF NOT EXISTS "txview"("txhash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "address" CHAR(64) NOT NULL, "blockheight" INTEGER NOT NULL, "blockhash" CHAR(64) NOT NULL);',
-    'CREATE INDEX IF NOT EXISTS "index_blockheight" on "txview" ("blockheight")',
-    'CREATE INDEX IF NOT EXISTS "index_address" on "txview" ("address")'
+    'CREATE INDEX IF NOT EXISTS "index_blockheight" on "txview" ("blockheight");',
+    'CREATE INDEX IF NOT EXISTS "index_address" on "txview" ("address");'
 ];
 
 export class TxStorage implements IElement {
@@ -66,45 +66,45 @@ export class TxStorage implements IElement {
         return ErrorCode.RESULT_OK;
     }
 
-    public async get(txHash: string): Promise<{err: ErrorCode, blockhash?: string}> {
+    public async get(txHash: string): Promise<{ err: ErrorCode, blockhash?: string }> {
         try {
             let result = this.m_db!.prepare(`select blockhash from txview where txhash="${txHash}"`).get();
             if (!result || result.blockhash === undefined) {
-                return {err: ErrorCode.RESULT_NOT_FOUND};
+                return { err: ErrorCode.RESULT_NOT_FOUND };
             }
 
-            return {err: ErrorCode.RESULT_OK, blockhash: result.blockhash};
+            return { err: ErrorCode.RESULT_OK, blockhash: result.blockhash };
         } catch (e) {
             this.m_logger.error(`txstorage,get exception,error=${e},txHash=${txHash}`);
-            return {err: ErrorCode.RESULT_EXCEPTION };
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
-    public async getCountByAddress(address: string): Promise<{err: ErrorCode, count?: number}> {
+    public async getCountByAddress(address: string): Promise<{ err: ErrorCode, count?: number }> {
         try {
             let result = this.m_db!.prepare(`select count(*) as value from txview where address="${address}"`).get();
             if (!result || result.value === undefined) {
-                return {err: ErrorCode.RESULT_FAILED};
+                return { err: ErrorCode.RESULT_FAILED };
             }
 
-            return {err: ErrorCode.RESULT_OK, count: result.value as number};
+            return { err: ErrorCode.RESULT_OK, count: result.value as number };
         } catch (e) {
             this.m_logger.error(`txstorage,getCountByAddress exception,error=${e},address=${address}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 
-    public async getTransactionByAddress(address: string): Promise<{err: ErrorCode, txs?: Transaction[]}> {
+    public async getTransactionByAddress(address: string): Promise<{ err: ErrorCode, txs?: Transaction[] }> {
         try {
             let result = this.m_db!.prepare(`select txhash from txview where address="${address}"`).all();
             if (!result || result.length === 0) {
-                return {err: ErrorCode.RESULT_NOT_FOUND};
+                return { err: ErrorCode.RESULT_NOT_FOUND };
             }
 
-            return {err: ErrorCode.RESULT_OK, txs: result};
+            return { err: ErrorCode.RESULT_OK, txs: result };
         } catch (e) {
             this.m_logger.error(`txstorage,getTransactionByAddress exception,error=${e},address=${address}`);
-            return {err: ErrorCode.RESULT_EXCEPTION};
+            return { err: ErrorCode.RESULT_EXCEPTION };
         }
     }
 }

@@ -6,7 +6,9 @@ import { ElementCreator, elementRegister as ElementRegister } from './element_cr
 import { IElement, ElementOptions } from './element';
 import * as fs from 'fs-extra';
 
-const initBlockTableSql = `CREATE TABLE IF NOT EXISTS "blocks"("number" INTEGER NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL)`;
+const initBlockTableSql = `CREATE TABLE IF NOT EXISTS "blocks"("number" INTEGER PRIMARY KEY NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL)`;
+
+const initIndexBlockSql = 'CREATE INDEX IF NOT EXISTS "index_hash" on "blocks" ("hash");'
 
 export type ContextOptions = ElementOptions & {};
 
@@ -72,6 +74,8 @@ export class HostChainContext {
             this.m_db.pragma('synchronous  = NORMAL');
             this.m_db.pragma('journal_mode = WAL');
             this.m_db!.prepare(initBlockTableSql).run();
+            // Yang Jun
+            this.m_db!.prepare(initIndexBlockSql).run();
         } catch (e) {
             this.m_logger.error(`HostChainContext init failed for open database failed, e=${e}`);
             return ErrorCode.RESULT_EXCEPTION;
