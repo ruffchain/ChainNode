@@ -2,7 +2,7 @@ import 'mocha';
 import * as path from 'path';
 import * as fs from 'fs-extra';
 const assert = require('assert');
-import {initChainCreator, INode, Chain, Miner, Block, BlockHeader, BufferReader, initLogger, LogShim, MinerInstanceOptions, BufferWriter, LoggerOptions, ErrorCode, staticPeeridIp, TcpNode, StaticOutNode, BaseHandler, Storage, ChainContructOptions, InprocessRoutineManager } from '../../src/core';
+import { initChainCreator, INode, Chain, Miner, Block, BlockHeader, BufferReader, initLogger, LogShim, MinerInstanceOptions, BufferWriter, LoggerOptions, ErrorCode, staticPeeridIp, TcpNode, StaticOutNode, BaseHandler, Storage, ChainContructOptions, InprocessRoutineManager } from '../../src/core';
 
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
@@ -53,18 +53,18 @@ class TestBlockHeader extends BlockHeader {
         return ErrorCode.RESULT_OK;
     }
 
-    public async verify(chain: TestChain): Promise<{err: ErrorCode, valid?: boolean}> {
+    public async verify(chain: TestChain): Promise<{ err: ErrorCode, valid?: boolean }> {
         let vr = await super.verify(chain);
         if (vr.err || !vr.valid) {
             return vr;
         }
         const valid = chain.miners.includes(this.m_miner);
-        return {err: ErrorCode.RESULT_OK, valid};
+        return { err: ErrorCode.RESULT_OK, valid };
     }
 }
 
 class TestChain extends Chain {
-    constructor(options: ChainContructOptions&{miners: number[]}) {
+    constructor(options: ChainContructOptions & { miners: number[] }) {
         super(options);
         this.m_miners = options.miners.slice(0);
     }
@@ -103,7 +103,7 @@ class TestMiner extends Miner {
     private m_miners: number[];
     private m_mining: boolean = false;
 
-    constructor(options: ChainContructOptions&{miners: number[], miner: number}) {
+    constructor(options: ChainContructOptions & { miners: number[], miner: number }) {
         super(options);
         this.m_miner = options.miner;
         this.m_miners = options.miners.slice(0);
@@ -136,7 +136,7 @@ class TestMiner extends Miner {
 
     protected async _onTipBlock(chain: Chain, tipBlock: BlockHeader) {
         if (!this.m_mining) {
-            return ;
+            return;
         }
         this.m_logger.debug(`will createBlock after 500 ms`);
         setTimeout(() => {
@@ -157,17 +157,20 @@ class TestMiner extends Miner {
 describe('sync chain', () => {
     let peers: string[] = [];
     let nodes: INode[] = [];
+
     const nodeType = StaticOutNode(staticPeeridIp.splitInstance(TcpNode));
-    const logger = initLogger({loggerOptions: {console: true, level: 'error'}});
+
+    const logger = initLogger({ loggerOptions: { console: true, level: 'error' } });
     const rootDir = path.join(__dirname, '../../../../data/test/sync');
     let chains: TestChain[] = [];
     let miners: TestMiner[] = [];
-    const cc = initChainCreator({logger});
+    const cc = initChainCreator({ logger });
 
     before((done) => {
         async function __test() {
             fs.removeSync(rootDir);
             fs.ensureDirSync(rootDir);
+
             for (let i = 0; i < 10 + 5; ++i) {
                 peers.push(`127.0.0.1:${startport + i}`);
             }
@@ -180,7 +183,7 @@ describe('sync chain', () => {
                         others.push(_pid);
                     }
                 }
-                const tcpNode = new nodeType(others, {network: 'default', peerid: pid, host: '127.0.0.1', port: startport + i, logger});
+                const tcpNode = new nodeType(others, { network: 'default', peerid: pid, host: '127.0.0.1', port: startport + i, logger });
                 nodes.push(tcpNode);
             }
             const minerPeers = [0, 1, 2, 3];
@@ -188,10 +191,10 @@ describe('sync chain', () => {
             logger.info(`create genesis`);
             {
                 const genesisDir = path.join(rootDir, `genesis`);
-                const genesisMiner = new TestMiner({networkCreator: cc.networkCreator, logger, dataDir: genesisDir, globalOptions: {txlivetime: 1000000, maxPengdingCount: 10000, warnPengdingCount: 5000}, handler: new BaseHandler(), miners: minerPeers, miner: 0});
+                const genesisMiner = new TestMiner({ networkCreator: cc.networkCreator, logger, dataDir: genesisDir, globalOptions: { txlivetime: 1000000, maxPengdingCount: 10000, warnPengdingCount: 5000 }, handler: new BaseHandler(), miners: minerPeers, miner: 0 });
 
                 assert(!(await genesisMiner.initComponents()), `initComponets genesis err`);
-                assert(!(await genesisMiner.create({txlivetime: 1000000})), 'create genesis err');
+                assert(!(await genesisMiner.create({ txlivetime: 1000000 })), 'create genesis err');
                 await genesisMiner.uninitComponents();
                 for (let i = 0; i < 10 + 5; ++i) {
                     const dataDir = path.join(rootDir, `${i}`);
@@ -204,7 +207,7 @@ describe('sync chain', () => {
             for (let i = 0; i < 4; ++i) {
                 const mLogger = new LogShim(logger).bind(`[miner: ${i}]`, true).log;
                 const dataDir = path.join(rootDir, `${i}`);
-                let miner = new TestMiner({networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, miner: i, dataDir, globalOptions: {}, handler: new BaseHandler() });
+                let miner = new TestMiner({ networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, miner: i, dataDir, globalOptions: {}, handler: new BaseHandler() });
                 assert(!(await miner.initComponents()), `initComponets ${i} err`);
                 miners.push(miner);
                 chains.push(miner.chain);
@@ -214,7 +217,7 @@ describe('sync chain', () => {
             for (let i = 4; i < 10; ++i) {
                 const mLogger = new LogShim(logger).bind(`[peer: ${i}]`, true).log;
                 const dataDir = path.join(rootDir, `${i}`);
-                let chain = new TestChain({networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, dataDir, globalOptions: {}, handler: new BaseHandler()});
+                let chain = new TestChain({ networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, dataDir, globalOptions: {}, handler: new BaseHandler() });
                 assert(!(await chain.initComponents()), `initComponets ${i} err`);
                 chains.push(chain);
             }
@@ -223,14 +226,14 @@ describe('sync chain', () => {
             logger.info(`create chain to miner peers`);
             for (let i = 10; i < 10 + 5; ++i) {
                 const pid = peers[i];
-                const tcpNode = new nodeType([peers[i - 1]], {network: 'default', peerid: pid, host: '127.0.0.1', port: startport + i, logger});
+                const tcpNode = new nodeType([peers[i - 1]], { network: 'default', peerid: pid, host: '127.0.0.1', port: startport + i, logger });
                 nodes.push(tcpNode);
             }
 
             for (let i = 10; i < 10 + 5; ++i) {
                 const mLogger = new LogShim(logger).bind(`[peer: ${i}]`, true).log;
                 const dataDir = path.join(rootDir, `${i}`);
-                let chain = new TestChain({networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, dataDir, globalOptions: {}, handler: new BaseHandler()});
+                let chain = new TestChain({ networkCreator: cc.networkCreator, logger: mLogger, miners: minerPeers, dataDir, globalOptions: {}, handler: new BaseHandler() });
                 assert(!(await chain.initComponents()), `initComponets ${i} err`);
                 chains.push(chain);
             }
@@ -245,7 +248,7 @@ describe('sync chain', () => {
 
             logger.info(`start miner 0`);
             assert(!(await miners[0].initialize({
-                networks: [miners[0].chain.newNetwork({node: nodes[0], minOutbound: 0}).network!],
+                networks: [miners[0].chain.newNetwork({ node: nodes[0], minOutbound: 0 }).network!],
                 initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 0 initialize err');
@@ -263,7 +266,7 @@ describe('sync chain', () => {
 
             logger.info(`start miner 1`);
             assert(!(await miners[1].initialize({
-                networks: [miners[1].chain.newNetwork({node: nodes[1], minOutbound: 0}).network!],
+                networks: [miners[1].chain.newNetwork({ node: nodes[1], minOutbound: 0 }).network!],
                 minOutbound: 0,
                 initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
@@ -282,7 +285,7 @@ describe('sync chain', () => {
 
             logger.info(`start miner 2`);
             assert(!(await miners[2].initialize({
-                networks: [miners[2].chain.newNetwork({node: nodes[2], minOutbound: 0}).network!],
+                networks: [miners[2].chain.newNetwork({ node: nodes[2], minOutbound: 0 }).network!],
                 initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 2 initialize err');
@@ -301,7 +304,7 @@ describe('sync chain', () => {
 
             logger.info(`start miner 3`);
             assert(!(await miners[3].initialize({
-                networks: [miners[3].chain.newNetwork({node: nodes[3], minOutbound: 0}).network!],
+                networks: [miners[3].chain.newNetwork({ node: nodes[3], minOutbound: 0 }).network!],
                 minOutbound: 0,
                 initializePeerCount: 0,
                 routineManagerType: InprocessRoutineManager,
@@ -344,7 +347,7 @@ describe('sync chain', () => {
         async function __test() {
             logger.info(`start peer 2`);
             assert(!(await chains[miners.length + 0].initialize({
-                networks: [chains[miners.length + 0].newNetwork({node: nodes[miners.length + 0], minOutbound: 5}).network!],
+                networks: [chains[miners.length + 0].newNetwork({ node: nodes[miners.length + 0], minOutbound: 5 }).network!],
                 initializePeerCount: 1,
                 routineManagerType: InprocessRoutineManager,
             })), `chain ${miners.length + 0} initialize err`);
@@ -375,7 +378,7 @@ describe('sync chain', () => {
     xit('1 peer from 2 peer sync', (done) => {
         async function __test() {
             assert(!(await chains[miners.length + 1].initialize({
-                networks: [chains[miners.length + 1].newNetwork({node: nodes[miners.length + 1], minOutbound: 5}).network!],
+                networks: [chains[miners.length + 1].newNetwork({ node: nodes[miners.length + 1], minOutbound: 5 }).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             })), `chain ${miners.length + 1} initialize err`);
@@ -388,7 +391,7 @@ describe('sync chain', () => {
     xit('merge short(in comfirm depth) shorter fork', (done) => {
         async function __test() {
             assert(!(await miners[1].initialize({
-                networks: [miners[1].chain.newNetwork({node: nodes[1], minOutbound: 5}).network!],
+                networks: [miners[1].chain.newNetwork({ node: nodes[1], minOutbound: 5 }).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 1 initialize err');
@@ -397,12 +400,12 @@ describe('sync chain', () => {
         __test().then(done);
     });
 
-     // 从较长的tip从较短的fork合并，fork和tip差距在confirm depth以内
+    // 从较长的tip从较短的fork合并，fork和tip差距在confirm depth以内
     xit('merge short(in comfirm depth) longer fork', (done) => {
         async function __test() {
             let curTip = miners[3].chain.tipBlockHeader!;
             assert(!(await miners[3].initialize({
-                networks: [miners[3].chain.newNetwork({node: nodes[3], minOutbound: 5}).network!],
+                networks: [miners[3].chain.newNetwork({ node: nodes[3], minOutbound: 5 }).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 3 initialize err');
@@ -449,7 +452,7 @@ describe('sync chain', () => {
             });
 
             assert(!(await miners[2].initialize({
-                networks: [miners[2].chain.newNetwork({node: nodes[2], minOutbound: 5}).network!],
+                networks: [miners[2].chain.newNetwork({ node: nodes[2], minOutbound: 5 }).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             })), 'miner 2 initialize err');
@@ -463,13 +466,13 @@ describe('sync chain', () => {
         async function __test() {
             let initOp = [];
             initOp.push(chains[9].initialize({
-                networks: [chains[9].newNetwork({node: nodes[9], minOutbound: 5}).network!],
+                networks: [chains[9].newNetwork({ node: nodes[9], minOutbound: 5 }).network!],
                 initializePeerCount: 2,
                 routineManagerType: InprocessRoutineManager,
             }));
             for (let i = 10; i < 10 + 5; ++i) {
                 initOp.push(chains[i].initialize({
-                    networks: [chains[i].newNetwork({node: nodes[i], minOutbound: 1}).network!],
+                    networks: [chains[i].newNetwork({ node: nodes[i], minOutbound: 1 }).network!],
                     initializePeerCount: 1,
                     routineManagerType: InprocessRoutineManager,
                 }));

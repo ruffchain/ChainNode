@@ -1,6 +1,6 @@
-import {ErrorCode} from '../error_code';
-import {Socket} from 'net';
-import {IConnection} from '../net';
+import { ErrorCode } from '../error_code';
+import { Socket } from 'net';
+import { IConnection } from '../net';
 
 export class TcpConnection extends IConnection {
     private m_socket: Socket;
@@ -8,7 +8,8 @@ export class TcpConnection extends IConnection {
     private m_remote: string;
     private m_network?: string;
     protected m_nTimeDelta: number = 0;
-    constructor(options: {socket: Socket, remote: string}) {
+
+    constructor(options: { socket: Socket, remote: string }) {
         super();
         this.m_socket = options.socket;
         this.m_socket.on('drain', () => {
@@ -42,7 +43,7 @@ export class TcpConnection extends IConnection {
                 // do nothing
             });
             this.m_socket.end();
-            delete this.m_socket; 
+            delete this.m_socket;
         }
         this.emit('close', this);
         return Promise.resolve(ErrorCode.RESULT_OK);

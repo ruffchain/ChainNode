@@ -1,4 +1,4 @@
-export {BigNumber} from 'bignumber.js';
+export { BigNumber } from 'bignumber.js';
 export * from './serializable';
 export * from './error_code';
 export * from './address';
@@ -10,33 +10,34 @@ export * from './pow_chain';
 export * from './dpos_chain';
 export * from './net';
 export * from './dbft_chain';
-export {TcpNode} from './net_tcp/node';
-export {BdtNode} from './net_bdt/node';
-export {StandaloneNode} from './net_standalone/node';
-export {ChainCreator} from './chain_creator';
+export { TcpNode } from './net_tcp/node';
+export { BdtNode } from './net_bdt/node';
+export { StandaloneNode } from './net_standalone/node';
+export { ChainCreator } from './chain_creator';
 export * from './lib/digest';
 export * from './lib/encoding';
 
 import * as fs from 'fs-extra';
-import {NetworkCreator} from './block/network';
+import { NetworkCreator } from './block/network';
 import { ChainCreator, ChainCreatorConfig } from './chain_creator';
 import { ChainTypeOptions, ValueHandler } from './value_chain';
 import { PowChain, PowMiner } from './pow_chain';
 import { DposChain, DposMiner } from './dpos_chain';
 import { DbftChain, DbftMiner } from './dbft_chain';
 import { initLogger, LoggerOptions } from './lib/logger_util';
-import {TcpNode} from './net_tcp/node';
-import {StandaloneNode} from './net_standalone/node';
-import {StaticOutNode, staticPeeridIp} from './net';
-import {BdtNode} from './net_bdt/node';
-import {RandomOutNetwork} from './block/random_outbound_network';
-import {ValidatorsNetwork} from './dbft_chain/validators_network';
+import { TcpNode } from './net_tcp/node';
+import { StandaloneNode } from './net_standalone/node';
+import { StaticOutNode, staticPeeridIp } from './net';
+import { BdtNode } from './net_bdt/node';
+import { RandomOutNetwork } from './block/random_outbound_network';
+import { ValidatorsNetwork } from './dbft_chain/validators_network';
 
-import {DposBftNetwork, DposBftChain, DposBftMiner} from './dpos_bft_chain';
+import { DposBftNetwork, DposBftChain, DposBftMiner } from './dpos_bft_chain';
 
 export function initChainCreator(options: LoggerOptions): ChainCreator {
     const logger = initLogger(options);
-    const networkCreator = new NetworkCreator({logger});
+    const networkCreator = new NetworkCreator({ logger });
+
     networkCreator.registerNode('tcp', (commandOptions: Map<string, any>): any => {
         let network = commandOptions.get('network');
         if (!network) {
@@ -45,12 +46,12 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         let _host = commandOptions.get('host');
         if (!_host) {
             console.error('invalid tcp host');
-            return ;
+            return;
         }
         let port = commandOptions.get('port');
         if (!port) {
             console.error('invalid tcp port');
-            return ;
+            return;
         }
         let peers = commandOptions.get('peers');
         if (!peers) {
@@ -59,7 +60,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             peers = (peers as string).split(';');
         }
         let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
-        return new nodeType(peers, {network, peerid: `${_host}:${port}` , host: _host, port});
+        return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
     });
 
     networkCreator.registerNode('standalone', (commandOptions: Map<string, any>): any => {
@@ -82,12 +83,12 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         let _host = commandOptions.get('host');
         if (!_host) {
             console.error('invalid bdt host');
-            return ;
+            return;
         }
         let port = commandOptions.get('port');
         if (!port) {
             console.error('no bdt port');
-            return ;
+            return;
         }
         let vport = 7883;
         if (commandOptions.has('vport')) {
@@ -109,7 +110,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
 
         if (isNaN(tcpport) || isNaN(udpport)) {
             console.error('invalid bdt port');
-            return ;
+            return;
         }
 
         let peerid = commandOptions.get('peerid');
@@ -119,12 +120,12 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         let snPeers = commandOptions.get('sn');
         if (!snPeers) {
             console.error('no sn');
-            return ;
+            return;
         }
         let snconfig = (snPeers as string).split('@');
         if (snconfig.length !== 4) {
             console.error('invalid sn: <SN_PEERID>@<SN_IP>@<SN_TCP_PORT>@<SN_UDP_PORT>');
-            return ;
+            return;
         }
         const snPeer = {
             peerid: `${snconfig[0]}`,
@@ -154,24 +155,24 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             initDHTEntry = fs.readJSONSync(initDHTFile);
         }
 
-        return new BdtNode({network, host: _host, tcpport, udpport, peerid, snPeer, dhtAppID, vport, bdtLoggerOptions: bdt_logger, initDHTEntry});
+        return new BdtNode({ network, host: _host, tcpport, udpport, peerid, snPeer, dhtAppID, vport, bdtLoggerOptions: bdt_logger, initDHTEntry });
     });
 
     networkCreator.registerNetwork('random', RandomOutNetwork);
     networkCreator.registerNetwork('validators', ValidatorsNetwork);
     networkCreator.registerNetwork('dposbft', DposBftNetwork);
 
-    let _creator = new ChainCreator({logger, networkCreator});
-    
+    let _creator = new ChainCreator({ logger, networkCreator });
+
     _creator.registerChainType('pow', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
         },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): PowChain {
-            return new PowChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new PowChain({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         },
         newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): PowMiner {
-            return new PowMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new PowMiner({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         }
     });
     _creator.registerChainType('dpos', {
@@ -179,10 +180,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new ValueHandler();
         },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposChain {
-            return new DposChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DposChain({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         },
         newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposMiner {
-            return new DposMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DposMiner({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         }
     });
     _creator.registerChainType('dbft', {
@@ -190,10 +191,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new ValueHandler();
         },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DbftChain {
-            return new DbftChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DbftChain({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         },
         newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DbftMiner {
-            return new DbftMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DbftMiner({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         }
     });
     _creator.registerChainType('dposbft', {
@@ -201,10 +202,10 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             return new ValueHandler();
         },
         newChain(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposBftChain {
-            return new DposBftChain({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DposBftChain({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         },
         newMiner(creator: ChainCreator, dataDir: string, config: ChainCreatorConfig): DposBftMiner {
-            return new DposBftMiner({networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions});
+            return new DposBftMiner({ networkCreator, logger: creator.logger, handler: config.handler, dataDir, globalOptions: config.globalOptions });
         }
     });
     return _creator;

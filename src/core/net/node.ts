@@ -161,6 +161,7 @@ export class INode extends EventEmitter {
         }
         ver.genesis = this.m_genesis!;
         ver.peerid = this.m_peerid!;
+
         let err = await new Promise((resolve: (value: ErrorCode) => void) => {
             conn.once('pkg', (pkg) => {
                 conn.removeListener('error', fn);
@@ -305,6 +306,7 @@ export class INode extends EventEmitter {
     public closeConnection(conn: NodeConnection, destroy = false): void {
         conn.removeAllListeners('error');
         conn.removeAllListeners('pkg');
+
         let index: number = 0;
         do {
             for (let c of this.m_outConn) {
@@ -413,6 +415,7 @@ export class INode extends EventEmitter {
     }
     protected _nodeConnectionType() {
         let superClass = this._connectionType();
+
         return class extends superClass {
             constructor(...args: any[]) {
                 assert(args.length);
