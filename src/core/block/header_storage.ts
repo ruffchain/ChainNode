@@ -12,7 +12,12 @@ import { BlockStorage } from './block_storage';
 import { IConsistency } from './consistency';
 
 const initHeaderSql = 'CREATE TABLE IF NOT EXISTS "headers"("hash" CHAR(64) PRIMARY KEY NOT NULL UNIQUE, "pre" CHAR(64) NOT NULL, "verified" TINYINT NOT NULL, "raw" BLOB NOT NULL);';
+
+// Yang Jun 2019-9-17
+const indexHeaderSql = 'CREATE INDEX IF NOT EXISTS "index_pre" on "headers" ("pre");'
+
 const initBestSql = 'CREATE TABLE IF NOT EXISTS "best"("height" INTEGER PRIMARY KEY NOT NULL UNIQUE, "hash" CHAR(64) NOT NULL,  "timestamp" INTEGER NOT NULL);';
+
 const getByHashSql = 'SELECT raw, verified FROM headers WHERE hash = $hash';
 // Yang Jun Modified 2019-7-8
 // const getByTimestampSql = 'SELECT h.raw, h.verified FROM headers AS h LEFT JOIN best AS b ON b.hash = h.hash WHERE b.timestamp = $timestamp';
@@ -93,6 +98,9 @@ export class HeaderStorage implements IHeaderStorage {
                 this.m_db.pragma('synchronous  = NORMAL');
                 this.m_db.pragma('journal_mode = WAL');
                 this.m_db.prepare(initHeaderSql).run();
+                // Yang Jun 2019-9-17
+                this.m_db.prepare(indexHeaderSql).run();
+                //////////////////////
                 this.m_db.prepare(initBestSql).run();
             } catch (e) {
                 this.m_logger.error(e);

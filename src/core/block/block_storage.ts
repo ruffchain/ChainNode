@@ -59,13 +59,14 @@ export class BlockStorage implements IBlockStorage {
 
     public get(blockHash: string): Block | undefined {
         let blockRaw;
+        this.m_logger.info('get(), Before read block')
         try {
             blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
         } catch (error) {
             this.m_logger.warn(`readBlockFile ${this._pathOfBlock(blockHash)} failed.`);
             this.m_logger.error(error);
         }
-
+        this.m_logger.info('After read block')
         if (blockRaw) {
             let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType, receiptType: this.m_receiptType });
             let err = block.decode(new BufferReader(blockRaw));
