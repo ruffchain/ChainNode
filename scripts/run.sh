@@ -15,7 +15,7 @@ echo $*
 
 if [  "$1" = 'miner'  -o  "$1" = 'peer'  ]
 then
-    node --inspect=0.0.0.0:3456 ./dist/blockchain-sdk/src/tool/host.js $*
+    node --max-old-space-size=2048 --inspect=0.0.0.0:3456 ./dist/blockchain-sdk/src/tool/host.js $*
 else
     echo 'Wrong arguments num'
     echo 'hello ending'
