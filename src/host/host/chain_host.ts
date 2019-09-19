@@ -78,9 +78,6 @@ export class ChainHost {
         }
         this.m_server = new ChainServer(logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
         this.m_server.init(commandOptions);
-
-        //
-
         return { ret: true, miner: cr.miner };
     }
 
@@ -102,7 +99,7 @@ export class ChainHost {
 
         let routineManagerType = this._parseExecutorRoutine(cr.chain!, commandOptions);
         if (!routineManagerType) {
-            console.error('chain_host initMiner fail _parseExecutorRoutine');
+            console.error('chain_host initPeer fail _parseExecutorRoutine');
             return { ret: false };
         }
         let pr = cr.chain!.parseInstanceOptions({ parsed: { routineManagerType }, origin: commandOptions });

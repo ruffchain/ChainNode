@@ -36,20 +36,27 @@ export class TcpNode extends INode {
         let tcp = new Socket();
 
         return new Promise<{ err: ErrorCode, conn?: NodeConnection }>((resolve, reject) => {
+            tcp.connect(par.ip!);
+
             tcp.once('error', (e) => {
                 tcp.removeAllListeners('connect');
                 resolve({ err: ErrorCode.RESULT_EXCEPTION });
             });
-            tcp.connect(par.ip!);
+
+
             tcp.once('connect', () => {
                 let connNodeType = this._nodeConnectionType();
 
                 let connNode: any = (new connNodeType(this, { socket: tcp, remote: peerid }));
 
                 tcp.removeAllListeners('error');
+
                 tcp.on('error', (e) => {
                     this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
                 });
+
+                // Yang Jun 2019-9-18
+
                 resolve({ err: ErrorCode.RESULT_OK, conn: connNode });
             });
         });
@@ -88,6 +95,12 @@ export class TcpNode extends INode {
                     tcp.on('error', (e) => {
                         this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
                     });
+
+                    // Yang Jun 2019-9-18
+                    tcp.on('close', (e) => {
+                        this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                    });
+
                     this._onInbound(connNode);
                 });
                 resolve(ErrorCode.RESULT_OK);

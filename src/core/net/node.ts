@@ -151,6 +151,7 @@ export class INode extends EventEmitter {
         if (!result.conn) {
             return { err: result.err, peerid };
         }
+        // conn is a socket
         let conn = result.conn;
 
         conn.remote = peerid;
@@ -168,6 +169,7 @@ export class INode extends EventEmitter {
         let err = await new Promise((resolve: (value: ErrorCode) => void) => {
             conn.once('pkg', (pkg) => {
                 conn.removeListener('error', fn);
+
                 if (pkg.header.cmdType === CMD_TYPE.versionAck) {
                     if (pkg.body.isSupport) {
                         // 忽略网络传输时间
@@ -217,7 +219,12 @@ export class INode extends EventEmitter {
         }
         this.m_outConn.push(result.conn);
         this.m_remoteMap.set(peerid, result.conn);
+
+        // connection error will close the connection
         conn.on('error', (_conn: IConnection, _err: ErrorCode) => {
+            // Yang Jun
+            console.log('Yang Jun , INode conn error')
+
             this.closeConnection(result.conn!);
             this.emit('error', result.conn, _err);
         });
@@ -306,7 +313,7 @@ export class INode extends EventEmitter {
         }
     }
 
-    public closeConnection(conn: NodeConnection, destroy = false): void {
+    public closeConnection(conn: NodeConnection, destroy = true): void {
         conn.removeAllListeners('error');
         conn.removeAllListeners('pkg');
 
@@ -314,6 +321,7 @@ export class INode extends EventEmitter {
         do {
             for (let c of this.m_outConn) {
                 if (c === conn) {
+                    //console.log('Yang Jun closeConnection , delete from m_outConn', conn)
                     this.m_outConn.splice(index, 1);
                     break;
                 }
@@ -322,13 +330,19 @@ export class INode extends EventEmitter {
             index = 0;
             for (let c of this.m_inConn) {
                 if (c === conn) {
+                    //console.log('Yang Jun closeConnection , delete from m_inConn', conn)
                     this.m_inConn.splice(index, 1);
                     break;
                 }
                 index++;
             }
         } while (false);
+
+        //console.log('Yang Jun m_remoteMap')
+        //console.log(this.m_remoteMap);
+
         this.m_remoteMap.delete(conn.remote!);
+
         if (destroy) {
             conn.destroy();
         } else {
@@ -351,6 +365,7 @@ export class INode extends EventEmitter {
     protected _onInbound(inbound: NodeConnection) {
         inbound.once('pkg', (pkg) => {
             inbound.removeListener('error', fn);
+
             if (pkg.header.cmdType === CMD_TYPE.version) {
                 let buff = pkg.data[0];
                 let dataReader: BufferReader = new BufferReader(buff);
@@ -394,10 +409,12 @@ export class INode extends EventEmitter {
                 }
                 this.m_inConn.push(inbound);
                 this.m_remoteMap.set(ver.peerid, inbound);
+
                 inbound.on('error', (conn: IConnection, _err: ErrorCode) => {
                     this.closeConnection(inbound);
                     this.emit('error', inbound, _err);
                 });
+
                 this.emit('inbound', inbound);
             } else {
                 this.m_logger.warn(`close inbound conn ${inbound.id} to ${inbound.fullRemote} by non version pkg`);
