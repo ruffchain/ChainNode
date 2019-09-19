@@ -59,7 +59,8 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         } else {
             peers = (peers as string).split(';');
         }
-        let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
+        // let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
+        let nodeType = staticPeeridIp.mapInstance(StaticOutNode(TcpNode));
         return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
     });
 

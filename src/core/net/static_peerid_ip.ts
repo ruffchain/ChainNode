@@ -10,10 +10,15 @@ export function mapInstance(superClass: new (...args: any[]) => INode) {
             super(...args.slice(1));
             this.m_peeridToIp = new Map();
             let iph = args[0];
-            for (let peerid of Object.keys(iph)) {
-                let [host, port] = (iph[peerid] as string).split(':');
+            // for (let peerid of Object.keys(iph)) {
+            //     let [host, port] = (iph[peerid] as string).split(':');
+            //     this.m_peeridToIp.set(peerid, { host, port: parseInt(port) });
+            // }
+            for (let item of iph) {
+                let [host, port, peerid] = (item as string).split(':');
                 this.m_peeridToIp.set(peerid, { host, port: parseInt(port) });
             }
+
         }
 
         protected async _peeridToIpAddress(peerid: string): Promise<{ err: ErrorCode, ip?: { host: string, port: number } }> {
