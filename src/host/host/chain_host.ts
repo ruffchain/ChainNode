@@ -21,7 +21,8 @@ export class ChainHost {
         if (options.commandOptions.has('eventsServer')) {
             eNames.push(ChainEvent.ElementName);
         }
-        if (options.commandOptions.has('txServer')) {
+        let eTxServer = options.commandOptions.get('txServer');
+        if (eTxServer && eTxServer === true) {
             eNames.push(TxStorage.ElementName);
         }
         if (!eNames.length) {
@@ -76,8 +77,16 @@ export class ChainHost {
             console.error('init context server fail parseInstanceOptions');
             return { ret: false };
         }
-        this.m_server = new ChainServer(logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
-        this.m_server.init(commandOptions);
+
+        // Yang Jun 2019-9-19
+        let eTxServer = commandOptions.get('txServer')
+        let eMonitor = commandOptions.get('perfMonitor')
+
+        if ((eTxServer && eTxServer === true) || (eMonitor && eMonitor === true)) {
+            this.m_server = new ChainServer(logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
+            this.m_server.init(commandOptions);
+        }
+
         return { ret: true, miner: cr.miner };
     }
 

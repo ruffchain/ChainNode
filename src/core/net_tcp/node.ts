@@ -83,35 +83,44 @@ export class TcpNode extends INode {
 
     public listen(): Promise<ErrorCode> {
         return new Promise((resolve, reject) => {
-            this.m_server.listen(this.m_options.port, this.m_options.host);
 
-            this.m_server.once('listening', () => {
-                this.m_server.removeAllListeners('error');
+            let start = () => {
+                this.m_server.listen(this.m_options.port, this.m_options.host);
 
-                this.m_server.on('connection', (tcp: Socket) => {
-                    let connNodeType = this._nodeConnectionType();
-                    let connNode: any = (new connNodeType(this, { socket: tcp, remote: `${tcp.remoteAddress}:${tcp.remotePort}` }));
+                this.m_server.once('listening', () => {
+                    this.m_server.removeAllListeners('error');
 
-                    tcp.on('error', (e) => {
-                        this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                    this.m_server.on('connection', (tcp: Socket) => {
+                        let connNodeType = this._nodeConnectionType();
+                        let connNode: any = (new connNodeType(this, { socket: tcp, remote: `${tcp.remoteAddress}:${tcp.remotePort}` }));
+
+                        tcp.on('error', (e) => {
+                            this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                        });
+
+                        // Yang Jun 2019-9-18
+                        tcp.on('close', (e) => {
+                            this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                        });
+
+                        this._onInbound(connNode);
                     });
-
-                    // Yang Jun 2019-9-18
-                    tcp.on('close', (e) => {
-                        this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
-                    });
-
-                    this._onInbound(connNode);
                 });
-                resolve(ErrorCode.RESULT_OK);
-            });
 
-            this.m_server.once('error', (e) => {
-                this.m_server.removeAllListeners('listening');
-                this.m_logger.error(`tcp listen on ${this.m_options.host}:${this.m_options.port} error `, e);
+                this.m_server.once('error', (e) => {
+                    this.m_server.removeAllListeners('listening');
+                    this.m_logger.error(`tcp listen on ${this.m_options.host}:${this.m_options.port} error `, e);
+                    this.m_server.close();
 
-                resolve(ErrorCode.RESULT_EXCEPTION);
-            });
+                    setTimeout(() => {
+                        start();
+                        this.m_logger.error('Restart tcp server after 5 seconds');
+                    }, 5000)
+                });
+            }
+
+            start();
+            resolve(ErrorCode.RESULT_OK);
         });
     }
 }

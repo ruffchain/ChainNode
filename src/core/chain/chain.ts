@@ -634,6 +634,8 @@ export class Chain extends EventEmitter implements IConsistency {
             return err;
         }
         // 初始化完成之后开始监听，这样初始化中的节点不会被作为初始化的sync 节点
+
+
         err = await this.m_node!.listen();
         if (err) {
             this.m_logger.error(`chain initialize failed for listen ${err}`);

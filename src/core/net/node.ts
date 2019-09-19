@@ -223,7 +223,7 @@ export class INode extends EventEmitter {
         // connection error will close the connection
         conn.on('error', (_conn: IConnection, _err: ErrorCode) => {
             // Yang Jun
-            console.log('Yang Jun , INode conn error')
+            console.log('net/node.ts , INode conn error')
 
             this.closeConnection(result.conn!);
             this.emit('error', result.conn, _err);

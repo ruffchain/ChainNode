@@ -49,13 +49,65 @@ export class ChainServer {
         }
         // Modify by Yang Jun 2019-8-29
         this.m_server = new RPCServer(host, parseInt(port, 10), this.m_chain.node.txBuffer);
-        this._initMethods();
+
+        let eTxServer = commandOptions.get('txServer')
+        let eMonitor = commandOptions.get('perfMonitor')
+
+        if (eTxServer && eTxServer === true) {
+            this._initMethods(commandOptions);
+        }
+        if (eMonitor && eMonitor === true) {
+            this._initMethodsMonitor(commandOptions);
+        }
         this.m_server.start();
 
         return true;
     }
 
-    _initMethods() {
+    // Yang Jun 2019-9-19
+    _initMethodsMonitor(commandOptions: CommandOptions) {
+        this.m_server!.on('getNodeInfo', async (params: {}, resp) => {
+            this.m_logger.info('getNodeInfo');
+            let feedback = await getNodeInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getConnInfo', async (params: { index: number }, resp) => {
+            this.m_logger.info('getConnInfo');
+            this.m_logger.info(typeof params.index)
+            this.m_logger.info(params.index + '')
+
+            let feedback = await getConnInfo(this.m_logger, params);
+
+            console.log('feedback:')
+            console.log(feedback);
+
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getProcessInfo', async (params: { index: number }, resp) => {
+
+            let feedback = await getProcessInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+        this.m_server!.on('getContribInfo', async (params: { index: number }, resp) => {
+
+            let feedback = await getContribInfo(this.m_logger, params);
+            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
+            await promisify(resp.end.bind(resp)());
+
+            getMonitor()!.updateSendRpcs();
+        });
+    }
+
+    _initMethods(commandOptions: CommandOptions) {
         this.m_server!.on('sendTransaction', async (params: { tx: any }, resp) => {
             // Yang Jun, make createToken, createBancorToken , tokenid to be UpperCase
             //
@@ -285,45 +337,6 @@ export class ChainServer {
         });
 
         // Yang Jun 2019-8-15
-        this.m_server!.on('getNodeInfo', async (params: {}, resp) => {
-            this.m_logger.info('getNodeInfo');
-            let feedback = await getNodeInfo(this.m_logger, params);
-            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
-            await promisify(resp.end.bind(resp)());
-
-            getMonitor()!.updateSendRpcs();
-        });
-        this.m_server!.on('getConnInfo', async (params: { index: number }, resp) => {
-            this.m_logger.info('getConnInfo');
-            this.m_logger.info(typeof params.index)
-            this.m_logger.info(params.index + '')
-
-            let feedback = await getConnInfo(this.m_logger, params);
-
-            console.log('feedback:')
-            console.log(feedback);
-
-            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
-            await promisify(resp.end.bind(resp)());
-
-            getMonitor()!.updateSendRpcs();
-        });
-        this.m_server!.on('getProcessInfo', async (params: { index: number }, resp) => {
-
-            let feedback = await getProcessInfo(this.m_logger, params);
-            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
-            await promisify(resp.end.bind(resp)());
-
-            getMonitor()!.updateSendRpcs();
-        });
-        this.m_server!.on('getContribInfo', async (params: { index: number }, resp) => {
-
-            let feedback = await getContribInfo(this.m_logger, params);
-            await promisify(resp.write.bind(resp)(JSON.stringify(feedback)));
-            await promisify(resp.end.bind(resp)());
-
-            getMonitor()!.updateSendRpcs();
-        });
     }
 
     public getLogger() {

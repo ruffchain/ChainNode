@@ -25,6 +25,8 @@ export interface IfNodeInfo {
     port: string; // "13101|13000"
     sn: string;
     txServer: boolean;
+    peers: string;
+    perfMonitor: boolean;
 
     version: string;
     bootTime: number;
@@ -77,6 +79,7 @@ export interface IfContribInfo {
     sendTxs: number;
     recvRpcs: number;
     sendRpcs: number;
+
 }
 
 let counterTx = 0;
@@ -113,6 +116,8 @@ abstract class Monitor {
         this.initNodeInfo('port', 'string', options);
         this.initNodeInfo('sn', 'string', options);
         this.initNodeInfo('txServer', 'boolean', options);
+        this.initNodeInfo('peers', 'string', options);
+        this.initNodeInfo('perfMonitor', 'boolean', options);
 
 
         this.connInfo = {

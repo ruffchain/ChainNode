@@ -1,16 +1,16 @@
 const assert = require('assert');
-import {EventEmitter} from 'events';
+import { EventEmitter } from 'events';
 
-import {ErrorCode} from '../error_code';
-import {LoggerInstance} from '../lib/logger_util';
-import {NodeStorage, NodeStorageOptions} from './node_storage';
-import {BlockHeader, Block} from './block';
-import {IHeaderStorage} from './header_storage';
-import {Transaction, Receipt} from './transaction';
+import { ErrorCode } from '../error_code';
+import { LoggerInstance } from '../lib/logger_util';
+import { NodeStorage, NodeStorageOptions } from './node_storage';
+import { BlockHeader, Block } from './block';
+import { IHeaderStorage } from './header_storage';
+import { Transaction, Receipt } from './transaction';
 
-import {INode, NodeConnection, PackageStreamWriter} from '../net';
+import { INode, NodeConnection, PackageStreamWriter } from '../net';
 import { isNullOrUndefined } from 'util';
-const {LogShim} = require('../lib/log_shim');
+const { LogShim } = require('../lib/log_shim');
 
 export type NetworkOptions = {
     node: INode;
@@ -50,8 +50,8 @@ export class Network extends EventEmitter {
 
         this.m_dataDir = options.dataDir;
         this.m_blockHeaderType = options.blockHeaderType;
-        this.m_transactionType = options.transactionType;  
-        this.m_receiptType = options.receiptType;  
+        this.m_transactionType = options.transactionType;
+        this.m_receiptType = options.receiptType;
         this.m_headerStorage = options.headerStorage;
     }
 
@@ -81,7 +81,7 @@ export class Network extends EventEmitter {
     once(event: 'error', listener: (connRemotePeer: string, id: string, err: ErrorCode) => any): this;
     once(event: string, listener: any): this {
         return super.once(event, listener);
-    }   
+    }
 
     prependListener(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     prependListener(event: 'inbound', listener: (conn: NodeConnection) => any): this;
@@ -89,7 +89,7 @@ export class Network extends EventEmitter {
     prependListener(event: 'error', listener: (connRemotePeer: string, err: ErrorCode) => any): this;
     prependListener(event: string, listener: any): this {
         return super.prependListener(event, listener);
-    }   
+    }
 
     prependOnceListener(event: 'outbound', listener: (conn: NodeConnection) => any): this;
     prependOnceListener(event: 'inbound', listener: (conn: NodeConnection) => any): this;
@@ -97,14 +97,14 @@ export class Network extends EventEmitter {
     prependOnceListener(event: 'error', listener: (connRemotePeer: string, err: ErrorCode) => any): this;
     prependOnceListener(event: string, listener: any): this {
         return super.prependOnceListener(event, listener);
-    }  
-    
-    parseInstanceOptions(options: {parsed: any, origin: Map<string, any>}): {err: ErrorCode, value?: any} {
+    }
+
+    parseInstanceOptions(options: { parsed: any, origin: Map<string, any> }): { err: ErrorCode, value?: any } {
         let value = Object.create(null);
         value.ignoreBan = options.origin.get('ignoreBan');
         value.nodeCacheSize = options.origin.get('nodeCacheSize');
         let strategyOptNames = {
-            broadcast_limit_transaction: NetworkBroadcastStrategy.transaction,  
+            broadcast_limit_transaction: NetworkBroadcastStrategy.transaction,
             broadcast_limit_headers: NetworkBroadcastStrategy.headers
         };
         value.strategy = new Map();
@@ -113,25 +113,26 @@ export class Network extends EventEmitter {
             if (ss) {
                 let count;
                 count = Number.parseInt(ss);
-                
+
                 let filter;
                 if (isNaN(count)) {
                     const address = (ss as string).split(',');
                     count = address.length;
                     filter = (conn: NodeConnection): boolean => address.indexOf(conn.remote!) !== -1;
                 }
-                value.strategy.set(s, {count, filter});
+                value.strategy.set(s, { count, filter });
             }
         }
-        return {err: ErrorCode.RESULT_OK, value};
+        return { err: ErrorCode.RESULT_OK, value };
     }
 
     setInstanceOptions(options: any) {
         this.m_ignoreBan = !!options.ignoreBan;
         this.m_nodeStorage = new NodeStorage({
-            count: options.nodeCacheSize ? options.nodeCacheSize : 50, 
-            dataDir: this.m_dataDir, 
-            logger: this.m_logger});
+            count: options.nodeCacheSize ? options.nodeCacheSize : 50,
+            dataDir: this.m_dataDir,
+            logger: this.m_logger
+        });
         for (const [n, s] of options.strategy) {
             this.addBroadcastStrategy(n, s);
         }
@@ -173,9 +174,10 @@ export class Network extends EventEmitter {
     public newBlock(header?: BlockHeader): Block {
         let block = new Block({
             header,
-            headerType: this.m_blockHeaderType!, 
+            headerType: this.m_blockHeaderType!,
             transactionType: this.m_transactionType!,
-            receiptType: this.m_receiptType!});
+            receiptType: this.m_receiptType!
+        });
         return block;
     }
 
@@ -224,7 +226,7 @@ export class Network extends EventEmitter {
             }
             return ErrorCode.RESULT_SKIPPED;
         }
-        
+
         Promise.all(ops).then((results) => {
             let connCount = 0;
             for (let r of results) {
@@ -233,7 +235,7 @@ export class Network extends EventEmitter {
                 if (r.conn) {
                     this.m_nodeStorage!.add(r.conn.remote!);
                     this.emit('outbound', r.conn);
-                    ++ connCount;
+                    ++connCount;
                 } else {
                     if (r.err !== ErrorCode.RESULT_ALREADY_EXIST) {
                         this.m_nodeStorage!.remove(r.peerid);
@@ -267,12 +269,13 @@ export class Network extends EventEmitter {
                 this.emit('inbound', inbound);
             }
         });
+
         return await this.m_node.listen();
     }
 
     public banConnection(remote: string, level: BAN_LEVEL) {
         if (this.m_ignoreBan) {
-            return ;
+            return;
         }
         this.m_logger.warn(`banned peer ${remote} for ${level}`);
         this.m_nodeStorage!.ban(remote, level);
@@ -301,17 +304,18 @@ export class Network extends EventEmitter {
     }
 
     broadcast(writer: PackageStreamWriter, options?: {
-        count?: number, filter?: (conn: NodeConnection) => boolean, strategy?: number}): Promise<{err: ErrorCode}> {
+        count?: number, filter?: (conn: NodeConnection) => boolean, strategy?: number
+    }): Promise<{ err: ErrorCode }> {
         let bopt = Object.create(null);
         if (options) {
-            bopt.count  = options.count;
+            bopt.count = options.count;
             bopt.filter = options.filter;
             if (!isNullOrUndefined(options.strategy)) {
-                const s  = this.m_broadcastStrategies.get(options.strategy);
+                const s = this.m_broadcastStrategies.get(options.strategy);
                 if (s) {
                     if (!isNullOrUndefined(s.count)) {
                         bopt.count = isNullOrUndefined(bopt.count) ? s.count : Math.min(bopt.count, s.count);
-                    } 
+                    }
                     if (s.filter) {
                         if (bopt.filter) {
                             let srcFilter = bopt.filter;
@@ -320,18 +324,18 @@ export class Network extends EventEmitter {
                             bopt.filter = s.filter;
                         }
                     }
-                } 
+                }
             }
         }
-        
+
         return this.m_node.broadcast(writer, bopt);
     }
 
-    addBroadcastStrategy(strategy: number, options: {count?: number, filter?: (conn: NodeConnection) => boolean}) {
-        this.m_broadcastStrategies.set(strategy, {count: options.count, filter: options.filter});
+    addBroadcastStrategy(strategy: number, options: { count?: number, filter?: (conn: NodeConnection) => boolean }) {
+        this.m_broadcastStrategies.set(strategy, { count: options.count, filter: options.filter });
     }
 
-    private m_broadcastStrategies: Map<number, {count?: number, filter?: (conn: NodeConnection) => boolean}> = new Map();
+    private m_broadcastStrategies: Map<number, { count?: number, filter?: (conn: NodeConnection) => boolean }> = new Map();
 
 }
 
@@ -345,39 +349,39 @@ export class NetworkCreator {
     }
     private m_logger: LoggerInstance;
 
-    create(options: {parsed: any, origin: Map<string, any>}): {err: ErrorCode, network?: Network} {
+    create(options: { parsed: any, origin: Map<string, any> }): { err: ErrorCode, network?: Network } {
         let pnr = this._parseNetwork(options);
         if (pnr.err) {
             this.m_logger.error(`parseNetwork failed, err ${pnr.err}`);
-            return {err: pnr.err};
+            return { err: pnr.err };
         }
         const network = pnr.network!;
-        return {err: ErrorCode.RESULT_OK, network};
+        return { err: ErrorCode.RESULT_OK, network };
     }
 
     registerNetwork(type: string, instance: new (...args: any[]) => Network) {
         this.m_network.set(type, instance);
     }
 
-    protected _parseNetwork(options: {parsed: any, origin: Map<string, any>}): {err: ErrorCode, network?: Network} {
-        const {parsed} = options;
-        if (!parsed.dataDir 
-            || !parsed.blockHeaderType 
-            || !parsed.headerStorage 
-            || !parsed.receiptType 
+    protected _parseNetwork(options: { parsed: any, origin: Map<string, any> }): { err: ErrorCode, network?: Network } {
+        const { parsed } = options;
+        if (!parsed.dataDir
+            || !parsed.blockHeaderType
+            || !parsed.headerStorage
+            || !parsed.receiptType
             || !parsed.transactionType
             || !parsed.logger
-            ) {
+        ) {
             this.m_logger.error(`parsed should has contructor options`);
-            return {err: ErrorCode.RESULT_PARSE_ERROR};
-        } 
+            return { err: ErrorCode.RESULT_PARSE_ERROR };
+        }
         let type = options.parsed.netType;
         if (!type) {
             type = options.origin.get('netType');
         }
         if (!type) {
             this.m_logger.error(`parse network failed for netype missing`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
 
         let node = options.parsed.node;
@@ -385,22 +389,22 @@ export class NetworkCreator {
             const pr = this._parseNode(options.origin);
             if (pr.err) {
                 this.m_logger.error(`parseNode failed, err ${pr.err}`);
-                return {err: pr.err};
+                return { err: pr.err };
             }
             node = pr.node;
-        } 
+        }
 
         const instance = this.m_network.get(type);
         if (!instance) {
             this.m_logger.error(`parse network failed for invalid netType ${type}`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
         let ops = Object.create(parsed);
         ops.node = node;
         ops.logger = this.m_logger;
         const ins = new instance(ops);
 
-        return {err: ErrorCode.RESULT_OK, network: ins};
+        return { err: ErrorCode.RESULT_OK, network: ins };
     }
 
     private m_network: Map<string, new (...args: any[]) => Network> = new Map();
@@ -409,18 +413,18 @@ export class NetworkCreator {
         this.m_node.set(type, instance);
     }
 
-    protected _parseNode(commandOptions: Map<string, any>): {err: ErrorCode, node?: INode}  {
+    protected _parseNode(commandOptions: Map<string, any>): { err: ErrorCode, node?: INode } {
         const type = commandOptions.get('net');
         if (type) {
             let ni = this.m_node.get(type);
             if (!ni) {
                 this.m_logger.error(`parse node failed for invalid node ${type}`);
-                return {err: ErrorCode.RESULT_INVALID_PARAM};
+                return { err: ErrorCode.RESULT_INVALID_PARAM };
             }
-            return {err: ErrorCode.RESULT_OK, node: ni(commandOptions)};
+            return { err: ErrorCode.RESULT_OK, node: ni(commandOptions) };
         } else {
             this.m_logger.error(`parse node failed for node missing`);
-            return {err: ErrorCode.RESULT_INVALID_PARAM};
+            return { err: ErrorCode.RESULT_INVALID_PARAM };
         }
     }
 
