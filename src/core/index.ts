@@ -149,7 +149,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         }
 
         let initDHTEntry;
-        const initDHTFile = commandOptions.get('dataDir') + '/peers';
+        const initDHTFile = commandOptions.get('peersDir') + '/peers';
         if (fs.pathExistsSync(initDHTFile)) {
             initDHTEntry = fs.readJSONSync(initDHTFile);
         }
@@ -162,7 +162,7 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
     networkCreator.registerNetwork('dposbft', DposBftNetwork);
 
     let _creator = new ChainCreator({logger, networkCreator});
-    
+
     _creator.registerChainType('pow', {
         newHandler(creator: ChainCreator, typeOptions: ChainTypeOptions): ValueHandler {
             return new ValueHandler();
