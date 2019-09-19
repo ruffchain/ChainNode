@@ -1,11 +1,25 @@
 import { ErrorCode } from '../error_code';
 import { INode } from './node';
+// import { TcpNode } from '..';
+// import { func, string } from '@hapi/joi';
+
+
 
 export function instance(superClass: new (...args: any[]) => INode) {
+
     return class extends superClass {
         constructor(...args: any[]) {
+
             super(...args.slice(1));
-            this.m_staticPeers = (args[0]).slice(0);
+            // this.m_staticPeers = (args[0]).slice(0);
+            this.m_staticPeers = [];
+
+            for (let peer of args[0]) {
+                let arr = peer.split(':');
+                this.m_staticPeers.push(arr[2]);
+            }
+
+            console.log(this.m_staticPeers);
         }
         private m_staticPeers: string[];
 

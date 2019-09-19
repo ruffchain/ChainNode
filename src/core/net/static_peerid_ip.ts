@@ -7,16 +7,20 @@ export function mapInstance(superClass: new (...args: any[]) => INode) {
         protected m_peeridToIp: Map<string, { host: string, port: number }>;
 
         constructor(...args: any[]) {
-            super(...args.slice(1));
+
+            super(...args);
+            //    super(...args.slice(1));   This is a mistake!
             this.m_peeridToIp = new Map();
             let iph = args[0];
             // for (let peerid of Object.keys(iph)) {
             //     let [host, port] = (iph[peerid] as string).split(':');
             //     this.m_peeridToIp.set(peerid, { host, port: parseInt(port) });
             // }
+
             for (let item of iph) {
                 let [host, port, peerid] = (item as string).split(':');
                 this.m_peeridToIp.set(peerid, { host, port: parseInt(port) });
+                console.log(peerid, { host, port: parseInt(port) })
             }
 
         }

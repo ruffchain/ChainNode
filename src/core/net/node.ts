@@ -63,7 +63,10 @@ export class INode extends EventEmitter {
     protected m_logger: LoggerInstance;
 
     constructor(options: { network: string, peerid: string } & LoggerOptions) {
+
         super();
+
+
         this.m_peerid = options.peerid;
         this.m_network = options.network;
         this.m_logger = initLogger(options);

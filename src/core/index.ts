@@ -43,6 +43,12 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         if (!network) {
             network = 'default';
         }
+
+        let m_peerid = commandOptions.get('peerid');
+        if (!m_peerid) {
+            m_peerid = 'default';
+        }
+
         let _host = commandOptions.get('host');
         if (!_host) {
             console.error('invalid tcp host');
@@ -61,7 +67,8 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         }
         // let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
         let nodeType = staticPeeridIp.mapInstance(StaticOutNode(TcpNode));
-        return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
+        // return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
+        return new nodeType(peers, { network, peerid: m_peerid, host: _host, port });
     });
 
     networkCreator.registerNode('standalone', (commandOptions: Map<string, any>): any => {

@@ -15,6 +15,8 @@ export class TcpNode extends INode {
     private m_server: Server;
 
     constructor(options: { network: string, peerid: string, host: string, port: number } & LoggerOptions) {
+        console.log(arguments);
+
         super({ network: options.network, peerid: options.peerid, logger: options.logger, loggerOptions: options.loggerOptions });
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
