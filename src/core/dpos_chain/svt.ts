@@ -378,7 +378,7 @@ export class SVTContext {
     await kvDPos.hset('candidate', from, BanStatus.NoBan);
 
     // 在SVT-depoist里面添加, 不再检测是否存在
-    this.m_logger.info('egister');
+    this.m_logger.info('register');
     this.m_logger.info('curBlock:', this.nGetCurBlock());
 
     let dueBlock = this.nGetCurDepositDueBlock();
@@ -685,6 +685,7 @@ export class SVTContext {
     return hret;
   }
   // Add 2019-6-14
+  /*
   private async calcVoteFromDeposit(from: string): Promise<BigNumber> {
     let kvSVTDeposit = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTDeposit)).kv! as SqliteStorageKeyValue;
 
@@ -701,7 +702,7 @@ export class SVTContext {
 
     return new BigNumber(0);
   }
-
+*/
   private async calcVoteFromMortgage(from: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
     // calculate svt-vote, voteSum
     let kvSVTVote = (await this.m_svtDatabase.getReadWritableKeyValue(SVTContext.kvSVTVote)).kv! as SqliteStorageKeyValue;
@@ -719,9 +720,11 @@ export class SVTContext {
     }
     this.m_logger.info('votsum:', votSum.toString());
 
+    // Remove it 2019-9-21
     // Yang Jun , add SVT-deposit 
-    let voteFromDeposit = await this.calcVoteFromDeposit(from);
-    votSum = votSum.plus(voteFromDeposit);
+    // let voteFromDeposit = await this.calcVoteFromDeposit(from);
+
+    // votSum = votSum.plus(voteFromDeposit);
 
     return { err: ErrorCode.RESULT_OK, value: votSum };
   }
