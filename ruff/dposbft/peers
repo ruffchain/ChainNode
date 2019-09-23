@@ -1,0 +1,10 @@
+[
+{
+    "peerid": "1Mmq6FMRJTGW9mT7yiee3JJ7cpdd3JZNpq",
+    "eplist": ["4@192.168.31.67@13000@u", "4@192.168.31.67@13010@t"]
+},
+{
+    "peerid": "1LcLZNsntAcU55LSqkrGDQTLuEnvJAVjrW",
+    "eplist": ["4@192.168.31.67@13020@u", "4@192.168.31.67@13020@t"]
+}
+]
