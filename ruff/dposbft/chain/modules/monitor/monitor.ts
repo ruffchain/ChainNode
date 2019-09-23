@@ -88,7 +88,7 @@ let counterSizeTx = 0;
 // base info
 abstract class Monitor {
     static MAX_PROCESS_INFO = 24;
-    static LOOP_INTERVAL = 10; // in minutes
+    static LOOP_INTERVAL = 60; // in minutes
     // static VERY_BIG = 1000000000;
     protected nodeInfo: IfNodeInfo | {};
     protected connInfoLst: IfConnInfo[];
