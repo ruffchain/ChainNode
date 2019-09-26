@@ -107,6 +107,8 @@ export class DposBftChainTipState extends DposChainTipState {
         let d = super.toJsonData();
         d.bft_irreversible_blocknum = this.m_bftIRB.number;
 
+        d.IRB = this.IRB.number;
+
         // Added by Yang Jun
         this.mBftIRB = this.m_bftIRB.number;
         return d;
