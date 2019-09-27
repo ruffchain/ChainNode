@@ -26,15 +26,15 @@ node ./dist/blockchain-sdk/src/tool/restore_storage.js restore --dataDir ${path1
 
 
 ```
-node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner2
+node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner2 --cfgFile ./config/tcpminer1.cfg
 
-node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner1
+node ./dist/blockchain-sdk/src/tool/trim.js  check --dataDir ./data/dposbft/miner1 --cfgFile ./config/tcpminer1.cfg
 
 We found the tip of node is 1000. A recommended trim point is height< 1000, for example 995, or smaller,  will be good.
 
 
 
-node ./dist/blockchain-sdk/src/tool/trim.js  trim --dataDir ./data/dposbft/miner2 --height 995
+node ./dist/blockchain-sdk/src/tool/trim.js  trim --dataDir ./data/dposbft/miner2 --cfgFile ./config/tcpminer1.cfg --height 995
 
 Start the genesis-node first, then the other nodes.
 

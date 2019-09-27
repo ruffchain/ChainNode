@@ -155,10 +155,15 @@ async function checkTxview(logger: winston.LoggerInstance, path: string): Promis
     if (retn.err !== 0) { return -1; }
     return 0;
 }
-export async function checkMain(logger: winston.LoggerInstance, path: string) {
+export async function checkMain(logger: winston.LoggerInstance, path: string, cfgOption: any) {
     let retn = await checkDatabase(logger, path);
     if (retn === -1) { return -1; }
 
-    retn = await checkTxview(logger, path);
-    if (retn === -1) { return -1; }
+    let bCheckTxView = cfgOption.txServer;
+
+    if (bCheckTxView) {
+        retn = await checkTxview(logger, path);
+        if (retn === -1) { return -1; }
+    }
+
 }

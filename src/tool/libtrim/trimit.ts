@@ -32,9 +32,11 @@ async function checkHeightValid(height: number, logger: winston.LoggerInstance, 
     return 0;
 }
 
-export async function trimMain(height: number, logger: winston.LoggerInstance, path: string) {
+export async function trimMain(height: number, logger: winston.LoggerInstance, path: string, cfgOption: any) {
     let result = await checkHeightValid(height, logger, path);
     if (result !== 0) { return -1; }
+
+    let bCheckTxView = cfgOption.txServer;
 
     let trimItemLst: IfBestItem[] = [];
     async function fetchTrimItemsLst(mDb: TrimDataBase): Promise<IFeedBack> {
@@ -60,10 +62,12 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
         return -1;
     }
 
-    result = await trimTxview(trimItemLst, logger, path);
-    if (result !== 0) {
-        logger.error('trim txview failed');
-        return -1;
+    if (bCheckTxView) {
+        result = await trimTxview(trimItemLst, logger, path);
+        if (result !== 0) {
+            logger.error('trim txview failed');
+            return -1;
+        }
     }
 
     result = await trimStorageLog(trimItemLst, logger, path);
