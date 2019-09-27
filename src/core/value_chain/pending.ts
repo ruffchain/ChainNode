@@ -5,7 +5,7 @@ import {BigNumber} from 'bignumber.js';
 import {ValueChain} from './chain';
 import {ValueBlockHeader} from './block';
 
-const MinFee = new BigNumber(0.001);
+const MinFee = new BigNumber(0.1);
 
 export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();

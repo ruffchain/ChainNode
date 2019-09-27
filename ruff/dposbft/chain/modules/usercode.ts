@@ -7,8 +7,8 @@ import { createScript, resolveHelper } from 'ruff-vm';
 const DB_NAME_MAX_LEN: number = 12;
 const DB_KEY_MAX_LEN: number = 256;
 const DB_VALUE_MAX_LEN: number = 512;
-const FEE_PER_BYTE = 0.000012;
-const USER_CODE_MIN_COST: BigNumber = new BigNumber(0.001);
+const FEE_PER_BYTE = 0.0012;
+const USER_CODE_MIN_COST: BigNumber = new BigNumber(0.1);
 
 async function getAddressCode(codeKv: IReadableKeyValue, address: string): Promise<Buffer | undefined> {
     let retInfo = await codeKv.get(address);
@@ -23,7 +23,7 @@ async function getTableValue(tableKv: IReadableKeyValue, keyName: string): Promi
 function getFeeCostForCode(code: string | Buffer) : BigNumber {
     let byteCost = new BigNumber(code.length * 204 * 18).div(1000000000);
 
-    return new BigNumber(0.002).plus(byteCost);
+    return new BigNumber(0.2).plus(byteCost);
 }
 
 function isValidUserCode(code: string | Buffer) : Boolean {
