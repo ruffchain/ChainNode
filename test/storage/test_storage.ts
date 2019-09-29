@@ -8,6 +8,7 @@ import { ErrorCode, initLogger, IReadWritableDatabase, IReadWritableKeyValue, Bu
 import { SqliteStorage } from '../../src/core/storage_sqlite/storage';
 import { JsonStorage } from '../../src/core/storage_json/storage';
 import * as jsonableValues from '../jsonable_values';
+import {BigNumber} from 'bignumber.js';
 
 process.on('unhandledRejection', (reason, p) => {
     console.log('未处理的 rejection：', p, '原因：', reason);
@@ -158,6 +159,43 @@ function defineStorageTest(rootDir: string, storageType: new (...args: any[]) =>
         __test().then(done);
     });
 
+    it(`${descName}: transaction commit`, (done) => {
+        async function __test() {
+            let transcation = (await storage.beginTransaction()).value!;
+            let testValue = new BigNumber(100.12345);
+            await keyvalue.set('main', testValue.minus(1));
+            await keyvalue.set('sub', testValue.minus(1.1));
+            await transcation.commit();
+
+            let main = (await keyvalue.get('main')).value!;
+            let sub = (await keyvalue.get('sub')).value!;
+            console.log(`main: ${main}, sub: ${sub}`);
+            assert.equal(testValue.minus(1).toString(), main);
+            assert.equal(testValue.minus(1.1).toString(), sub);
+        }
+
+        __test().then(done);
+    });
+
+    it(`${descName}: transaction rollback`, (done) => {
+        async function __test() {
+            let transcation = (await storage.beginTransaction()).value!;
+            let testValue = new BigNumber(100.12345);
+            await keyvalue.set('main', 'invalid');
+            await keyvalue.set('sub', 'invalid');
+            await transcation.rollback();
+
+            let main = (await keyvalue.get('main')).value!;
+            let sub = (await keyvalue.get('sub')).value!;
+            console.log(`main: ${main}, sub: ${sub}`);
+            assert.equal(testValue.minus(1).toString(), main);
+            assert.equal(testValue.minus(1.1).toString(), sub);
+        }
+
+        __test().then(done);
+    });
+
+
     it(`${descName}: redo log`, (done) => {
         async function __test() {
             const redoLog = storage.storageLogger!;
@@ -184,6 +222,7 @@ function defineStorageTest(rootDir: string, storageType: new (...args: any[]) =>
         }
         __test().then(done);
     });
+
 }
 
 describe('Storage', async () => {
