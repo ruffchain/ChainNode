@@ -56,6 +56,11 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     console.log('\nTo trim below ' + trimItemLst.length + ' blocks:')
     console.log(trimItemLst);
 
+    if (trimItemLst.length === 0) {
+        console.log('No need to trim, trimItemLst is empty.');
+        return 0;
+    }
+
     result = await trimDatabase(trimItemLst, logger, path);
     if (result !== 0) {
         logger.error('trim database failed');
