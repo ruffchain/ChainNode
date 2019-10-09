@@ -13,7 +13,9 @@ export const VOTE_FROM_DEPOSIT = 6870;
 
 
 export const SYS_TOKEN = 'SYS';
-export const SVT_TOKEN = 'SVT';
+export const SVT_TOKEN = 'RVT';
+export const RUFF_TOKEN = 'RUFF';
+
 const TOKEN_MIN_LEN = 3;
 const TOKEN_MAX_LEN = 12;
 
@@ -70,7 +72,7 @@ export function bCheckTokenid(tokenid: string) {
     return false;
   }
 
-  if (str === SYS_TOKEN || str === SVT_TOKEN) {
+  if (str === SYS_TOKEN || str === SVT_TOKEN || str === RUFF_TOKEN) {
     return false;
   }
 
