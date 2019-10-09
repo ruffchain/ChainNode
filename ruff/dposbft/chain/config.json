@@ -6,10 +6,10 @@
     },
     "global": {
         "minCreateor": 2,
-        "maxCreateor": 15,
+        "maxCreateor": 12,
         "reSelectionBlocks": 60,
         "blockInterval": 10,
-        "timeOffsetToLastBlock": 43200,
+        "timeOffsetToLastBlock": 86400,
         "timeBan": 259200,
         "unbanBlocks": 360,
         "dposVoteMaxProducers": 7,
@@ -18,6 +18,6 @@
         "depositPeriod": 777600,
         "mortgagePeriod": 25920,
         "voteInterval": 10,
-        "heightIntervalForUserCode": 200
+        "heightIntervalForUserCode": 20
     }
 }
