@@ -119,7 +119,7 @@ export class ValuePendingTransactions extends PendingTransactions {
         for (let pos = 0; pos < this.m_transactions.length; pos++) {
             total = total.plus((this.m_transactions[pos].tx as ValueTransaction).fee);
             txs.push(this.m_transactions[pos].tx as ValueTransaction);
-            if (total.gt(maxFee) || txs.length >= txLimit) {
+            if (total.gte(maxFee) || txs.length >= txLimit) {
                 break;
             }
         }
