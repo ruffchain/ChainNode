@@ -4,12 +4,12 @@ import * as fs from 'fs';
 
 export type Options = Map<string, any>;
 
-export type Command = {command?: string, options: Options};
+export type Command = { command?: string, options: Options };
 
-function objToStrMap(obj:any): Map<string, any> {
+function objToStrMap(obj: any): Map<string, any> {
     let strMap = new Map();
     for (let k of Object.keys(obj)) {
-        strMap.set(k,obj[k]);
+        strMap.set(k, obj[k]);
     }
     return strMap;
 }
@@ -27,24 +27,25 @@ export function parseCommandFromCfgFile(cmd: Command): Command {
         let content = fs.readFileSync(filePath).toString();
         try {
             let obj = JSON.parse(content);
-            let newCommand: Command = {command: cmd.command, options: objToStrMap(obj)};
+            let newCommand: Command = { command: cmd.command, options: objToStrMap(obj) };
+
             cmd.options.forEach((value, key) => {
                 newCommand.options.set(key, value);
             });
             return newCommand;
-        } catch(err) {
+        } catch (err) {
             throw new Error(`invalid config file ${filePath}`);
         }
     }
     return cmd;
 }
 
-export function parseCommand(argv: string[]): Command|undefined {
+export function parseCommand(argv: string[]): Command | undefined {
     if (argv.length < 3) {
         console.log('no enough command');
-        return ;
+        return;
     }
-    let command: Command = {options: new Map()};
+    let command: Command = { options: new Map() };
     let start = 2;
     let firstArg = argv[2];
     if (!firstArg.startsWith('--')) {
@@ -52,7 +53,7 @@ export function parseCommand(argv: string[]): Command|undefined {
         start = 3;
     }
 
-    let curKey: string|undefined;
+    let curKey: string | undefined;
     while (start < argv.length) {
         let arg = argv[start];
         if (arg.startsWith('--')) {

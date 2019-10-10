@@ -20,8 +20,10 @@ export function instance(superClass: new (...args: any[]) => INode) {
             }
 
             console.log(this.m_staticPeers);
+
         }
         private m_staticPeers: string[];
+
 
         async randomPeers(count: number, excludes: Set<string>): Promise<{ err: ErrorCode, peers: string[] }> {
             const doubleCount = 2 * count;

@@ -65,10 +65,20 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
         } else {
             peers = (peers as string).split(';');
         }
+
+        // same format as peers
+        let inpeers = commandOptions.get('inpeers');
+        if (!inpeers) {
+            inpeers = [];
+        } else {
+            inpeers = (inpeers as string).split(';');
+        }
+
+
         // let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
         let nodeType = staticPeeridIp.mapInstance(StaticOutNode(TcpNode));
         // return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
-        return new nodeType(peers, { network, peerid: m_peerid, host: _host, port });
+        return new nodeType(peers, inpeers, { network, peerid: m_peerid, host: _host, port });
     });
 
     networkCreator.registerNode('standalone', (commandOptions: Map<string, any>): any => {

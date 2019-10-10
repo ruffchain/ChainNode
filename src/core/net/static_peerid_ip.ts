@@ -32,6 +32,7 @@ export function mapInstance(superClass: new (...args: any[]) => INode) {
             }
             return { err: ErrorCode.RESULT_OK, ip: iph };
         }
+
     };
 }
 
