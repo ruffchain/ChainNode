@@ -87,6 +87,7 @@ const genGenisisSimpleCmd = [
     "cp -R ruff distDocker",
     "cp -a src distDocker/chainsdk/",
     "cp scripts/* distDocker/chainsdk",
+    "cp js/* distDocker/chainsdk/js",
     "cp package.json distDocker/chainsdk && cp tsconfig.json distDocker/chainsdk && cp tslint.json distDocker/chainsdk && cp gulpfile.js distDocker/chainsdk",
     `cd distDocker && docker build -t ${imageName} . && docker push ${imageName}`
 ];
