@@ -25,6 +25,8 @@ gulp.task("res", () => {
             .pipe(gulp.dest("./dist/blockchain-sdk/src")),
         gulp.src(["./ruff/**/*.json"])
             .pipe(gulp.dest("./dist/blockchain-sdk/ruff")),
+        gulp.src(["./js/**/*.js"])
+            .pipe(gulp.dest("./dist/blockchain-sdk/js"))
     ]);
 });
 

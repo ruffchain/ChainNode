@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import * as process from 'process';
 import * as path from 'path';
+import * as fs from 'fs';
 import { host as chainhost } from '../host';
 import { initUnhandledRejection, parseCommand, parseCommandFromCfgFile, initLogger } from '../common/';
+
+const prompt = require('prompts-ex');
+const keyStore = require('../../js/key-store');
 
 Error.stackTraceLimit = 1000;
 
@@ -46,6 +50,30 @@ export async function run(argv: string[]) {
 
     } else if (command.command === 'miner') {
 
+        if (command.options.has('keyStore')) {
+            let keyFilePath = command.options.get('keyStore');
+            if (!path.isAbsolute(keyFilePath)) {
+                keyFilePath = path.join(process.cwd(), keyFilePath);
+            }
+            try {
+                let content = fs.readFileSync(keyFilePath).toString();
+
+                const response = await prompt({
+                    type: 'password',
+                    name: 'secret',
+                    message: 'password',
+                    validate: (value: string) => value.length < 8 ? 'password length must >= 8' : true
+                });
+
+                if (response.secret) {
+                    let secretKey = keyStore.fromV3Keystore(content, response.secret);
+                    command.options.set('minerSecret', secretKey);
+                }
+            } catch (err) {
+                console.log(`invalie keyFilePath ${keyFilePath}`);
+                return -3;
+            }
+        }
         exit = !(await chainhost.initMiner(command.options)).ret;
 
     } else if (command.command === 'create') {
