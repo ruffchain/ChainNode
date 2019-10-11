@@ -74,11 +74,20 @@ export function initChainCreator(options: LoggerOptions): ChainCreator {
             inpeers = (inpeers as string).split(';');
         }
 
+        let banInpeers = commandOptions.get('ignoreInpeers');
+        let bIgnoreInpeers: boolean;
+        if (banInpeers === undefined || banInpeers === null) {
+            bIgnoreInpeers = false;
+        } else if (banInpeers === false) {
+            bIgnoreInpeers = false;
+        } else {
+            bIgnoreInpeers = true;
+        }
 
         // let nodeType = staticPeeridIp.splitInstance(StaticOutNode(TcpNode));
         let nodeType = staticPeeridIp.mapInstance(StaticOutNode(TcpNode));
         // return new nodeType(peers, { network, peerid: `${_host}:${port}`, host: _host, port });
-        return new nodeType(peers, inpeers, { network, peerid: m_peerid, host: _host, port });
+        return new nodeType(peers, inpeers, bIgnoreInpeers, { network, peerid: m_peerid, host: _host, port });
     });
 
     networkCreator.registerNode('standalone', (commandOptions: Map<string, any>): any => {

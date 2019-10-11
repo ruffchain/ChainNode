@@ -16,17 +16,20 @@ export class TcpNode extends INode {
 
     // Yang Jun 2019-10-10
     protected m_inStaticIps: string[];
+    protected m_ignoreInpeers: boolean;
 
-    constructor(inpeers: string, options: { network: string, peerid: string, host: string, port: number } & LoggerOptions) {
+    constructor(inpeers: string, bIgnoreInpeers: boolean, options: { network: string, peerid: string, host: string, port: number } & LoggerOptions) {
         console.log(arguments);
 
         super({ network: options.network, peerid: options.peerid, logger: options.logger, loggerOptions: options.loggerOptions });
+
         this.m_options = Object.create(null);
         Object.assign(this.m_options, options);
         this.m_server = new Server();
 
         // Yang Jun 2019-10-10
         this.m_inStaticIps = [];
+        this.m_ignoreInpeers = bIgnoreInpeers;
 
         for (let inpeer of inpeers) {
             let arr = inpeer.split(':');
@@ -37,8 +40,8 @@ export class TcpNode extends INode {
         }
         console.log('inpeers ips:');
         console.log(this.m_inStaticIps);
+        console.log('ignoreInpeers: ', this.m_ignoreInpeers);
     }
-
 
     // ip in inPeers
     protected _bInPeers(strIp: string): boolean {
@@ -118,12 +121,10 @@ export class TcpNode extends INode {
                     this.m_server.removeAllListeners('error');
 
                     this.m_server.on('connection', (tcp: Socket) => {
-                        // 
-
                         // if ip not in inpeers return
                         // Yang Jun 2019-9-18
                         let ip = tcp.remoteAddress;
-                        if (ip === undefined || this._bInPeers(ip) === false) {
+                        if (this.m_ignoreInpeers === false && (ip === undefined || this._bInPeers(ip) === false)) {
 
                             console.log('Connection not allowed: ', ip)
                             tcp.on('error', (e) => { });
@@ -137,7 +138,6 @@ export class TcpNode extends INode {
                             tcp.end();
                             return;
                         }
-
 
                         let connNodeType = this._nodeConnectionType();
                         let connNode: any = (new connNodeType(this, { socket: tcp, remote: `${tcp.remoteAddress}:${tcp.remotePort}` }));
