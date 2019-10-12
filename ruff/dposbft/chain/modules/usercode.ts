@@ -200,7 +200,7 @@ export async function runUserMethod(context: DposTransactionContext, params: any
         bcDBCreate: async (resolve: any, name: string): Promise<any> => {
             const resolver = resolveHelper(resolve, 100);
             try {
-                if (context.cost(new BigNumber(FEE_PER_BYTE)) != ErrorCode.RESULT_OK) {
+                if (context.cost(USER_CODE_MIN_COST) != ErrorCode.RESULT_OK) {
                     return (resolver(false));
                 }
                 if (!bCheckDBName(name)) {
