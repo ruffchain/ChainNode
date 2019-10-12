@@ -21,7 +21,7 @@ async function getTableValue(tableKv: IReadableKeyValue, keyName: string): Promi
 }
 
 function getFeeCostForCode(code: string | Buffer) : BigNumber {
-    let byteCost = new BigNumber(code.length * 204 * 18).div(1000000000);
+    let byteCost = new BigNumber(code.length * 100 * 204 * 18).div(1000000000);
 
     return new BigNumber(0.2).plus(byteCost);
 }
