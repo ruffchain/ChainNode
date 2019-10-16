@@ -6,18 +6,18 @@
     },
     "global": {
         "minCreateor": 2,
-        "maxCreateor": 3,
+        "maxCreateor": 21,
         "reSelectionBlocks": 60,
         "blockInterval": 10,
-        "timeOffsetToLastBlock": 600,
-        "timeBan": 1800,
-        "unbanBlocks": 10,
+        "timeOffsetToLastBlock": 43200,
+        "timeBan": 259200,
+        "unbanBlocks": 360,
         "dposVoteMaxProducers": 7,
         "maxBlockIntervalOffset": 1,
         "depositAmount": 3000000,
-        "depositPeriod": 60,
-        "mortgagePeriod": 60,
+        "depositPeriod": 777600,
+        "mortgagePeriod": 25920,
         "voteInterval": 10,
-        "heightIntervalForUserCode": 20
+        "heightIntervalForUserCode": 180
     }
 }
