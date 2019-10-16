@@ -149,11 +149,19 @@ export class ValueChain extends Chain {
                 // Add by Yang Jun 2019-5-20
                 // if address in Candidates list
                 if (genesisOptions.candidates.indexOf(genesisOptions.preBalances[index].address) !== -1) {
+                    // amount is string?
                     let amount = genesisOptions.preBalances[index].amount;
-                    if (amount < DEPOSIT_AMOUNT) {
+                    let bnAmount: BigNumber = new BigNumber(amount);
+                    let bnDepositAmount: BigNumber = new BigNumber(DEPOSIT_AMOUNT);
+
+                    //if (amount < DEPOSIT_AMOUNT) {
+                    if (bnAmount.lt(bnDepositAmount)) {
                         throw new Error('Not enough balance for candidates');
                     }
-                    await kvBalance.set(genesisOptions.preBalances[index].address, new BigNumber(genesisOptions.preBalances[index].amount - DEPOSIT_AMOUNT));
+                    // await kvBalance.set(genesisOptions.preBalances[index].address, new BigNumber(genesisOptions.preBalances[index].amount - DEPOSIT_AMOUNT));
+
+                    await kvBalance.set(genesisOptions.preBalances[index].address,
+                        bnAmount.minus(bnDepositAmount));
 
                     // update SVT deposit table
                     await gkvSVT.kv!.hset(genesisOptions.preBalances[index].address, this.globalOptions.depositPeriod.toString(), DEPOSIT_AMOUNT);
