@@ -78,6 +78,7 @@ export async function setUserCode(context: DposTransactionContext, params: any):
 
         return ErrorCode.RESULT_OK;
     } else {
+        context.cost(context.fee);
         return ErrorCode.RESULT_INVALID_STATE;
     }
 }
