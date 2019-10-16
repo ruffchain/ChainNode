@@ -13,7 +13,8 @@
         "1FaNqJQSHHw3R2k1e5oPmxGZEHBgAkxUyj",
         "135xQBv3yRjrvbNxmPWLkyAuzBjbmhZXRA",
         "18fuDyHpEvuc9c4MrD2WVwG8myDz68LrXZ",
-        "16fLQTbyvoM1j3S8Bf8f2gGcP4gYkwv8QL"
+        "16fLQTbyvoM1j3S8Bf8f2gGcP4gYkwv8QL",
+        "1MufUJPpaE99jLmZJJCufXya4KgG4XjVSy"
     ],
     "candidatesInfo": [
         {
@@ -77,6 +78,13 @@
             "name": "Shepherd-9",
             "ip": "-",
             "url": "-",
+            "location": "US"
+        },
+        {
+            "address": "1MufUJPpaE99jLmZJJCufXya4KgG4XjVSy",
+            "name": "ruff.link",
+            "ip": "-",
+            "url": "https://ruff.link",
             "location": "US"
         }
     ],
