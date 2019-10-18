@@ -2,23 +2,31 @@
     "preBalances": [
         {
             "address": "14pfYReBoVo93KCeFvfhuPmaeoz1vUnNAZ",
-            "amount": 4000000
+            "amount": "4000000"
         },
         {
             "address": "1FbwA2egJnzUqifZWFggrHcDHE1mv1XEwx",
-            "amount": 4000000
+            "amount": "4000000"
         },
         {
             "address": "18bea6HE35DfsLy3JrGDdhgt2Lgpj6cnVk",
-            "amount": 4000000
+            "amount": "4000000"
         },
         {
             "address": "125yhbpdLjW9NrZA5vM6s6URDT9cLAAgHZ",
-            "amount": 4000000
+            "amount": "4000000"
         },
         {
             "address": "154bdF5WH3FXGo4v24F4dYwXnR8br8rc2r",
-            "amount": 76000000
+            "amount": "76000000"
+        },
+        {
+            "address": "1GAG8DQ9vX41ED6qwBDvhjYk8E5k8bSr8h",
+            "amount": "663023288.786016561"
+        },
+        {
+            "address": "1G5iPXZcyqZST4end53cW4WG1ZvNyBkm8G",
+            "amount": "1207111882.940056733"
         }
     ],
     "miners": [

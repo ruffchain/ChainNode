@@ -234,6 +234,8 @@ export class INode extends EventEmitter {
     public async broadcast(writer: PackageStreamWriter, options?: { count?: number, filter?: (conn: NodeConnection) => boolean }): Promise<{ err: ErrorCode, count: number }> {
         let nSend: number = 0;
         let nMax: number = 999999999;
+
+
         if (options && !isNullOrUndefined(options.count)) {
             if (!options.count) {
                 return { err: ErrorCode.RESULT_OK, count: 0 };
