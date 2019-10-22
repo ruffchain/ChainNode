@@ -158,6 +158,7 @@ export class INode extends EventEmitter {
         conn.network = this.network;
         let ver: Version = new Version();
         conn.version = ver;
+
         if (!this.m_genesis || !this.m_peerid) {
             this.m_logger.error(`connectTo failed for genesis or peerid not set`);
             assert(false, `${this.m_peerid} has not set genesis`);
@@ -197,6 +198,7 @@ export class INode extends EventEmitter {
             let buf: Buffer = writer.render();
             let verWriter = PackageStreamWriter.fromPackage(CMD_TYPE.version, {}, buf.length).writeData(buf);
             conn.addPendingWriter(verWriter);
+
             let fn = (_conn: IConnection, _err: ErrorCode) => {
                 _conn.close();
                 resolve(_err);
@@ -220,6 +222,7 @@ export class INode extends EventEmitter {
         this.m_outConn.push(result.conn);
         this.m_remoteMap.set(peerid, result.conn);
 
+        conn.removeAllListeners('error');
         // connection error will close the connection
         conn.on('error', (_conn: IConnection, _err: ErrorCode) => {
             // Yang Jun
@@ -412,6 +415,7 @@ export class INode extends EventEmitter {
                 this.m_inConn.push(inbound);
                 this.m_remoteMap.set(ver.peerid, inbound);
 
+                inbound.removeAllListeners('error');
                 inbound.on('error', (conn: IConnection, _err: ErrorCode) => {
                     this.closeConnection(inbound);
                     this.emit('error', inbound, _err);
@@ -446,6 +450,7 @@ export class INode extends EventEmitter {
                 this.m_pendingWriters = [];
                 this.m_reader = new PackageStreamReader();
                 this.m_reader.start(this);
+
                 this.m_reader.on('pkg', (pkg) => {
                     super.emit('pkg', pkg);
                 });

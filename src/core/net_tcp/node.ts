@@ -77,13 +77,14 @@ export class TcpNode extends INode {
             tcp.once('connect', () => {
                 let connNodeType = this._nodeConnectionType();
 
-                let connNode: any = (new connNodeType(this, { socket: tcp, remote: peerid }));
-
                 tcp.removeAllListeners('error');
 
-                tcp.on('error', (e) => {
-                    this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
-                });
+                let connNode: any = (new connNodeType(this, { socket: tcp, remote: peerid }));
+
+
+                // tcp.on('error', (e) => {
+                //     this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                // });
 
                 // Yang Jun 2019-9-18
 
@@ -127,34 +128,26 @@ export class TcpNode extends INode {
                         if (this.m_ignoreInpeers === false && (ip === undefined || this._bInPeers(ip) === false)) {
 
                             console.log('Connection not allowed: ', ip)
-                            tcp.on('error', (e) => { });
-
-                            tcp.on('close', (e) => { });
-
-                            tcp.on('data', (dat) => { });
-
-                            tcp.on('end', (data: any) => { });
-
-                            tcp.end();
+                            tcp.destroy();
                             return;
                         }
 
                         let connNodeType = this._nodeConnectionType();
                         let connNode: any = (new connNodeType(this, { socket: tcp, remote: `${tcp.remoteAddress}:${tcp.remotePort}` }));
 
-                        tcp.on('error', (e) => {
-                            this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
-                        });
+                        // tcp.on('error', (e) => {
+                        //     this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                        // });
 
                         // Yang Jun 2019-9-18
-                        tcp.on('close', (e) => {
-                            this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
-                        });
+                        // tcp.on('close', (e) => {
+                        //     this.emit('error', connNode, ErrorCode.RESULT_EXCEPTION);
+                        // });
 
                         this._onInbound(connNode);
                     });
                 });
-
+                // only error once it will close the server and restart it
                 this.m_server.once('error', (e) => {
                     this.m_server.removeAllListeners('listening');
                     this.m_logger.error(`tcp listen on ${this.m_options.host}:${this.m_options.port} error `, e);
@@ -163,7 +156,7 @@ export class TcpNode extends INode {
                     setTimeout(() => {
                         start();
                         this.m_logger.error('Restart tcp server after 5 seconds');
-                    }, 5000)
+                    }, 5000 + Math.random() * 2500)
                 });
             }
 

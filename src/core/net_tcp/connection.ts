@@ -21,13 +21,17 @@ export class TcpConnection extends IConnection {
             this.emit('data', [data]);
         });
         this.m_socket.on('error', (err) => {
-            this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
+            // this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
         });
 
         // Yang Jun
         this.m_socket.on('close', (err) => {
             this.emit('error', this, ErrorCode.RESULT_EXCEPTION);
         });
+
+        // this.m_socket.on('end', () => {
+
+        // });
 
         this.m_pending = false;
         this.m_remote = options.remote;
@@ -36,7 +40,10 @@ export class TcpConnection extends IConnection {
     send(data: Buffer): number {
         if (this.m_pending) {
             return 0;
-        } else {
+        } else if (!this.m_socket) {
+            return 0;
+        }
+        else {
             this.m_pending = !this.m_socket.write(data);
             return data.length;
         }
@@ -46,11 +53,9 @@ export class TcpConnection extends IConnection {
             this.m_socket.removeAllListeners('drain');
             this.m_socket.removeAllListeners('data');
             this.m_socket.removeAllListeners('error');
+            this.m_socket.removeAllListeners('close');
 
-            this.m_socket.once('error', () => {
-                // do nothing
-            });
-            this.m_socket.end();
+            this.m_socket.destroy();
             delete this.m_socket;
         }
         this.emit('close', this);
@@ -62,10 +67,8 @@ export class TcpConnection extends IConnection {
             this.m_socket.removeAllListeners('drain');
             this.m_socket.removeAllListeners('data');
             this.m_socket.removeAllListeners('error');
+            this.m_socket.removeAllListeners('close');
 
-            this.m_socket.once('error', () => {
-                // do nothing
-            });
             this.m_socket.destroy();
             delete this.m_socket;
         }
