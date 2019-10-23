@@ -826,8 +826,6 @@ export class Chain extends EventEmitter implements IConsistency {
     protected async _addPendingHeaders(params: HeadersEventParams) {
         // TODO: 这里可以和pending block一样优化，去重已经有的
 
-
-
         this.m_pendingHeaders.push(params);
 
         if (this.m_pendingHeaders.length === 1) {

@@ -226,7 +226,6 @@ export class ChainNode extends EventEmitter {
                     this.logger.error(`encode header ${header.hash} failed`);
                     return err;
                 }
-
             }
             // Yang Jun 2019-8-15
             getMonitor()!.updateSendHeaders(content.length);
