@@ -2,8 +2,8 @@ import { ErrorCode } from '../error_code';
 import { EventEmitter } from 'events';
 import { LoggerInstance } from '../lib/logger_util';
 import { SYNC_CMD_TYPE } from '../chain/chain_node';
-import { NodeConnection, PackageStreamWriter, Package, CMD_TYPE } from '../net';
-import { DposBftBlockHeaderSignature, DposBftBlockHeader } from './block';
+import { NodeConnection, PackageStreamWriter, Package, CMD_TYPE, createTipSignBody, PackageTipSignBody } from '../net';
+import { DposBftBlockHeaderSignature, DposBftBlockHeader, DposBftBlockHeaderPkg } from './block';
 import { DposBftNetwork } from './network';
 import { BufferReader } from '../lib/reader';
 import { BufferWriter } from '../lib/writer';
@@ -27,6 +27,7 @@ export class DposBftChainNode extends EventEmitter {
     private m_globalOptions: any;
     protected m_secret: Buffer;
     protected m_pubkey: Buffer;
+    private m_address: string;
 
     constructor(options: DposBftNodeOptions) {
         super();
@@ -34,6 +35,8 @@ export class DposBftChainNode extends EventEmitter {
         this.m_globalOptions = options.globalOptions;
         this.m_secret = options.secret;
         this.m_pubkey = libAddress.publicKeyFromSecretKey(this.m_secret)!;
+        this.m_address = libAddress.addressFromSecretKey(this.m_secret)!;
+
         let initBound = (conns: NodeConnection[]) => {
             for (let conn of conns) {
                 this._beginSyncWithNode(conn);
@@ -65,6 +68,7 @@ export class DposBftChainNode extends EventEmitter {
         });
     }
     on(event: 'tipSign', listener: (sign: DposBftBlockHeaderSignature) => any): this;
+    on(event: 'tipSignPkg', listener: (pkg: Package) => any): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
@@ -81,12 +85,18 @@ export class DposBftChainNode extends EventEmitter {
     protected _beginSyncWithNode(conn: NodeConnection) {
         conn.on('pkg', async (pkg: Package) => {
             if (pkg.header.cmdType === DPOS_BFT_SYNC_CMD_TYPE.tipSign) {
-                let reader = new BufferReader(pkg.copyData());
+                // let reader = new BufferReader(pkg.copyData());
+
                 try {
-                    let pubkey = reader.readBytes(33);
-                    let sign = reader.readBytes(64);
-                    let hash = reader.readHash().toString('hex');
-                    this.emit('tipSign', { hash, pubkey, sign });
+                    // let pubkey = reader.readBytes(33);
+                    // let sign = reader.readBytes(64);
+                    // let hash = reader.readHash().toString('hex');
+
+                    // this.emit('tipSign', { hash, pubkey, sign });
+
+                    // Yang Jun 2019-10-25
+                    this.emit('tipSignPkg', pkg);
+
                 } catch (e) {
                     this.logger.error(`dpos_bft decode tipSign failed `, e);
                     return;
@@ -102,7 +112,15 @@ export class DposBftChainNode extends EventEmitter {
         writer.writeHash(header.hash);
 
         let data = writer.render();
-        let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, null, data.length).writeData(data);
+        // let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, null, data.length).writeData(data);
+
+        // Yang Jun 2019-10-25
+        let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, createTipSignBody(this.m_address, header.number), data.length).writeData(data);
         this.m_network.broadcastToValidators(pkg);
     }
+
+    public relayTipSign(writer: PackageStreamWriter, addresses: string[]) {
+        return this.m_network.relayTipSign(writer, addresses);
+    }
+
 }

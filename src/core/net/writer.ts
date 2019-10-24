@@ -1,7 +1,7 @@
-import {Package, PackageHeader} from './package';
-import {EventEmitter} from 'events';
-import {ErrorCode} from '../error_code';
-import {IConnection} from './connection';
+import { Package, PackageHeader } from './package';
+import { EventEmitter } from 'events';
+import { ErrorCode } from '../error_code';
+import { IConnection } from './connection';
 import { IpcNetConnectOpts } from 'net';
 const msgpack = require('msgpack-lite');
 const assert = require('assert');
@@ -17,7 +17,7 @@ export class PackageStreamWriter extends EventEmitter {
     private m_toSendLength: number;
     private m_writtenLength: number;
     private m_sentLength: 0;
-    private m_drainListener?: () => void; 
+    private m_drainListener?: () => void;
     constructor() {
         super();
         this.m_pending = [];
@@ -31,14 +31,15 @@ export class PackageStreamWriter extends EventEmitter {
         let writeHeader: PackageHeader = {
             version: 0,
             magic: Package.magic,
-            flags: 0, 
+            flags: 0,
             bodyLength: 0,
             totalLength: 0,
             cmdType,
         };
-        
+
         let bodyBuffer = null;
         writeHeader.bodyLength = 0;
+
         if (body) {
             bodyBuffer = msgpack.encode(body);
             writeHeader.bodyLength = bodyBuffer.length;
@@ -56,6 +57,7 @@ export class PackageStreamWriter extends EventEmitter {
         writer.m_toSendLength = writeHeader.totalLength;
         writer.m_writtenLength = Package.headerLength + writeHeader.bodyLength;
         writer.m_pending.push(headerBuffer);
+
         if (bodyBuffer) {
             writer.m_pending.push(bodyBuffer);
         }
@@ -100,17 +102,17 @@ export class PackageStreamWriter extends EventEmitter {
 
     async _doSend() {
         if (!this.m_connection) {
-            return ;
+            return;
         }
         if (this.m_drainListener) {
-            return ;
+            return;
         }
         let spliceTo = 0;
         for (; spliceTo < this.m_pending.length; ++spliceTo) {
             let buffer: any = this.m_pending[spliceTo];
             let sent = this.m_connection.send(buffer);
             if (sent < 0) {
-                setImmediate(() => {this.emit(WRITER_EVENT.error); });
+                setImmediate(() => { this.emit(WRITER_EVENT.error); });
                 return;
             }
             this.m_sentLength += sent;
@@ -123,12 +125,12 @@ export class PackageStreamWriter extends EventEmitter {
                 this.m_pending[spliceTo] = Buffer.from(buffer.buffer, buffer.offset + sent, buffer.length - sent);
                 this.m_connection.once('drain', this.m_drainListener);
                 break;
-            } 
+            }
         }
         this.m_pending.splice(0, spliceTo);
         assert(this.m_sentLength <= this.m_toSendLength);
         if (this.m_sentLength === this.m_toSendLength) {
-            setImmediate(() => {this.emit(WRITER_EVENT.finish); });
+            setImmediate(() => { this.emit(WRITER_EVENT.finish); });
         }
     }
 

@@ -48,6 +48,7 @@ export class DposBftChainTipState extends DposChainTipState {
         let hashCount: Map<string, number> = new Map();
         let maxCount = -1;
         let maxCountHeader: DposBftBlockHeader | undefined;
+
         for (let sign of signs) {
             let hr = await this.m_headerStorage.getHeader(sign.hash);
             if (hr.err) {

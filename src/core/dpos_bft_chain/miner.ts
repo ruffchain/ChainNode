@@ -1,13 +1,14 @@
 import { ErrorCode } from '../error_code';
-import { DposMiner, DposMinerInstanceOptions } from '../dpos_chain';
+import { DposMiner, DposMinerInstanceOptions, PackageStreamWriter, PackageTipSignBody, Package } from '../dpos_chain';
 import { DposBftChain, DposBftMinerChain } from './chain';
-import { DposBftChainNode } from './dpos_bft_node';
+import { DposBftChainNode, DPOS_BFT_SYNC_CMD_TYPE } from './dpos_bft_node';
 import { DposBftNetwork } from './network';
-import { DposBftBlockHeaderSignature, DposBftBlockHeader } from './block';
+import { DposBftBlockHeaderSignature, DposBftBlockHeader, DposBftBlockHeaderPkg } from './block';
 import * as libAddress from '../address';
 import { DposBftChainTipState } from './chain_state';
 import { DposBftChainTipStateManager } from './chain_state_manager';
 import { Block } from '../block';
+import { BufferReader } from '..';
 
 export type DposBftSignEntry = {
     number: number,
@@ -20,6 +21,9 @@ export class DposBftMiner extends DposMiner {
     private m_pubkey: Buffer | undefined;
     private m_checkTimes: number = 0;
     private m_libOnBest: number = -1;
+
+    // Yang Jun 2019-10-25
+    private m_tipSignCache: Set<string> = new Set();
 
     protected _chainInstance(): DposBftChain {
         return new DposBftMinerChain(this.m_constructOptions);
@@ -41,6 +45,7 @@ export class DposBftMiner extends DposMiner {
     protected maybeNewBftIRB() {
         let checkImpl = async () => {
             let signs: DposBftBlockHeaderSignature[] = [];
+
             for (let [_, entry] of this.m_minerSigns) {
                 if (entry.bInBestChain) {
                     signs.push(entry.sign);
@@ -52,6 +57,7 @@ export class DposBftMiner extends DposMiner {
             }
 
             let lib: number = this.chain.chainTipState.IRB.number;
+
             let temp = this.m_minerSigns;
             for (let [m, entry] of temp) {
                 if (entry.number > lib) {
@@ -61,6 +67,7 @@ export class DposBftMiner extends DposMiner {
 
             if (this.m_libOnBest !== lib) {
                 this.m_libOnBest = lib;
+                // Yang Jun 2019-10-25, if it is the BP 
                 await this.sendSign();
             }
 
@@ -68,6 +75,7 @@ export class DposBftMiner extends DposMiner {
         };
 
         let check = async () => {
+
             if (this.m_checkTimes > 0) {
                 this.m_checkTimes++;
                 return;
@@ -75,6 +83,7 @@ export class DposBftMiner extends DposMiner {
             this.m_checkTimes = 1;
             await checkImpl();
             this.m_checkTimes--;
+
             if (this.m_checkTimes > 0) {
                 this.m_checkTimes = 0;
                 this.maybeNewBftIRB();
@@ -102,7 +111,7 @@ export class DposBftMiner extends DposMiner {
             this.m_chain!.node.txBuffer.beginTipSign();
 
             let address = libAddress.addressFromPublicKey(sign.pubkey)!;
-            this.m_logger.info(`===============tipSign from ${address} hash=${sign.hash}`);
+            this.m_logger.info(`===============tipSign from ${address} hash=${sign.hash} `);
             let entry: DposBftSignEntry = { number: -1, bInBestChain: false, sign };
             let hr = await this.chain.getHeader(sign.hash);
             if (!hr.err) {
@@ -121,6 +130,70 @@ export class DposBftMiner extends DposMiner {
             this.m_chain!.node.txBuffer.endTipSign();
         });
 
+        // Yang Jun 2019-10-25
+        this.m_bftNode.on('tipSignPkg', async (inpkg: Package) => {
+            // How to relay it?
+            let reader = new BufferReader(inpkg.copyData());
+            let pubkey: Buffer;
+            let sign: Buffer;
+            let hash: string;
+
+            try {
+                pubkey = reader.readBytes(33);
+                sign = reader.readBytes(64);
+                hash = reader.readHash().toString('hex');
+            } catch (e) {
+                this.m_logger.error(`dpos_bft decode tipSign failed `, e);
+                return;
+            }
+
+            // Yang Jun 2019-10-25
+            let data = inpkg.data;
+            let body: PackageTipSignBody = inpkg.body;
+            let addresses: string[] = body.froms;
+            let tipSignId = body.height + ':' + body.source;
+
+            this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
+            console.log('tipSignCache:')
+            console.log(this.m_tipSignCache);
+            console.log('tip body:')
+            console.log(body)
+            console.log('tipSignId: ', tipSignId);
+
+
+
+            if (this.m_tipSignCache.has(tipSignId) || body.depth === 0) {
+                this.m_logger.info('<<< No need to relay tipSign:' + tipSignId)
+                return;
+            } else {
+                this.m_tipSignCache.add(tipSignId);
+            }
+
+            if (body.source !== this.address) {
+                this.m_logger.info('Emit tipSign');
+                this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
+            }
+
+            body.froms.push(this.address);
+            body.depth = body.depth - 1;
+
+            // prepare pkg to be sent
+            let dataToSend = inpkg.copyData();
+            let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
+            console.log('new body:')
+            console.log(body)
+
+            // Broadcast it 
+            console.log('RelayTipSign: ')
+            // let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
+            // console.log('After relay:')
+            // console.log(hret);
+            let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
+            console.log(hret);
+
+            this.cleanTipSignCache();
+        });
+
         return ErrorCode.RESULT_OK;
     }
 
@@ -136,8 +209,12 @@ export class DposBftMiner extends DposMiner {
         const sign = libAddress.sign(hr.header!.hash, this.m_secret!);
         this.m_bftNode!.broadcastTip(this.m_pubkey!, sign, hr.header! as DposBftBlockHeader);
 
+        // Yang Jun 2019-10-25 update tipSignCache
+        this.m_tipSignCache.add(hr.header!.number + ':' + this.address);
+
         let entry: DposBftSignEntry = { number: hr.header!.number, bInBestChain: true, sign: { hash: hr.header!.hash, pubkey: this.m_pubkey!, sign } };
         this.m_minerSigns.set(this.address, entry);
+
         this.maybeNewBftIRB();
     }
 
@@ -160,5 +237,23 @@ export class DposBftMiner extends DposMiner {
             return;
         }
         (this.m_chain!.node.getNetwork() as DposBftNetwork).setValidators(gm.creators!);
+
+    }
+
+    // Yang Jun 2019-10-25
+    private cleanTipSignCache() {
+        let irbNum = this.chain.chainTipState.IRB.number - 2;
+
+        let arr: string[] = [];
+        this.m_tipSignCache.forEach((str) => {
+            let strLst = str.split(':');
+            let num = parseInt(strLst[0]);
+            if (num <= irbNum) {
+                arr.push(str);
+            }
+        })
+        for (let i = 0; i < arr.length; i++) {
+            this.m_tipSignCache.delete(arr[i]);
+        }
     }
 }

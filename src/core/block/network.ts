@@ -310,6 +310,7 @@ export class Network extends EventEmitter {
         if (options) {
             bopt.count = options.count;
             bopt.filter = options.filter;
+
             if (!isNullOrUndefined(options.strategy)) {
                 const s = this.m_broadcastStrategies.get(options.strategy);
                 if (s) {

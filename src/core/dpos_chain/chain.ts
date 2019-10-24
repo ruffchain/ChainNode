@@ -454,7 +454,9 @@ export class DposChain extends ValueChain implements IChainStateStorage {
 
     public async getMiners(header: DposBlockHeader): Promise<{ err: ErrorCode, header?: DposBlockHeader, creators?: string[] }> {
         let en = consensus.ViewContext.getElectionBlockNumber(this.globalOptions, header.number);
+
         let electionHeader: DposBlockHeader;
+
         if (header.number === en) {
             electionHeader = header;
         } else {

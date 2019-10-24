@@ -8,6 +8,27 @@ export type PackageHeader = {
     bodyLength: number;
 };
 
+// Yang Jun 2019-10-24
+export type PackageTipSignBody = {
+    froms: string[];
+    depth: number;
+    height: number;  // 
+    source: string;  // source BP address
+};
+
+export const MAX_PACKAGE_TIPSIGN_DEPTH = 10; // Normally it is not used
+
+export function createTipSignBody(address: string, inHeight: number): any {
+    return {
+        froms: [address],
+        depth: MAX_PACKAGE_TIPSIGN_DEPTH,
+        height: inHeight,
+        source: address
+    }
+}
+
+///////////////
+
 export class Package {
     private m_header: PackageHeader;
     private m_body: any;

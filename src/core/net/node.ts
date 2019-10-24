@@ -233,6 +233,30 @@ export class INode extends EventEmitter {
         });
         return { err: ErrorCode.RESULT_OK, peerid, conn };
     }
+    public async broadcast2(writer: PackageStreamWriter, addresses: string[]): Promise<{ err: ErrorCode, count: number }> {
+
+        let conns = this.m_inConn.slice(0);
+        conns.push(...this.m_outConn);
+
+        console.log('addresses:')
+        console.log(addresses);
+
+        let counter = 0;
+
+        if (conns.length) {
+            console.log('conns length: ', conns.length);
+            for (let i = 0; i < conns.length; i++) {
+                let remo = conns[i].remote;
+                console.log(remo);
+                if (addresses.indexOf(remo!) === -1) {
+                    console.log('send it to: ', remo);
+                    conns[i].addPendingWriter(writer.clone());
+                    counter++;
+                }
+            }
+        }
+        return { err: ErrorCode.RESULT_OK, count: counter };
+    }
 
     public async broadcast(writer: PackageStreamWriter, options?: { count?: number, filter?: (conn: NodeConnection) => boolean }): Promise<{ err: ErrorCode, count: number }> {
         let nSend: number = 0;
@@ -252,6 +276,7 @@ export class INode extends EventEmitter {
             return { err: ErrorCode.RESULT_OK, count: 0 };
         }
         let rstart = Math.floor(Math.random() * (conns.length - 1));
+
         for (let i = rstart; i < conns.length; ++i) {
             const conn = conns[i];
             if (nSend === nMax) {
@@ -468,6 +493,7 @@ export class INode extends EventEmitter {
             }
             private m_pendingWriters: PackageStreamWriter[];
             private m_reader: PackageStreamReader;
+
             addPendingWriter(writer: PackageStreamWriter): void {
                 let onFinish = () => {
                     let _writer = this.m_pendingWriters.splice(0, 1)[0];

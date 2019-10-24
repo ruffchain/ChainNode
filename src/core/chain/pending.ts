@@ -235,6 +235,7 @@ export class PendingTransactions extends EventEmitter {
 
         let { err, nonce } = await this.getNonce(address);
         this.m_logger.debug(`_addTx, nonce=${nonce}, txNonce=${txTime.tx.nonce}, txhash=${txTime.tx.hash}, address=${txTime.tx.address}`);
+
         if (nonce! + 1 === txTime.tx.nonce) {
             let retCode = await this._onCheck(txTime);
             if (retCode) {

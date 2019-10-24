@@ -1,11 +1,16 @@
 import { ErrorCode } from '../error_code';
-import { DposBlockHeader } from '../dpos_chain';
-import {BufferWriter} from '../lib/writer';
-import {BufferReader} from '../lib/reader';
-import {BlockContent} from '../block/block';
+import { DposBlockHeader, Package } from '../dpos_chain';
+import { BufferWriter } from '../lib/writer';
+import { BufferReader } from '../lib/reader';
+import { BlockContent } from '../block/block';
 
-export type DposBftBlockHeaderSignature =   {
+export type DposBftBlockHeaderSignature = {
     hash: string, pubkey: Buffer, sign: Buffer
+};
+
+// Yang Jun 2019-10-25
+export type DposBftBlockHeaderPkg = {
+    hash: string, pubkey: Buffer, sign: Buffer, pkg: Package
 };
 
 export class DposBftBlockHeader extends DposBlockHeader {
@@ -47,7 +52,7 @@ export class DposBftBlockHeader extends DposBlockHeader {
                 let pubkey: Buffer = reader.readBytes(33);
                 let sign: Buffer = reader.readBytes(64);
                 let hash: string = reader.readHash().toString('hex');
-                this.m_bftSigns.push({hash, pubkey, sign});
+                this.m_bftSigns.push({ hash, pubkey, sign });
             }
         } catch (e) {
             return ErrorCode.RESULT_INVALID_FORMAT;
