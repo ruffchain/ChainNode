@@ -154,11 +154,11 @@ export class DposBftMiner extends DposMiner {
             let tipSignId = body.height + ':' + body.source;
 
             this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
-            console.log('tipSignCache:')
-            console.log(this.m_tipSignCache);
-            console.log('tip body:')
-            console.log(body)
-            console.log('tipSignId: ', tipSignId);
+            this.m_logger.info('tipSignCache:')
+            this.m_logger.info(JSON.stringify(this.m_tipSignCache));
+            this.m_logger.info('tip body:')
+            this.m_logger.info(JSON.stringify(body))
+            this.m_logger.info('tipSignId: ', tipSignId);
 
 
 
@@ -180,16 +180,14 @@ export class DposBftMiner extends DposMiner {
             // prepare pkg to be sent
             let dataToSend = inpkg.copyData();
             let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
-            console.log('new body:')
-            console.log(body)
+            this.m_logger.info('new body:')
+            this.m_logger.info(JSON.stringify(body))
 
             // Broadcast it 
-            console.log('RelayTipSign: ')
-            // let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
-            // console.log('After relay:')
-            // console.log(hret);
+            this.m_logger.info('RelayTipSign: ')
+
             let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
-            console.log(hret);
+            // console.log(hret);
 
             this.cleanTipSignCache();
         });
