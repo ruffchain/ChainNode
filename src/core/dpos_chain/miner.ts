@@ -9,6 +9,7 @@ import { DposChain } from './chain';
 import * as consensus from './consensus';
 import { LoggerOptions } from '../lib/logger_util';
 import * as Address from '../address';
+import { isValidAddress } from '../../host';
 
 export type DposMinerInstanceOptions = { secret: Buffer } & ValueMinerInstanceOptions;
 
@@ -62,7 +63,11 @@ export class DposMiner extends ValueMiner {
         }
         if (!options.coinbase) {
             this.coinbase = this.m_address;
+        } else if (isValidAddress(options.coinbase)) {
+            this.coinbase = options.coinbase;
         }
+        // Added 2019-10-30 Yang Jun coinbase
+
         assert(this.coinbase, `secret key failed`);
 
         if (!this.m_address) {

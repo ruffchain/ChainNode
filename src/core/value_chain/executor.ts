@@ -29,6 +29,7 @@ export class ValueBlockExecutor extends BlockExecutor {
 
         let ve = new Context(kvBalance);
         let coinbase = (this.m_block.header as ValueBlockHeader).coinbase;
+
         assert(isValidAddress(coinbase), `block ${this.m_block.hash} has no coinbase set`);
 
         if (!isValidAddress(coinbase)) {
@@ -64,17 +65,17 @@ export class ValueTransactionExecutor extends TransactionExecutor {
 
         Object.defineProperty(
             context, 'value', {
-                writable: false,
-                value: (this.m_tx as ValueTransaction).value
-            }
+            writable: false,
+            value: (this.m_tx as ValueTransaction).value
+        }
 
         );
 
         Object.defineProperty(
             context, 'fee', {
-                writable: false,
-                value: (this.m_tx as ValueTransaction).fee
-            }
+            writable: false,
+            value: (this.m_tx as ValueTransaction).fee
+        }
 
         );
 
