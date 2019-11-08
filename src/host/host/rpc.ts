@@ -112,7 +112,6 @@ export class ChainServer {
             // Yang Jun, make createToken, createBancorToken , tokenid to be UpperCase
             //
 
-
             let tx = ValueTransaction.fromRaw(Buffer.from(params.tx, 'hex'), ValueTransaction);
 
             if (!tx) {
@@ -140,8 +139,11 @@ export class ChainServer {
 
         this.m_server!.on('getTransactionReceipt', async (params: { tx: string }, resp) => {
             let _getTransactionReceipt = async (s: string): Promise<{ err: ErrorCode, block?: BlockHeader, tx?: Transaction, receipt?: Receipt }> => {
+
                 let element: TxStorage = this.m_chainContext!.getElement(TxStorage.ElementName)! as TxStorage;
+
                 let ret = await element.get(params.tx);
+
                 if (ret.err !== ErrorCode.RESULT_OK) {
                     this.m_logger.debug(`get transaction receipt ${s} failed for ${ret.err}`);
                     return { err: ret.err };
@@ -152,6 +154,7 @@ export class ChainServer {
                     this.m_logger.debug(`get transaction receipt failed for get block ${ret.blockhash!} failed`);
                     return { err: ErrorCode.RESULT_NOT_FOUND };
                 }
+
                 let tx: Transaction | null = block.content.getTransaction(s);
                 let receipt: Receipt | undefined = block.content.getReceipt(s);
                 if (tx && receipt) {
@@ -178,7 +181,9 @@ export class ChainServer {
                     })));
                 }
             } while (false);
+
             await promisify(resp.end.bind(resp)());
+
             getMonitor()!.updateSendRpcs();
         });
 

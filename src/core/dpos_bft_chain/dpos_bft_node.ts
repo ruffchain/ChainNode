@@ -116,6 +116,7 @@ export class DposBftChainNode extends EventEmitter {
 
         // Yang Jun 2019-10-25
         let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, createTipSignBody(this.m_address, header.number), data.length).writeData(data);
+
         this.m_network.broadcastToValidators(pkg);
     }
 

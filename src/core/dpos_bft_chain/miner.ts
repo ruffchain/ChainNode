@@ -1,5 +1,5 @@
 import { ErrorCode } from '../error_code';
-import { DposMiner, DposMinerInstanceOptions, PackageStreamWriter, PackageTipSignBody, Package } from '../dpos_chain';
+import { DposMiner, DposMinerInstanceOptions, PackageStreamWriter, PackageTipSignBody, Package, MAX_PACKAGE_TIPSIGN_DEPTH } from '../dpos_chain';
 import { DposBftChain, DposBftMinerChain } from './chain';
 import { DposBftChainNode, DPOS_BFT_SYNC_CMD_TYPE } from './dpos_bft_node';
 import { DposBftNetwork } from './network';
@@ -21,6 +21,31 @@ export class DposBftMiner extends DposMiner {
     private m_pubkey: Buffer | undefined;
     private m_checkTimes: number = 0;
     private m_libOnBest: number = -1;
+
+    public static RANDOM_ADDRESS = [
+        'April',
+        'Block',
+        'Cat',
+        'Dog',
+        'Egg',
+        'Flower',
+        'Goat',
+        'Hook',
+        'Igloo',
+        'Jack',
+        'King',
+        'Lion',
+        'Mew',
+        'Noodle',
+        'Oppo',
+        'Pep',
+        'Queen',
+        'Rest',
+        'Seed',
+        'Tud',
+        'Ugg'
+    ];
+    public static MAX_NODE_NUM = 21;
 
     // Yang Jun 2019-10-25
     private m_tipSignCache: Set<string> = new Set();
@@ -148,51 +173,114 @@ export class DposBftMiner extends DposMiner {
             }
 
             // Yang Jun 2019-10-25
-            let data = inpkg.data;
+            // let data = inpkg.data;
             let body: PackageTipSignBody = inpkg.body;
-            let addresses: string[] = body.froms;
-            let tipSignId = body.height + ':' + body.source;
 
-            this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
-            this.m_logger.info('tipSignCache:')
-            this.m_logger.info(JSON.stringify(this.m_tipSignCache));
-            this.m_logger.info('tip body:')
-            this.m_logger.info(JSON.stringify(body))
-            this.m_logger.info('tipSignId: ', tipSignId);
+            console.log('tipSignPkg, body.froms:', body.froms)
 
+            // if body is empty, from older nodes
+            if (!body.froms) {
+                // emit tipSign
+                this.m_logger.info('Emit tipSign (from old version)');
+                this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
 
-
-            if (this.m_tipSignCache.has(tipSignId) || body.depth === 0) {
-                this.m_logger.info('<<< No need to relay tipSign:' + tipSignId)
+                // then broadcast it out, 
+                await this.handleOldTipSign(hash, pubkey, sign, inpkg);
                 return;
             } else {
-                this.m_tipSignCache.add(tipSignId);
+                this.m_logger.info('New tipSign');
             }
 
-            if (body.source !== this.address) {
-                this.m_logger.info('Emit tipSign');
-                this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
-            }
+            await this.handleNewTipSign(hash, pubkey, sign, inpkg);
 
-            body.froms.push(this.address);
-            body.depth = body.depth - 1;
-
-            // prepare pkg to be sent
-            let dataToSend = inpkg.copyData();
-            let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
-            this.m_logger.info('new body:')
-            this.m_logger.info(JSON.stringify(body))
-
-            // Broadcast it 
-            this.m_logger.info('RelayTipSign: ')
-
-            let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
-            // console.log(hret);
-
-            this.cleanTipSignCache();
         });
 
         return ErrorCode.RESULT_OK;
+    }
+
+    private async handleNewTipSign(hash: string, pubkey: Buffer, sign: Buffer, inpkg: Package) {
+        let body: PackageTipSignBody = inpkg.body;
+
+        let addresses: string[] = body.froms;
+        let tipSignId = body.height + ':' + body.source;
+
+        this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
+        console.log('tipSignCache:')
+        console.log(this.m_tipSignCache);
+        console.log('tip body:')
+        console.log(body)
+        console.log('tipSignId: ', tipSignId);
+
+
+        // if body.depth === 0
+        if (this.m_tipSignCache.has(tipSignId) || body.depth === 0) {
+            this.m_logger.info('<<< No need to relay tipSign:' + tipSignId)
+            return;
+        } else {
+            this.m_tipSignCache.add(tipSignId);
+        }
+
+        if (body.source !== this.address) {
+            this.m_logger.info('Emit tipSign');
+            this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
+        }
+
+        body.froms.push(this.address);
+        body.depth = body.depth - 1;
+
+        // prepare pkg to be sent
+        let dataToSend = inpkg.copyData();
+        let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
+        console.log('new body:')
+        console.log(body)
+
+        // Broadcast it 
+        console.log('RelayTipSign: ')
+
+        let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
+        console.log(hret);
+
+        this.cleanTipSignCache();
+    }
+    private createRandomAddress(): string {
+        let ind = Math.floor(Math.random() * DposBftMiner.MAX_NODE_NUM);
+        let num = Math.floor(Math.random() * DposBftMiner.RANDOM_ADDRESS.length)
+        return DposBftMiner.RANDOM_ADDRESS[ind] + num;
+    }
+    private async handleOldTipSign(hash: string, pubkey: Buffer, sign: Buffer, inpkg: Package) {
+        // Create new Body
+        let fakeAddress = this.createRandomAddress();
+        let recvHeight = 0;
+
+        let hr = await this.chain.getHeader(hash);
+        if (!hr.err) {
+            recvHeight = hr.header!.number;
+        } else {
+            this.m_logger.error('Unrecognized hash: ' + hash)
+            return;
+        }
+
+        let body: PackageTipSignBody = {
+            froms: [],
+            depth: MAX_PACKAGE_TIPSIGN_DEPTH,
+            height: recvHeight,
+            source: fakeAddress
+        };
+
+        body.froms.push(fakeAddress);
+        let dataToSend = inpkg.copyData();
+        let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
+        console.log('new body:')
+        console.log(body)
+
+        // Broadcast it 
+        console.log('RelayTipSign: ')
+
+        let hret = await this.m_bftNode!.relayTipSign(pkg, []);
+        console.log(hret);
+
+        this.cleanTipSignCache();
+
     }
 
     protected async sendSign() {
@@ -252,6 +340,11 @@ export class DposBftMiner extends DposMiner {
         })
         for (let i = 0; i < arr.length; i++) {
             this.m_tipSignCache.delete(arr[i]);
+        }
+
+        // limit size of cache , during initialization 2019-11-6
+        if (this.m_tipSignCache.size > 21 * 14) {
+            this.m_tipSignCache.clear();
         }
     }
 }
