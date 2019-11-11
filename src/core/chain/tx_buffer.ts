@@ -29,20 +29,20 @@ export class TxBuffer extends EventEmitter {
     static MIN_RPC_LOAD_TAP: number = 1;
 
 
-    static TAP_HEADERS: number = 80;
-    static TAP_GETHEADER: number = 80;
-    static TAP_BLOCK: number = 80;
-    static TAP_GETBLOCK: number = 80;
-    static TAP_TIPSIGN: number = 80;
+    static TAP_HEADERS: number = 40;
+    static TAP_GETHEADER: number = 40;
+    static TAP_BLOCK: number = 40;
+    static TAP_GETBLOCK: number = 40;
+    static TAP_TIPSIGN: number = 20;
 
-    static RPC_TAP_HEADERS: number = 80;
-    static RPC_TAP_GETHEADER: number = 80;
-    static RPC_TAP_BLOCK: number = 80;
-    static RPC_TAP_GETBLOCK: number = 80;
-    static RPC_TAP_TIPSIGN: number = 80;
+    static RPC_TAP_HEADERS: number = 40;
+    static RPC_TAP_GETHEADER: number = 40;
+    static RPC_TAP_BLOCK: number = 40;
+    static RPC_TAP_GETBLOCK: number = 40;
+    static RPC_TAP_TIPSIGN: number = 20;
 
     private m_buffer: IfTxBufferItem[] = [];
-    private m_timer?: NodeJS.Timer;
+    // private m_timer?: NodeJS.Timer;
     private m_logger: LoggerInstance;
     private m_sliceCounter: number = 0;
     private m_slices: number[] = [];
@@ -155,6 +155,10 @@ export class TxBuffer extends EventEmitter {
         let num = this.getTxNumToSend();
         // this.m_logger.info('TxBuffer send num: ' + num)
         for (let i = 0; i < num; i++) {
+            if (this.m_buffer.length <= 0) {
+
+                break;
+            }
             let item = this.m_buffer.shift();
             if (item) {
                 this.m_logger.info('TxBuffer emit: ' + i + ' loadTap:' + this.m_loadTap + ' num:' + num)
@@ -166,6 +170,10 @@ export class TxBuffer extends EventEmitter {
         let num = this.getRpcNumToSend();
 
         for (let i = 0; i < num; i++) {
+            if (this.m_rpcBuffer.length <= 0) {
+
+                break;
+            }
             let item = this.m_rpcBuffer.shift();
             if (item) {
                 this.m_logger.info('RpcBuffer emit: ', + i + ' rpcLoadTap:' + this.m_rpcLoadTap + ' num:' + num);

@@ -598,6 +598,7 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_node.on('transactions', async (conn: NodeConnection, transactions: Transaction[]) => {
             for (let tx of transactions) {
                 const _err = await this._addTransaction(tx);
+
                 if (_err === ErrorCode.RESULT_TX_CHECKER_ERROR) {
                     this._banConnection(conn.fullRemote, BAN_LEVEL.forever);
                     break;

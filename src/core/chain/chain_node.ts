@@ -269,8 +269,10 @@ export class ChainNode extends EventEmitter {
                 let txReader = new BufferReader(buffer);
                 let txes: Transaction[] = [];
                 let err = ErrorCode.RESULT_OK;
+
                 for (let ix = 0; ix < pkg.body.count; ++ix) {
                     let tx = network.newTransaction();
+
                     if (tx.decode(txReader) !== ErrorCode.RESULT_OK) {
                         this.logger.warn(`receive invalid format transaction from ${conn.fullRemote}`);
                         err = ErrorCode.RESULT_INVALID_PARAM;
