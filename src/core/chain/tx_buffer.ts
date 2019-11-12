@@ -22,7 +22,7 @@ export class TxBuffer extends EventEmitter {
     static MIN_LOAD_TAP: number = 1;
     static TAP_BOUNCE_BACK: number = 2;
     static ENABLE_TAP: boolean = true;
-    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 2000;
+    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 1000;
     static ENABLE_RPC_TAP: boolean = true;
 
     static MAX_RPC_LOAD_TAP: number = 100;
@@ -154,12 +154,20 @@ export class TxBuffer extends EventEmitter {
         // num to be sent in this time slice
         let num = this.getTxNumToSend();
         // this.m_logger.info('TxBuffer send num: ' + num)
+
+        if (this.m_buffer.length <= 0) {
+            return;
+        } else {
+            this.m_logger.info('m_buffer len: ' + this.m_buffer.length);
+        }
+
         for (let i = 0; i < num; i++) {
             if (this.m_buffer.length <= 0) {
-
                 break;
             }
+
             let item = this.m_buffer.shift();
+
             if (item) {
                 this.m_logger.info('TxBuffer emit: ' + i + ' loadTap:' + this.m_loadTap + ' num:' + num)
                 this.m_node!.emit('transactions', item.conn, item.transactions);
@@ -169,9 +177,14 @@ export class TxBuffer extends EventEmitter {
     private sendRpc() {
         let num = this.getRpcNumToSend();
 
+        if (this.m_rpcBuffer.length <= 0) {
+            return;
+        } else {
+            this.m_logger.info('m_rpcBuffer len: ' + this.m_rpcBuffer.length);
+        }
+
         for (let i = 0; i < num; i++) {
             if (this.m_rpcBuffer.length <= 0) {
-
                 break;
             }
             let item = this.m_rpcBuffer.shift();

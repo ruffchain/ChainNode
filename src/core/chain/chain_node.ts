@@ -309,9 +309,11 @@ export class ChainNode extends EventEmitter {
                 let headerReader = new BufferReader(buffer);
                 let headers = [];
                 this.logger.debug(`receive headers from ${conn.fullRemote} err ${pkg.body.error} request `, pkg.body.request);
+
                 if (!pkg.body.error) {
                     let err = ErrorCode.RESULT_OK;
                     let preHeader: BlockHeader | undefined;
+
                     for (let ix = 0; ix < pkg.body.count; ++ix) {
                         let header = network.newBlockHeader();
                         if (header.decode(headerReader) !== ErrorCode.RESULT_OK) {
