@@ -62,7 +62,7 @@ export class DposBftNetwork extends RandomOutNetwork {
 
     // Yang Jun 2019-10-25
     public async relayTipSign(writer: PackageStreamWriter, addresses: string[]): Promise<{ err: ErrorCode, count: number }> {
-        let validators = new Set(addresses);
+        // let validators = new Set(addresses);
 
         // return this.m_node.broadcast(writer, {
         //     count: validators.size, filter: (conn: NodeConnection) => {

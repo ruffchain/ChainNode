@@ -208,11 +208,46 @@ export class ChainNode extends EventEmitter {
         }
         return arr;
     }
+    // Added 2019-11-13
+    public broadcastTx(content: Transaction, connAddr: string): ErrorCode {
+        if (!content) {
+            return ErrorCode.RESULT_OK;
+        }
+
+        let pwriter: PackageStreamWriter | undefined;
+        let strategy;
+
+        let hwriter = new BufferWriter();
+
+        let err = content.encode(hwriter);
+        if (err) {
+            this.logger.error(`encode transaction ${content.hash} failed`);
+            return err;
+        }
+
+        // Yang Jun 2019-8-15
+        getMonitor()!.updateSendTxs(1);
+
+        let raw = hwriter.render();
+        pwriter = PackageStreamWriter.fromPackage(SYNC_CMD_TYPE.tx, { count: 1 }, raw.length);
+        pwriter.writeData(raw);
+        strategy = NetworkBroadcastStrategy.transaction;
+
+        assert(pwriter);
+        for (const network of this.m_networks) {
+            const opt = Object.create(null);
+            opt.strategy = strategy;
+            network.broadcastTx(pwriter!, connAddr, opt);
+        }
+
+        return ErrorCode.RESULT_OK;
+    }
 
     public broadcast(content: BlockHeader[] | Transaction[], options?: {
         count?: number,
         filter?: (conn: NodeConnection) => boolean
     }): ErrorCode {
+
         if (!content.length) {
             return ErrorCode.RESULT_OK;
         }

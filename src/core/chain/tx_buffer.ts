@@ -20,28 +20,29 @@ export class TxBuffer extends EventEmitter {
     static MAX_TIME_SLICE: number = 10;
     static MAX_LOAD_TAP: number = 100;
     static MIN_LOAD_TAP: number = 1;
-    static TAP_BOUNCE_BACK: number = 2;
+    static TAP_BOUNCE_BACK: number = 10;
     static ENABLE_TAP: boolean = true;
-    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 1000;
+    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 2000;
     static ENABLE_RPC_TAP: boolean = true;
 
     static MAX_RPC_LOAD_TAP: number = 100;
-    static MIN_RPC_LOAD_TAP: number = 1;
+    static MIN_RPC_LOAD_TAP: number = 100;
 
 
-    static TAP_HEADERS: number = 40;
-    static TAP_GETHEADER: number = 40;
-    static TAP_BLOCK: number = 40;
-    static TAP_GETBLOCK: number = 40;
-    static TAP_TIPSIGN: number = 20;
+    static TAP_HEADERS: number = 10;
+    static TAP_GETHEADER: number = 0;
+    static TAP_BLOCK: number = 10;
+    static TAP_GETBLOCK: number = 0;
+    static TAP_TIPSIGN: number = 10;
 
-    static RPC_TAP_HEADERS: number = 40;
-    static RPC_TAP_GETHEADER: number = 40;
-    static RPC_TAP_BLOCK: number = 40;
-    static RPC_TAP_GETBLOCK: number = 40;
-    static RPC_TAP_TIPSIGN: number = 20;
+    static RPC_TAP_HEADERS: number = 10;
+    static RPC_TAP_GETHEADER: number = 0;
+    static RPC_TAP_BLOCK: number = 10;
+    static RPC_TAP_GETBLOCK: number = 0;
+    static RPC_TAP_TIPSIGN: number = 10;
 
     private m_buffer: IfTxBufferItem[] = [];
+    private m_tx_hash: Set<string> = new Set();
     // private m_timer?: NodeJS.Timer;
     private m_logger: LoggerInstance;
     private m_sliceCounter: number = 0;
@@ -62,7 +63,7 @@ export class TxBuffer extends EventEmitter {
         this.m_logger = logger;
         this.m_node = chainnode;
 
-        this.m_buffer = [];
+        // this.m_buffer = [];
         this.m_sliceCounter = 0;
 
         for (let i = 0; i < TxBuffer.MAX_TIME_SLICE; i++) {
@@ -87,7 +88,7 @@ export class TxBuffer extends EventEmitter {
         let div = Math.floor(tap / TxBuffer.MAX_TIME_SLICE);
         let remai = tap % TxBuffer.MAX_TIME_SLICE;
         for (let i = 0; i < TxBuffer.MAX_TIME_SLICE; i++) {
-            this.m_slices[i] = div;
+            this.m_slices[i] = div + 1;
         }
         for (let i = 0; i < remai; i++) {
             this.m_slices[i] += 1;
@@ -151,8 +152,7 @@ export class TxBuffer extends EventEmitter {
         return this.m_rpcSlices[out];
     }
     private sendTx() {
-        // num to be sent in this time slice
-        let num = this.getTxNumToSend();
+
         // this.m_logger.info('TxBuffer send num: ' + num)
 
         if (this.m_buffer.length <= 0) {
@@ -160,6 +160,11 @@ export class TxBuffer extends EventEmitter {
         } else {
             this.m_logger.info('m_buffer len: ' + this.m_buffer.length);
         }
+
+        // num to be sent in this time slice
+        let num = this.getTxNumToSend();
+
+        this.m_logger.info('pattern num: ' + num);
 
         for (let i = 0; i < num; i++) {
             if (this.m_buffer.length <= 0) {
@@ -170,18 +175,24 @@ export class TxBuffer extends EventEmitter {
 
             if (item) {
                 this.m_logger.info('TxBuffer emit: ' + i + ' loadTap:' + this.m_loadTap + ' num:' + num)
+
+                // there is only one transaction every time
+                this.m_tx_hash.delete(item.transactions[0].hash);
+
                 this.m_node!.emit('transactions', item.conn, item.transactions);
             }
         }
     }
     private sendRpc() {
-        let num = this.getRpcNumToSend();
+
 
         if (this.m_rpcBuffer.length <= 0) {
             return;
         } else {
             this.m_logger.info('m_rpcBuffer len: ' + this.m_rpcBuffer.length);
         }
+
+        let num = this.getRpcNumToSend();
 
         for (let i = 0; i < num; i++) {
             if (this.m_rpcBuffer.length <= 0) {
@@ -195,19 +206,24 @@ export class TxBuffer extends EventEmitter {
         }
     }
 
-    public async start(): Promise<ErrorCode> {
+    public start() {
         // this.m_logger.info('TxBuffer trigure ->' + new Date().getTime())
         // check 
-        this.sendTx();
 
-        await DelayPromise(TxBuffer.DELAY_UNIT);
+        let func = async () => {
+            this.sendTx();
 
-        this.sendRpc();
+            await DelayPromise(TxBuffer.DELAY_UNIT);
 
-        await DelayPromise(TxBuffer.DELAY_UNIT);
+            this.sendRpc();
 
-        this.start();
-        return ErrorCode.RESULT_OK;
+            await DelayPromise(TxBuffer.DELAY_UNIT);
+
+            await func();
+        }
+
+        func();
+
     }
 
     public addRpcIf(server: RPCServer) {
@@ -215,10 +231,19 @@ export class TxBuffer extends EventEmitter {
     }
 
     public addTxes(connection: NodeConnection, txs: Transaction[]) {
-        this.m_buffer.push({
-            conn: connection,
-            transactions: txs
-        })
+        // this.m_buffer.push({
+        //     conn: connection,
+        //     transactions: txs
+        // })
+        for (let item of txs) {
+            if (!this.m_tx_hash.has(item.hash)) {
+                this.m_buffer.push({
+                    conn: connection,
+                    transactions: [item]
+                })
+                this.m_tx_hash.add(item.hash);
+            }
+        }
     }
     public addRpc(funName: string, args: any, resp: any): boolean {
         this.m_rpcBuffer.push({

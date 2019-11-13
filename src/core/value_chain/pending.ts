@@ -1,16 +1,16 @@
-import {PendingTransactions, TransactionWithTime, Chain, Transaction} from '../chain';
+import { PendingTransactions, TransactionWithTime, Chain, Transaction } from '../chain';
 import { ErrorCode } from '../error_code';
-import {ValueTransaction} from './transaction';
-import {BigNumber} from 'bignumber.js';
-import {ValueChain} from './chain';
-import {ValueBlockHeader} from './block';
+import { ValueTransaction } from './transaction';
+import { BigNumber } from 'bignumber.js';
+import { ValueChain } from './chain';
+import { ValueBlockHeader } from './block';
 
 const MinFee = new BigNumber(0.1);
 
 export class ValuePendingTransactions extends PendingTransactions {
     protected m_balance: Map<string, BigNumber> = new Map<string, BigNumber>();
 
-    protected async _onCheck(txTime: TransactionWithTime,  txOld?: TransactionWithTime): Promise<ErrorCode> {
+    protected async _onCheck(txTime: TransactionWithTime, txOld?: TransactionWithTime): Promise<ErrorCode> {
         let ret = await super._onCheck(txTime, txOld);
         if (ret) {
             return ret;
@@ -37,7 +37,7 @@ export class ValuePendingTransactions extends PendingTransactions {
         }
         return ErrorCode.RESULT_OK;
     }
-    protected async _onAddedTx(txTime: TransactionWithTime, txOld?: TransactionWithTime): Promise<ErrorCode> {
+    protected async _onAddedTx(txTime: TransactionWithTime, connAddr: string, txOld?: TransactionWithTime): Promise<ErrorCode> {
         let br = await this.getBalance(txTime.tx.address as string);
         if (br.err) {
             return br.err;
@@ -52,7 +52,7 @@ export class ValuePendingTransactions extends PendingTransactions {
         }
         this.m_balance.set(txTime.tx.address as string, balance);
 
-        return await super._onAddedTx(txTime);
+        return await super._onAddedTx(txTime, connAddr);
     }
 
     public async updateTipBlock(header: ValueBlockHeader): Promise<ErrorCode> {
@@ -60,23 +60,23 @@ export class ValuePendingTransactions extends PendingTransactions {
         return await super.updateTipBlock(header);
     }
 
-    protected async getStorageBalance(s: string): Promise<{err: ErrorCode, value?: BigNumber}> {
+    protected async getStorageBalance(s: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
         try {
             let dbr = await this.m_storageView!.getReadableDataBase(Chain.dbSystem);
             if (dbr.err) {
-                return {err: dbr.err};
+                return { err: dbr.err };
             }
             let kvr = await dbr.value!.getReadableKeyValue(ValueChain.kvBalance);
             if (kvr.err !== ErrorCode.RESULT_OK) {
-                return {err: kvr.err};
+                return { err: kvr.err };
             }
             let ret = await kvr.kv!.get(s);
             if (!ret.err) {
                 return ret;
             } else if (ret.err === ErrorCode.RESULT_NOT_FOUND) {
-                return {err: ErrorCode.RESULT_OK, value: new BigNumber(0)};
+                return { err: ErrorCode.RESULT_OK, value: new BigNumber(0) };
             } else {
-                return {err: ret.err};
+                return { err: ret.err };
             }
 
         } catch (error) {
@@ -86,9 +86,9 @@ export class ValuePendingTransactions extends PendingTransactions {
     }
 
     // 获取pending中的balance
-    protected async getBalance(s: string): Promise<{ err: ErrorCode, value?: BigNumber}> {
+    protected async getBalance(s: string): Promise<{ err: ErrorCode, value?: BigNumber }> {
         if (this.m_balance.has(s)) {
-            return { err: ErrorCode.RESULT_OK, value: this.m_balance.get(s)};
+            return { err: ErrorCode.RESULT_OK, value: this.m_balance.get(s) };
         }
         return this.getStorageBalance(s);
     }

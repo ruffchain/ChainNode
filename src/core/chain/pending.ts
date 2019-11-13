@@ -16,7 +16,8 @@ enum SyncOptType {
 }
 type SyncOpt = {
     _type: SyncOptType,
-    param: any
+    param: any,
+    connAddr: string // Add connection address here
 };
 
 export class PendingTransactions extends EventEmitter {
@@ -35,13 +36,13 @@ export class PendingTransactions extends EventEmitter {
     protected m_currAdding: SyncOpt | undefined;
     protected m_txRecord: LRUCache<string, number>;
 
-    on(event: 'txAdded', listener: (tx: Transaction) => void): this;
+    on(event: 'txAdded', listener: (tx: Transaction, connAddr: string) => void): this;
     on(event: string, listener: any): this {
         return super.on(event, listener);
     }
 
-    once(event: 'txAdded', listener: (tx: Transaction) => void): this;
-    once(event: string, listener: (tx: Transaction) => void): this {
+    once(event: 'txAdded', listener: (tx: Transaction, connAddr: string) => void): this;
+    once(event: string, listener: (tx: Transaction, connAddr: string) => void): this {
         return super.once(event, listener);
     }
 
@@ -66,7 +67,13 @@ export class PendingTransactions extends EventEmitter {
         this.m_txRecord = new LRUCache(this.m_maxPengdingCount);
     }
 
-    public async addTransaction(tx: Transaction): Promise<ErrorCode> {
+    public async addTransaction(tx: Transaction, connAddr: string): Promise<ErrorCode> {
+        if (this._isExist(tx)) {
+            this.m_logger.warn(`addTransaction failed, tx exist,hash=${tx.hash}`);
+            return ErrorCode.RESULT_TX_EXIST;
+        }
+
+
         if (!tx.verify()) {
             this.m_logger.error(`addTransaction failed, tx param error, txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
             return ErrorCode.RESULT_INVALID_PARAM;
@@ -96,12 +103,13 @@ export class PendingTransactions extends EventEmitter {
         }
         this.m_txRecord.set(tx.hash, Date.now());
 
-        if (this._isExist(tx)) {
-            this.m_logger.warn(`addTransaction failed, tx exist,hash=${tx.hash}`);
-            return ErrorCode.RESULT_TX_EXIST;
-        }
+        // if (this._isExist(tx)) {
+        //     this.m_logger.warn(`addTransaction failed, tx exist,hash=${tx.hash}`);
+        //     return ErrorCode.RESULT_TX_EXIST;
+        // }
 
-        let opt: SyncOpt = { _type: SyncOptType.addTx, param: { tx, ct: Date.now() } };
+        let opt: SyncOpt = { _type: SyncOptType.addTx, param: { tx, ct: Date.now() }, connAddr: connAddr };
+
         this._addPendingOpt(opt);
         return ErrorCode.RESULT_OK;
     }
@@ -126,7 +134,7 @@ export class PendingTransactions extends EventEmitter {
         this.m_curHeader = header;
         this.m_storageView = svr.storage!;
 
-        this._addPendingOpt({ _type: SyncOptType.updateTip, param: undefined });
+        this._addPendingOpt({ _type: SyncOptType.updateTip, param: undefined, connAddr: '' });
         return ErrorCode.RESULT_OK;
     }
 
@@ -183,6 +191,7 @@ export class PendingTransactions extends EventEmitter {
 
         while (this.m_queueOpt.length > 0) {
             this.m_currAdding = this.m_queueOpt.shift();
+
             if (this.m_currAdding!._type === SyncOptType.updateTip) {
                 let pos: number = 0;
                 for (pos = 0; pos < this.m_queueOpt.length; pos++) {
@@ -191,12 +200,12 @@ export class PendingTransactions extends EventEmitter {
                     }
                 }
                 for (let i = 0; i < this.m_transactions.length; i++) {
-                    this.m_queueOpt.splice(i + pos, 0, { _type: SyncOptType.addTx, param: this.m_transactions[i] });
+                    this.m_queueOpt.splice(i + pos, 0, { _type: SyncOptType.addTx, param: this.m_transactions[i], connAddr: '' });
                 }
                 this.m_mapNonce = new Map();
                 this.m_transactions = [];
             } else if (this.m_currAdding!._type === SyncOptType.addTx) {
-                await this._addTx(this.m_currAdding!.param as TransactionWithTime);
+                await this._addTx(this.m_currAdding!.param as TransactionWithTime, this.m_currAdding!.connAddr);
             }
             this.m_currAdding = undefined;
         }
@@ -206,15 +215,15 @@ export class PendingTransactions extends EventEmitter {
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _onAddedTx(txTime: TransactionWithTime, txOld?: TransactionWithTime): Promise<ErrorCode> {
+    protected async _onAddedTx(txTime: TransactionWithTime, connAddr: string, txOld?: TransactionWithTime): Promise<ErrorCode> {
         if (!txOld) {
             this.m_mapNonce.set(txTime.tx.address as string, txTime.tx.nonce);
         }
-        this.emit('txAdded', txTime.tx);
+        this.emit('txAdded', txTime.tx, connAddr);
         return ErrorCode.RESULT_OK;
     }
 
-    protected async _addTx(txTime: TransactionWithTime): Promise<ErrorCode> {
+    protected async _addTx(txTime: TransactionWithTime, connAddr: string): Promise<ErrorCode> {
         if (this._isTimeout(txTime)) {
             this.m_logger.warn(`_addTx tx timeout, txhash=${txTime.tx.hash}`);
             return ErrorCode.RESULT_TIMEOUT;
@@ -242,7 +251,7 @@ export class PendingTransactions extends EventEmitter {
                 return retCode;
             }
             this._addToQueue(txTime, -1);
-            await this._onAddedTx(txTime);
+            await this._onAddedTx(txTime, connAddr);
             await this._scanOrphan(address);
             return ErrorCode.RESULT_OK;
         }
@@ -251,7 +260,7 @@ export class PendingTransactions extends EventEmitter {
             return await this._addToOrphanMayNonceExist(txTime);
         }
 
-        return await this._addToQueueMayNonceExist(txTime);
+        return await this._addToQueueMayNonceExist(txTime, connAddr);
     }
 
     // 同个address的两个相同nonce的tx存在，且先前的也还没有入链
@@ -337,7 +346,7 @@ export class PendingTransactions extends EventEmitter {
 
             if (nonce! + 1 === l[0].tx.nonce) {
                 let txTime: TransactionWithTime = l.shift() as TransactionWithTime;
-                this._addPendingOpt({ _type: SyncOptType.addTx, param: txTime });
+                this._addPendingOpt({ _type: SyncOptType.addTx, param: txTime, connAddr: '' });
             }
             break;
         }
@@ -363,7 +372,7 @@ export class PendingTransactions extends EventEmitter {
         return count;
     }
 
-    protected async _addToQueueMayNonceExist(txTime: TransactionWithTime): Promise<ErrorCode> {
+    protected async _addToQueueMayNonceExist(txTime: TransactionWithTime, connAddr: string): Promise<ErrorCode> {
         for (let i = 0; i < this.m_transactions.length; i++) {
             if (this.m_transactions[i].tx.address === txTime.tx.address && this.m_transactions[i].tx.nonce === txTime.tx.nonce) {
                 let txOld: TransactionWithTime = this.m_transactions[i];
@@ -374,7 +383,7 @@ export class PendingTransactions extends EventEmitter {
                     }
                     this.m_transactions.splice(i, 1);
                     this._addToQueue(txTime, i);
-                    await this._onAddedTx(txTime, txOld);
+                    await this._onAddedTx(txTime, connAddr, txOld);
                     return ErrorCode.RESULT_OK;
                 }
 
@@ -386,7 +395,7 @@ export class PendingTransactions extends EventEmitter {
                     }
                     this.m_transactions.splice(i, 1);
                     this._addToQueue(txTime, i);
-                    await this._onAddedTx(txTime, txOld);
+                    await this._onAddedTx(txTime, connAddr, txOld);
                     return ErrorCode.RESULT_OK;
                 }
                 return _err;

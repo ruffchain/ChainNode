@@ -302,7 +302,11 @@ export class Network extends EventEmitter {
 
         return true;
     }
-
+    broadcastTx(writer: PackageStreamWriter, connAddr: string, options?: {
+        count?: number, filter?: (conn: NodeConnection) => boolean, strategy?: number
+    }) {
+        return this.m_node.broadcast2(writer, [connAddr]);
+    }
     broadcast(writer: PackageStreamWriter, options?: {
         count?: number, filter?: (conn: NodeConnection) => boolean, strategy?: number
     }): Promise<{ err: ErrorCode }> {
@@ -311,6 +315,8 @@ export class Network extends EventEmitter {
             bopt.count = options.count;
             bopt.filter = options.filter;
 
+
+            // find default strategy, I think it's not used
             if (!isNullOrUndefined(options.strategy)) {
                 const s = this.m_broadcastStrategies.get(options.strategy);
                 if (s) {

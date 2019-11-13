@@ -29,6 +29,7 @@ function promisify(f: any) {
 export class ChainServer {
     private m_logger: LoggerInstance;
     private m_chainContext?: HostChainContext;
+    private m_peerid: string;
 
     constructor(logger: LoggerInstance, chain: Chain, chainContext?: HostChainContext, miner?: Miner) {
         this.m_chain = chain;
@@ -36,6 +37,7 @@ export class ChainServer {
         this.m_logger = logger;
         this.m_chainContext = chainContext;
 
+        this.m_peerid = '';
     }
 
     init(commandOptions: CommandOptions): boolean {
@@ -59,6 +61,10 @@ export class ChainServer {
         if (eMonitor && eMonitor === true) {
             this._initMethodsMonitor(commandOptions);
         }
+
+        // 
+        this.m_peerid = commandOptions.get('peerid');
+
         this.m_server.start();
 
         return true;
@@ -129,7 +135,7 @@ export class ChainServer {
                         tx.input.tokenid = tx.input.tokenid.toUpperCase();
                     }
                     this.m_logger.debug(tx.input);
-                    const err = await this.m_chain.addTransaction(tx);
+                    const err = await this.m_chain.addTransaction(tx, this.m_peerid);
                     await promisify(resp.write.bind(resp)(JSON.stringify(err)));
                 }
             }

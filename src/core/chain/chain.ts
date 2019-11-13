@@ -561,9 +561,10 @@ export class Chain extends EventEmitter implements IConsistency {
         this.m_instanceOptions = _instanceOptions;
 
         this.m_pending = this._createPending();
-        this.m_pending.on('txAdded', (tx: Transaction) => {
+        this.m_pending.on('txAdded', (tx: Transaction, connAddr: string) => {
             this.logger.debug(`broadcast transaction txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
-            this.m_node!.broadcast([tx]);
+            // this.m_node!.broadcast([tx]);
+            this.m_node!.broadcastTx(tx, connAddr);
         });
         this.m_pending.init();
 
@@ -597,7 +598,12 @@ export class Chain extends EventEmitter implements IConsistency {
         });
         this.m_node.on('transactions', async (conn: NodeConnection, transactions: Transaction[]) => {
             for (let tx of transactions) {
-                const _err = await this._addTransaction(tx);
+                if (conn.fullRemote === undefined) {
+                    this.logger.error('Undefined conn');
+                    return;
+                }
+
+                const _err = await this._addTransaction(tx, conn.fullRemote.split('^')[1]);
 
                 if (_err === ErrorCode.RESULT_TX_CHECKER_ERROR) {
                     this._banConnection(conn.fullRemote, BAN_LEVEL.forever);
@@ -811,11 +817,11 @@ export class Chain extends EventEmitter implements IConsistency {
         return this.m_blockStorage!.get(hash);
     }
 
-    protected async _addTransaction(tx: Transaction): Promise<ErrorCode> {
+    protected async _addTransaction(tx: Transaction, connAddr: string): Promise<ErrorCode> {
         if (this.m_state !== ChainState.synced) {
             return ErrorCode.RESULT_INVALID_STATE;
         }
-        let err = await this.m_pending!.addTransaction(tx);
+        let err = await this.m_pending!.addTransaction(tx, connAddr);
         return err;
     }
 
@@ -1747,8 +1753,8 @@ export class Chain extends EventEmitter implements IConsistency {
         return await this.m_pending!.getNonce(s);
     }
 
-    public addTransaction(tx: Transaction): Promise<ErrorCode> {
-        return this._addTransaction(tx);
+    public addTransaction(tx: Transaction, connAddr: string): Promise<ErrorCode> {
+        return this._addTransaction(tx, connAddr);
     }
 
     protected _getBlockHeaderType(): new () => BlockHeader {
