@@ -22,11 +22,11 @@ export class TxBuffer extends EventEmitter {
     static MIN_LOAD_TAP: number = 1;
     static TAP_BOUNCE_BACK: number = 10;
     static ENABLE_TAP: boolean = true;
-    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 2000;
+    static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 1000;
     static ENABLE_RPC_TAP: boolean = true;
 
     static MAX_RPC_LOAD_TAP: number = 100;
-    static MIN_RPC_LOAD_TAP: number = 100;
+    static MIN_RPC_LOAD_TAP: number = 1;
 
 
     static TAP_HEADERS: number = 10;
@@ -213,13 +213,13 @@ export class TxBuffer extends EventEmitter {
         let func = async () => {
             this.sendTx();
 
-            await DelayPromise(TxBuffer.DELAY_UNIT);
+            // await DelayPromise(TxBuffer.DELAY_UNIT);
 
             this.sendRpc();
 
             await DelayPromise(TxBuffer.DELAY_UNIT);
 
-            await func();
+            func();
         }
 
         func();
