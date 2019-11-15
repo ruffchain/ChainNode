@@ -20,7 +20,7 @@ export class TxBuffer extends EventEmitter {
     static MAX_TIME_SLICE: number = 10;
     static MAX_LOAD_TAP: number = 100;
     static MIN_LOAD_TAP: number = 1;
-    static TAP_BOUNCE_BACK: number = 10;
+    static TAP_BOUNCE_BACK: number = 5;
     static ENABLE_TAP: boolean = true;
     static DELAY_UNIT = TxBuffer.TIME_INTERVAL / 1000;
     static ENABLE_RPC_TAP: boolean = true;
@@ -29,17 +29,17 @@ export class TxBuffer extends EventEmitter {
     static MIN_RPC_LOAD_TAP: number = 1;
 
 
-    static TAP_HEADERS: number = 10;
-    static TAP_GETHEADER: number = 0;
-    static TAP_BLOCK: number = 10;
-    static TAP_GETBLOCK: number = 0;
-    static TAP_TIPSIGN: number = 10;
+    static TAP_HEADERS: number = 30;
+    static TAP_GETHEADER: number = 10;
+    static TAP_BLOCK: number = 30;
+    static TAP_GETBLOCK: number = 10;
+    static TAP_TIPSIGN: number = 30;
 
-    static RPC_TAP_HEADERS: number = 10;
-    static RPC_TAP_GETHEADER: number = 0;
-    static RPC_TAP_BLOCK: number = 10;
-    static RPC_TAP_GETBLOCK: number = 0;
-    static RPC_TAP_TIPSIGN: number = 10;
+    static RPC_TAP_HEADERS: number = 30;
+    static RPC_TAP_GETHEADER: number = 10;
+    static RPC_TAP_BLOCK: number = 30;
+    static RPC_TAP_GETBLOCK: number = 10;
+    static RPC_TAP_TIPSIGN: number = 30;
 
     private m_buffer: IfTxBufferItem[] = [];
     private m_tx_hash: Set<string> = new Set();
