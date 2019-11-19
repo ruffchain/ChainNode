@@ -16,6 +16,8 @@ export interface IfRpcBufferItem {
 }
 
 export class TxBuffer extends EventEmitter {
+    static MAX_BUFFER_DEPTH: number = 5000;
+
     static TIME_INTERVAL: number = 100;
     static MAX_TIME_SLICE: number = 10;
     static MAX_LOAD_TAP: number = 100;
@@ -235,7 +237,12 @@ export class TxBuffer extends EventEmitter {
         //     conn: connection,
         //     transactions: txs
         // })
+        if (this.m_buffer.length >= TxBuffer.MAX_BUFFER_DEPTH) {
+            console.log('m_buffer full > 5000');
+            return;
+        }
         for (let item of txs) {
+
             if (!this.m_tx_hash.has(item.hash)) {
                 this.m_buffer.push({
                     conn: connection,
@@ -246,6 +253,11 @@ export class TxBuffer extends EventEmitter {
         }
     }
     public addRpc(funName: string, args: any, resp: any): boolean {
+        if (this.m_rpcBuffer.length >= TxBuffer.MAX_BUFFER_DEPTH) {
+            console.warn('rpcBuffer full, > 5000');
+            return true;
+        }
+
         this.m_rpcBuffer.push({
             func: funName,
             args: args,
