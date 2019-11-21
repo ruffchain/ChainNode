@@ -90,7 +90,8 @@ export class TxBuffer extends EventEmitter {
         let div = Math.floor(tap / TxBuffer.MAX_TIME_SLICE);
         let remai = tap % TxBuffer.MAX_TIME_SLICE;
         for (let i = 0; i < TxBuffer.MAX_TIME_SLICE; i++) {
-            this.m_slices[i] = div + 1;
+            // default , it will have 1010101010 pattern
+            this.m_slices[i] = div + ((i % 2 === 0) ? 1 : 0);
         }
         for (let i = 0; i < remai; i++) {
             this.m_slices[i] += 1;
@@ -179,7 +180,9 @@ export class TxBuffer extends EventEmitter {
                 this.m_logger.info('TxBuffer emit: ' + i + ' loadTap:' + this.m_loadTap + ' num:' + num)
 
                 // there is only one transaction every time
-                this.m_tx_hash.delete(item.transactions[0].hash);
+                for (let tx of item.transactions) {
+                    this.m_tx_hash.delete(tx.hash);
+                }
 
                 this.m_node!.emit('transactions', item.conn, item.transactions);
             }
@@ -215,7 +218,7 @@ export class TxBuffer extends EventEmitter {
         let func = async () => {
             this.sendTx();
 
-            // await DelayPromise(TxBuffer.DELAY_UNIT);
+            await DelayPromise(TxBuffer.DELAY_UNIT);
 
             this.sendRpc();
 
