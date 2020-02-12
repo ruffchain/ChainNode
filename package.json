@@ -24,7 +24,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@hapi/joi": "^15.1.0",
+    "@hapi/joi": "^15.1.1",
     "@types/better-sqlite3": "^5.4.0",
     "@types/hapi__joi": "^15.0.3",
     "bdt-p2p": "^0.1.238",
