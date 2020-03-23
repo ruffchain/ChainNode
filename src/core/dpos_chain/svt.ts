@@ -844,12 +844,16 @@ export class SVTViewContext {
 
   // block to epoch time
   private async nGetTimeFromDueBlock(block: number): Promise<number> {
-    let hr = await this.m_chain!.getHeader(1);
+    // Get latest block, valid 
+    let curBlock = this.m_chain.tipBlockHeader!.number;
+    let blockBefore = curBlock - 14;
+
+    let hr = await this.m_chain!.getHeader(blockBefore);
     if (hr.err) {
       return -1;
     }
     let epochTime = hr.header!.timestamp;
-    let out: number = epochTime * 1000 + (block - 1) * this.m_chain.globalOptions.blockInterval * 1000;
+    let out: number = epochTime * 1000 + (block - blockBefore) * this.m_chain.globalOptions.blockInterval * 1000;
 
     return out;
   }
