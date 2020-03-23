@@ -116,14 +116,13 @@ export class ChainServer {
     _initMethods(commandOptions: CommandOptions) {
         this.m_server!.on('sendTransaction', async (params: { tx: any }, resp) => {
             // Yang Jun, make createToken, createBancorToken , tokenid to be UpperCase
-            //
 
             let tx = ValueTransaction.fromRaw(Buffer.from(params.tx, 'hex'), ValueTransaction);
 
             if (!tx) {
                 await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_FORMAT)));
             } else {
-                if (!tx.verify()) {
+                if (!tx.verify() || !tx.verifySignature()) {
                     this.m_logger.debug(`rpc server tx param error , txhash=${tx.hash}, nonce=${tx.nonce}, address=${tx.address}`);
                     await promisify(resp.write.bind(resp)(JSON.stringify(ErrorCode.RESULT_INVALID_PARAM)));
                 } else {

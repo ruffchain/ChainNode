@@ -98,7 +98,7 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
 
     result = await generateStorageDump(height - 3, logger, path);
     if (result !== 0) {
-        logger.error('generate storage/dump 3 NOK'); return -1;
+        logger.error('generate storage/dump 4 NOK'); return -1;
     }
 
     result = await trimBlockDir(trimItemLst, logger, path);
@@ -387,6 +387,7 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
 
     }
     if (!fs.existsSync(RESTORE_FILE_PATH)) {
+        console.log("File not found")
         return -1;
     }
     let stats = fs.statSync(RESTORE_FILE_PATH)

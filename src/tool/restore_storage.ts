@@ -2,14 +2,14 @@
 import * as process from 'process';
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import {initUnhandledRejection, parseCommand, initLogger} from '../common';
-import {initChainCreator, createValueDebuger, ErrorCode, stringifyErrorCode} from '../core';
+import { initUnhandledRejection, parseCommand, initLogger } from '../common';
+import { initChainCreator, createValueDebuger, ErrorCode, stringifyErrorCode } from '../core';
 
-const logger = initLogger({loggerOptions: {console: true}});
+const logger = initLogger({ loggerOptions: { console: true } });
 initUnhandledRejection(logger);
 
 async function main() {
-    const commandTip = `Usage: node restore_storage.js restore --dateDir [data dir] --height [block height] --output [output path]`;
+    const commandTip = `Usage: node restore_storage.js restore --dataDir [data dir] --height [block height] --output [output path]`;
     let command = parseCommand(process.argv);
     if (!command || !command.command) {
         console.log(commandTip);
@@ -19,34 +19,34 @@ async function main() {
         const dataDir = command!.options.get('dataDir');
         if (!dataDir) {
             console.log(commandTip);
-            return ;
+            return;
         }
         let output = command!.options.get('output');
         if (!output) {
             console.log(commandTip);
-            return ;
+            return;
         }
         if (!path.isAbsolute(output)) {
             output = path.join(process.cwd(), output);
         }
-        const chainCreator = initChainCreator({logger});
-        const ccir = await chainCreator.createChainInstance(dataDir, {readonly: false, initComponents: true});
+        const chainCreator = initChainCreator({ logger });
+        const ccir = await chainCreator.createChainInstance(dataDir, { readonly: false, initComponents: true });
         if (ccir.err) {
             chainCreator.logger.error(`create chain instance from ${dataDir} failed `, stringifyErrorCode(ccir.err));
-            return ;
+            return;
         }
 
         let height = parseInt(command!.options.get('height'));
         let headerRet = await ccir.chain!.headerStorage.getHeader(height);
         if (headerRet.err) {
             console.log(`get header error ${headerRet.err}, exit.`);
-            return ;
+            return;
         }
         console.log(`recovering storage for Block ${headerRet.header!.hash}...`);
         const csr = await ccir.chain!.storageManager.createStorage('temp', headerRet.header!.hash);
         if (csr.err) {
             console.log(`restore storage from redo log failed ${stringifyErrorCode(csr.err)}`);
-            return ;
+            return;
         }
         fs.ensureDirSync(output);
         await csr.storage!.uninit();
@@ -57,7 +57,7 @@ async function main() {
     }
 
 }
-(async() => {
+(async () => {
     await main();
     process.exit(0);
 })()
