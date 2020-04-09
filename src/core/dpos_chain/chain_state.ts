@@ -78,6 +78,9 @@ export class DposChainTipState {
     }
 
     async updateTip(header: DposBlockHeader): Promise<ErrorCode> {
+
+        // Added by Yang 2020-04-10
+        this.logger.debug(`m_tip : ${this.m_tip.number} ${this.m_tip.hash}`);
         if (header.preBlockHash !== this.m_tip.hash || header.number !== this.m_tip.number + 1) {
             this.logger.error(`updateTip failed for header error, header.number ${header.number} should equal tip.number+1 ${this.m_tip.number + 1}, header.preBlockHash '${header.preBlockHash}' should equal tip.hash ${this.m_tip.hash} headerhash=${header.hash}`);
             return ErrorCode.RESULT_INVALID_PARAM;

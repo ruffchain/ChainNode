@@ -109,11 +109,37 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     let hret = await trimDatabaseBest(height, logger, path);
     if (hret !== 0) { return -1; }
 
+    // delete redundant rows from headers which not exists in best table
+    console.log('\nClear headers table according to best table');
+    hret = await trimHeadersFromBest(logger, path);
+    if (hret !== 0) { return -1; }
+
     console.log('===================');
     console.log('    End of Trim    ')
     console.log('===================');
 }
 ///////////////////////////////////////////////////////////////////////////////
+/**
+ * To clear Headers table in database
+ * @param height 
+ * @param logger 
+ * @param path 
+ */
+async function trimHeadersFromBest(logger: winston.LoggerInstance, path: string): Promise<number> {
+    async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
+        let retn = await mDb.runBySQL(`delete from headers where headers.hash not in (select hash from best)`);
+        if (retn.err) {
+            logger.error('delete from headers fail');
+            return { err: ErrorCode.RESULT_DB_TABLE_FAILED, data: null }
+        }
+        return { err: ErrorCode.RESULT_OK, data: null };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path, method: funcMethod });
+
+    if (result !== 0) { return -1; }
+    return 0;
+}
+
 async function trimDatabaseBest(height: number, logger: winston.LoggerInstance, path: string): Promise<number> {
     async function funcMethod(mDb: TrimDataBase): Promise<IFeedBack> {
         let retn = await mDb.runBySQL(`delete from best where height > ${height}`);
