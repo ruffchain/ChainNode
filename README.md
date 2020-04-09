@@ -53,4 +53,7 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 2019-6-21  - Image version 1.13.1 , 15 nodes tes
 
 2020-3-26  - Image version 1.16.38, update network layer, other updates
+
+2020-04-09  - Image version 1.16.38.1, update trimit.ts, rollback 
+
 ```
