@@ -6,6 +6,13 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { ErrorCode } from '../error_code';
 
+// UnhandledPromiseRejectionWarning
+process.on('unhandledRejection', (reason, p) => {
+    console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
+    // application specific logging, throwing an error, or other logic here
+});
+
+
 export interface IBlockStorage {
     init(): ErrorCode;
     has(blockHash: string): boolean;
@@ -60,6 +67,7 @@ export class BlockStorage implements IBlockStorage {
     public get(blockHash: string): Block | undefined {
         let blockRaw;
         this.m_logger.info('get(), Before read block')
+        console.log('blockHash', blockHash)
         try {
             blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
         } catch (error) {
@@ -68,13 +76,19 @@ export class BlockStorage implements IBlockStorage {
         }
         this.m_logger.info('After read block')
         if (blockRaw) {
-            let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType, receiptType: this.m_receiptType });
-            let err = block.decode(new BufferReader(blockRaw));
-            if (err) {
-                this.m_logger.error(`load block ${blockHash} from storage failed!`);
-                return undefined;
+            try {
+                let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType, receiptType: this.m_receiptType });
+                let err = block.decode(new BufferReader(blockRaw));
+                if (err) {
+                    this.m_logger.error(`load block ${blockHash} from storage failed!`);
+                    return undefined;
+                }
+                return block;
+            } catch (e) {
+                console.log('print e:')
+                console.log(e);
             }
-            return block;
+
         } else {
             return undefined;
         }
