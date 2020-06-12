@@ -364,10 +364,11 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
 }
 //  const { stdout, stderr } = await exec(
 async function clearEmptyBlocks(logger: winston.LoggerInstance, path1: string): Promise<number> {
-    logger.debug('Clear empty blocks from Blocks/')
-    let mPath = path.join(path1, BLOCK_DIR)
-    let result = await exec(`find ${mPath} -name "*" -type f -size 0c | xargs -n 1 rm -f`);
-    logger.debug('Done')
+    logger.debug('Clear empty blocks from Blocks/');
+    let mPath = path.join(path1, BLOCK_DIR);
+    let result = await exec(`find ${mPath} -name "*" -type f -size 0c`);
+    result = await exec(`find ${mPath} -name "*" -type f -size 0c | xargs -n 1 rm -f`);
+    logger.debug('Clear Done')
     return 0;
 }
 async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string): Promise<number> {
