@@ -114,6 +114,11 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     hret = await trimHeadersFromBest(logger, path);
     if (hret !== 0) { return -1; }
 
+    // remove redundant block files from Block/ which not exists in best table
+    console.log('\nClear Block/ files according to best table');
+    hret = await trimBlocksFromBest(logger, path);
+    if (hret !== 0) { return -1; }
+
     console.log('===================');
     console.log('    End of Trim    ')
     console.log('===================');
@@ -355,6 +360,40 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
             logger.debug('Not exist')
         }
     });
+    return 0;
+}
+async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string): Promise<number> {
+    console.log('\nClear redundant blocks from Block/')
+    logger.debug('Clear redundant blocks from Block/');
+    let files = fs.readdirSync(path.join(path1, BLOCK_DIR))
+    if (!files) {
+        console.log('Get files list failed', path1)
+        return -1
+    }
+    // read from database best table
+    async function deleteBlockLst(mDb: TrimDataBase): Promise<IFeedBack> {
+        console.log('\n--------------------------------')
+        let retrn = await mDb.getBySQL(`select hash from best;`);
+        if (retrn.err) {
+            logger.error('query best for height failed');
+            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] }
+        }
+
+        files.forEach((value) => {
+            if (retrn.data.indexOf(value) === -1) {
+                fs.unlinkSync(path.join(path1, BLOCK_DIR, value))
+                console.log(value, 'Deleted')
+            }
+        })
+        // let trimItemLst = retrn.data;
+        return { err: ErrorCode.RESULT_OK, data: retrn.data };
+    }
+    let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path1, method: deleteBlockLst });
+    if (result !== 0) {
+        console.log('run failed trimBlocksFromBest')
+        return -1
+    }
+    console.log('task done!')
     return 0;
 }
 async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
