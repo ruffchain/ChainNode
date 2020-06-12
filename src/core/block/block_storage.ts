@@ -81,12 +81,19 @@ export class BlockStorage implements IBlockStorage {
                 let err = block.decode(new BufferReader(blockRaw));
                 if (err) {
                     this.m_logger.error(`load block ${blockHash} from storage failed!`);
+                    // remove the block from the directory
+                    this.m_logger.info('remove block :', blockHash)
+                    fs.unlinkSync(this._pathOfBlock(blockHash));
                     return undefined;
                 }
                 return block;
             } catch (e) {
                 console.log('print e:')
                 console.log(e);
+                // remove the block from the directory
+                this.m_logger.info('remove block :', blockHash)
+                fs.unlinkSync(this._pathOfBlock(blockHash));
+                return undefined;
             }
 
         } else {
