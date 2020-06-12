@@ -115,8 +115,8 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     if (hret !== 0) { return -1; }
 
     // remove redundant block files from Block/ which not exists in best table
-    console.log('\nClear Block/ files according to best table');
-    hret = await trimBlocksFromBest(logger, path);
+    console.log('\nClear Block/ files 0 size');
+    hret = await clearEmptyBlocks(logger, path);
     if (hret !== 0) { return -1; }
 
     console.log('===================');
@@ -362,6 +362,14 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
     });
     return 0;
 }
+//  const { stdout, stderr } = await exec(
+async function clearEmptyBlocks(logger: winston.LoggerInstance, path1: string): Promise<number> {
+    logger.debug('Clear empty blocks from Blocks/')
+    let mPath = path.join(path1, BLOCK_DIR)
+    let result = await exec(`find ${mPath} -name "*" -type f -size 0c | xargs -n 1 rm -f`);
+    logger.debug('Done')
+    return 0;
+}
 async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string): Promise<number> {
     console.log('\nClear redundant blocks from Block/')
     logger.debug('Clear redundant blocks from Block/');
@@ -370,23 +378,23 @@ async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string)
         console.log('Get files list failed', path1)
         return -1
     }
+    console.log('blocks num:', files.length)
     // read from database best table
     async function deleteBlockLst(mDb: TrimDataBase): Promise<IFeedBack> {
         console.log('\n--------------------------------')
-        let retrn = await mDb.getBySQL(`select hash from best;`);
-        if (retrn.err) {
-            logger.error('query best for height failed');
-            return { err: ErrorCode.RESULT_DB_RECORD_EMPTY, data: [] }
-        }
+        console.log('deleteBlockLst:')
+        for (let i = 0; i < files.length; i++) {
+            let value = files[i]
 
-        files.forEach((value) => {
-            if (retrn.data.indexOf(value) === -1) {
+            // console.log('hash:', value)
+            let retrn = await mDb.getBySQL(`select height from best where hash="${value}";`)
+            if (!retrn.data) {
                 fs.unlinkSync(path.join(path1, BLOCK_DIR, value))
                 console.log(value, 'Deleted')
             }
-        })
+        }
         // let trimItemLst = retrn.data;
-        return { err: ErrorCode.RESULT_OK, data: retrn.data };
+        return { err: ErrorCode.RESULT_OK, data: {} };
     }
     let result = await runMethodOnDb({ dbname: "database", logger: logger, path: path1, method: deleteBlockLst });
     if (result !== 0) {
