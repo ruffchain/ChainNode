@@ -67,13 +67,7 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
         return -1;
     }
 
-    if (bCheckTxView) {
-        result = await trimTxview(trimItemLst, logger, path);
-        if (result !== 0) {
-            logger.error('trim txview failed');
-            return -1;
-        }
-    }
+
 
     result = await trimStorageLog(trimItemLst, logger, path);
     if (result !== 0) { logger.error('trim storage/log failed'); return -1; }
@@ -118,6 +112,15 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     console.log('\nClear Block/ files 0 size');
     hret = await clearEmptyBlocks(logger, path);
     if (hret !== 0) { return -1; }
+
+
+    if (bCheckTxView) {
+        result = await trimTxview(trimItemLst, logger, path);
+        if (result !== 0) {
+            logger.error('trim txview failed');
+            return -1;
+        }
+    }
 
     console.log('===================');
     console.log('    End of Trim    ')
