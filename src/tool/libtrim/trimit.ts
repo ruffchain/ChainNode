@@ -6,12 +6,13 @@
 import winston = require("winston");
 import { checkDatabaseBest } from "./check";
 import { TrimDataBase, IfBestItem, IfHeadersItem } from "./trimdb";
-import { runMethodOnDb } from "./basic";
+import { runMethodOnDb, existsFile } from "./basic";
 import { IFeedBack, ErrorCode } from "../../core";
-import * as path from 'path';
+// import * as path from 'path';
 import * as fs from 'fs';
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
+import * as pathlib from 'path';
 
 const LOG_PATH = "storage/log/"
 const DUMP_PATH = "storage/dump/"
@@ -115,6 +116,10 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
 
 
     if (bCheckTxView) {
+        if (existsFile(pathlib.join(path, "txview"))) {
+            logger.warn('No txview file found, so step out')
+            return 0;
+        }
         result = await trimTxview(trimItemLst, logger, path);
         if (result !== 0) {
             logger.error('trim txview failed');
@@ -329,11 +334,11 @@ async function trimTxview(itemLst: IfBestItem[], logger: winston.LoggerInstance,
 }
 async function trimStorageDump(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
     console.log('\nClear database under dump/');
-    const dumpPath = path.join(path1, DUMP_PATH);
+    const dumpPath = pathlib.join(path1, DUMP_PATH);
 
     console.log('\nDelete databases')
     itemLst.forEach((item: IfBestItem) => {
-        let filename = path.join(dumpPath, item.hash);
+        let filename = pathlib.join(dumpPath, item.hash);
         console.log('Delete dump ' + item.height + ' : ' + filename);
         if (fs.existsSync(filename)) {
             try {
@@ -352,8 +357,8 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
     console.log('\nClear Block/');
 
     itemLst.forEach(async (item: IfBestItem) => {
-        let blockPath = path.join(path1, BLOCK_DIR);
-        let FILE = path.join(blockPath, item.hash);
+        let blockPath = pathlib.join(path1, BLOCK_DIR);
+        let FILE = pathlib.join(blockPath, item.hash);
         if (fs.existsSync(FILE)) {
             // Do something
             await fs.unlinkSync(FILE);
@@ -368,7 +373,7 @@ async function trimBlockDir(itemLst: IfBestItem[], logger: winston.LoggerInstanc
 //  const { stdout, stderr } = await exec(
 async function clearEmptyBlocks(logger: winston.LoggerInstance, path1: string): Promise<number> {
     logger.debug('Clear empty blocks from Blocks/');
-    let mPath = path.join(path1, BLOCK_DIR);
+    let mPath = pathlib.join(path1, BLOCK_DIR);
     let result = await exec(`find ${mPath} -name "*" -type f -size 0c`);
     result = await exec(`find ${mPath} -name "*" -type f -size 0c | xargs -n 1 rm -f`);
     logger.debug('Clear Done')
@@ -377,7 +382,7 @@ async function clearEmptyBlocks(logger: winston.LoggerInstance, path1: string): 
 async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string): Promise<number> {
     console.log('\nClear redundant blocks from Block/')
     logger.debug('Clear redundant blocks from Block/');
-    let files = fs.readdirSync(path.join(path1, BLOCK_DIR))
+    let files = fs.readdirSync(pathlib.join(path1, BLOCK_DIR))
     if (!files) {
         console.log('Get files list failed', path1)
         return -1
@@ -393,7 +398,7 @@ async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string)
             // console.log('hash:', value)
             let retrn = await mDb.getBySQL(`select height from best where hash="${value}";`)
             if (!retrn.data) {
-                fs.unlinkSync(path.join(path1, BLOCK_DIR, value))
+                fs.unlinkSync(pathlib.join(path1, BLOCK_DIR, value))
                 console.log(value, 'Deleted')
             }
         }
@@ -410,10 +415,10 @@ async function trimBlocksFromBest(logger: winston.LoggerInstance, path1: string)
 }
 async function trimStorageLog(itemLst: IfBestItem[], logger: winston.LoggerInstance, path1: string): Promise<number> {
     console.log('\nClear redo.log');
-    const logPath = path.join(path1, LOG_PATH);
+    const logPath = pathlib.join(path1, LOG_PATH);
 
     itemLst.forEach((item: IfBestItem) => {
-        let filename = path.join(logPath, item.hash + '.redo');
+        let filename = pathlib.join(logPath, item.hash + '.redo');
         console.log('Delete ' + item.height + ' : ' + filename);
         if (fs.existsSync(filename)) {
             try {
@@ -448,7 +453,7 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
 
     console.log('height item:');
     console.log(trimHeightItem);
-    const dumpPath = path.join(path1, DUMP_PATH);
+    const dumpPath = pathlib.join(path1, DUMP_PATH);
 
     // generate database and copy it to storage/dump/
     try {
@@ -476,7 +481,7 @@ async function generateStorageDump(height: number, logger: winston.LoggerInstanc
     }
     console.log('Copy restore to dump/ as: ', trimHeightItem.hash);
     let srcFile = RESTORE_FILE_PATH;
-    let dstFile = path.join(path1, DUMP_PATH + trimHeightItem.hash);
+    let dstFile = pathlib.join(path1, DUMP_PATH + trimHeightItem.hash);
     await fs.copyFileSync(srcFile, dstFile);
 
     return 0;

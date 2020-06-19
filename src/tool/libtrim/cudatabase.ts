@@ -35,7 +35,7 @@ export class CUDataBase {
             try {
                 this.db = new sqlite3(path.join(this.options.path, this.options.name));
                 resolv({ err: ErrorCode.RESULT_OK, data: null });
-           } catch (err) {
+            } catch (err) {
                 this.logger.error(err);
                 resolv({ err: ErrorCode.RESULT_FAILED, data: err });
             }
