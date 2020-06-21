@@ -114,6 +114,10 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     hret = await clearEmptyBlocks(logger, path);
     if (hret !== 0) { return -1; }
 
+    // rm files under tmp/
+    console.log('Delete files under tmp/')
+    fs.unlinkSync(pathlib.join(path, "tmp/*.*"))
+
 
     if (bCheckTxView) {
         if (existsFile(pathlib.join(path, "txview"))) {
