@@ -122,7 +122,8 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     })
 
     if (bCheckTxView) {
-        if (existsFile(pathlib.join(path, "txview"))) {
+        console.log('check ', pathlib.join(path, "txview"))
+        if (existsFile(pathlib.join(path, "txview")) === false) {
             logger.warn('No txview file found, so step out')
             return 0;
         }

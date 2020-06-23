@@ -167,7 +167,8 @@ export async function checkMain(logger: winston.LoggerInstance, path1: string, c
         // if no txview under the directory,
         // dont check it
         // path.join(path, this.options.name)
-        if (existsFile(path.join(path1, "txview"))) {
+        console.log('check ', path.join(path1, "txview"))
+        if (existsFile(path.join(path1, "txview")) === false) {
             logger.warn('No txview file found, so step out')
             return 0;
         }

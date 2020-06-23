@@ -27,5 +27,7 @@ export async function runMethodOnDb({ dbname, logger, path, method }: { dbname: 
 }
 
 export function existsFile(filename: string): Boolean {
-    return fs.existsSync(filename);
+    let out = fs.existsSync(filename);
+    console.log("existsFile:", out)
+    return out
 }
