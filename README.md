@@ -62,7 +62,6 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 
 2020-06-27  - Image version 1.16.39, update to solve 2027160 problem
 
-2020-06-28  - Image version 1.16.39.1, udpate version
 
 
 ```
