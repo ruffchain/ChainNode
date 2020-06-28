@@ -1,6 +1,7 @@
 import { IFeedBack } from "../../core";
 import { TrimDataBase } from "./trimdb";
 import winston = require("winston");
+import * as fs from 'fs'
 
 export async function runMethodOnDb({ dbname, logger, path, method }: { dbname: string; logger: winston.LoggerInstance; path: string; method: (mdb: TrimDataBase) => Promise<IFeedBack> }): Promise<number> {
     let mDb = new TrimDataBase(logger, {
@@ -23,4 +24,10 @@ export async function runMethodOnDb({ dbname, logger, path, method }: { dbname: 
         return -1;
     }
     return 0;
+}
+
+export function existsFile(filename: string): Boolean {
+    let out = fs.existsSync(filename);
+    console.log("existsFile:", out)
+    return out
 }

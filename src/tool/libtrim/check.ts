@@ -1,7 +1,8 @@
 import winston = require("winston");
 import { TrimDataBase, IfBestItem, IfHeadersItem, IfMinersItem, IfTxviewItem, IfTxviewBlocksItem } from "./trimdb";
 import { IFeedBack, ErrorCode } from "../../core";
-import { runMethodOnDb } from "./basic";
+import { runMethodOnDb, existsFile } from "./basic";
+import * as path from 'path';
 
 export async function checkDatabaseBest(logger: winston.LoggerInstance, path: string): Promise<IFeedBack> {
     let mData;
@@ -151,18 +152,27 @@ async function checkTxviewTxview(logger: winston.LoggerInstance, path: string): 
 async function checkTxview(logger: winston.LoggerInstance, path: string): Promise<number> {
     let retn = await checkTxviewBlocks(logger, path);
     if (retn.err !== 0) { return -1; }
+
     retn = await checkTxviewTxview(logger, path);
     if (retn.err !== 0) { return -1; }
     return 0;
 }
-export async function checkMain(logger: winston.LoggerInstance, path: string, cfgOption: any) {
-    let retn = await checkDatabase(logger, path);
+export async function checkMain(logger: winston.LoggerInstance, path1: string, cfgOption: any) {
+    let retn = await checkDatabase(logger, path1);
     if (retn === -1) { return -1; }
 
     let bCheckTxView = cfgOption.txServer;
 
     if (bCheckTxView) {
-        retn = await checkTxview(logger, path);
+        // if no txview under the directory,
+        // dont check it
+        // path.join(path, this.options.name)
+        console.log('check ', path.join(path1, "txview"))
+        if (existsFile(path.join(path1, "txview")) === false) {
+            logger.warn('No txview file found, so step out')
+            return 0;
+        }
+        retn = await checkTxview(logger, path1);
         if (retn === -1) { return -1; }
     }
 
