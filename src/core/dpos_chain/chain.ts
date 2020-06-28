@@ -149,6 +149,14 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         if (block.number === 0 || block.number % this.globalOptions.reSelectionBlocks !== 0) {
             return { err: ErrorCode.RESULT_OK, params: [] };
         }
+
+        // delay some time to wait for sometimes low-speed morking process
+        await new Promise((resolve) => {
+            setTimeout(() => {
+                resolve('')
+            }, 1000)
+        })
+
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
             blockHash: this.chainTipState.IRB.hash
