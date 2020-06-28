@@ -60,4 +60,6 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 
 2020-06-21  - Image version 1.16.38.23, update trimit.ts, empty miner/tmp directory
 
+2020-06-27  - Image version 1.16.39, update to solve 2027160 problem
+
 ```
