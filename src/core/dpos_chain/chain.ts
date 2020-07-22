@@ -477,11 +477,25 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         try {
-            const gm = this.m_db!.prepare(getMinersSql).get({ hash: electionHeader.hash });
+            let gm = this.m_db!.prepare(getMinersSql).get({ hash: electionHeader.hash });
             if (!gm || !gm.miners) {
                 this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}`);
+
+                // YJ wait for db operation to finish
+                await new Promise((resolve) => {
+                    setTimeout(() => {
+                        resolve('OK')
+                    }, 1000)
+                })
+                this.logger.info('Try again getMinersSql')
+
+                gm = this.m_db!.prepare(getMinersSql).get({ hash: electionHeader.hash });
+            }
+            if (!gm || !gm.miners) {
+                this.logger.error(`Try getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}`);
                 return { err: ErrorCode.RESULT_NOT_FOUND };
             }
+
 
             let creators = JSON.parse(gm.miners);
             if (!creators.length) {

@@ -790,7 +790,7 @@ export class Chain extends EventEmitter implements IConsistency {
         }
     }
 
-    protected async  _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
+    protected async _onUpdateTip(tip: BlockHeader): Promise<ErrorCode> {
         this.m_tip = tip;
         let toMork = new Set([tip.hash]);
         const msr = await this._onMorkSnapshot({ tip, toMork });
@@ -1494,6 +1494,13 @@ export class Chain extends EventEmitter implements IConsistency {
         next?: () => Promise<{ err: ErrorCode, valid?: ErrorCode }>;
     }> {
         this.m_logger.info(`begin verify block number: ${block.number} hash: ${block.hash} `);
+
+        if (block.number === 2707162) {
+            console.log('Exit on 2707162')
+            process.exit(1)
+        }
+
+
         let sr = await this.m_storageManager!.createStorage(name, block.header.preBlockHash);
         if (sr.err) {
             this.m_logger.warn(`verify block failed for recover storage to previous block's failed for ${sr.err}`);
