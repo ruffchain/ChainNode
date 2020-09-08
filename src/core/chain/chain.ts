@@ -1495,12 +1495,6 @@ export class Chain extends EventEmitter implements IConsistency {
     }> {
         this.m_logger.info(`begin verify block number: ${block.number} hash: ${block.hash} `);
 
-        if (block.number === 2707162) {
-            console.log('Exit on 2707162')
-            process.exit(1)
-        }
-
-
         let sr = await this.m_storageManager!.createStorage(name, block.header.preBlockHash);
         if (sr.err) {
             this.m_logger.warn(`verify block failed for recover storage to previous block's failed for ${sr.err}`);
