@@ -318,7 +318,9 @@ export class ChainServer {
             let tipState = dChain.chainTipState as DposBftChainTipState;
 
             let bftNum = tipState.getBftIRB();
-            let proposedNum = tipState.getProposedIRB();
+            // let proposedNum = tipState.getProposedIRB();
+            let proposedNum = tipState.getIRB();
+            
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
             //console.log('--> ', num);
 
