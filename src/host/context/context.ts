@@ -216,7 +216,10 @@ export class HostChainContext {
                     break;
                 }
             }
-            for (let i = beginAddNumber + 1; i <= header.number; i++) {
+            // YJ To fix memroy overlimit problem
+            let upperLimit = ((header.number - beginAddNumber - 1) > 1000)?(beginAddNumber + 1000): header.number;
+
+            for (let i = beginAddNumber + 1; i <= upperLimit; i++) {
                 let gh = await this.m_chain.getHeader(i);
                 if (gh.err) {
                     this.m_logger.error(`HostChainContext, _addBlock failed for get header (number: ${i}) failed`);

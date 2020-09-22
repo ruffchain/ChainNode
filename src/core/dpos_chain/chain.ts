@@ -154,12 +154,13 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         await new Promise((resolve) => {
             setTimeout(() => {
                 resolve('')
-            }, 1000)
+            }, 500)
         })
 
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
-            blockHash: this.chainTipState.IRB.hash
+            // blockHash: this.chainTipState.IRB.hash
+            blockHash: (block.number === 2683620)?block.header.preBlockHash:this.chainTipState.IRB.hash
         });
         if (csr.err) {
             return { err: csr.err };
@@ -481,7 +482,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
             if (!gm || !gm.miners) {
                 this.logger.error(`getMinersSql error,election block hash=${electionHeader.hash},en=${en},header.height=${header.number}`);
 
-                // YJ wait for db operation to finish
+                // YJ wait for db operation to finish, read the db again
                 await new Promise((resolve) => {
                     setTimeout(() => {
                         resolve('OK')

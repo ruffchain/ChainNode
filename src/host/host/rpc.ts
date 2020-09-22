@@ -322,7 +322,6 @@ export class ChainServer {
             let proposedNum = tipState.getIRB();
             
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
-            //console.log('--> ', num);
 
             await promisify(resp.write.bind(resp)(JSON.stringify(num)));
             await promisify(resp.end.bind(resp)());
