@@ -217,7 +217,7 @@ export class HostChainContext {
                 }
             }
             // YJ To fix memroy overlimit problem
-            let upperLimit = ((header.number - beginAddNumber - 1) > 1000)?(beginAddNumber + 1000): header.number;
+            let upperLimit = ((header.number - beginAddNumber - 1) > 40000)?(beginAddNumber + 40000): header.number;
 
             for (let i = beginAddNumber + 1; i <= upperLimit; i++) {
                 let gh = await this.m_chain.getHeader(i);

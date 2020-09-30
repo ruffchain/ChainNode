@@ -291,22 +291,23 @@ abstract class Monitor {
         }
     }
     public async getDataDirSize(path: string): Promise<IFeedBack> {
-        const { stdout, stderr } = await exec(`du -s ${path}`);
+        // const { stdout, stderr } = await exec(`du -s ${path}`);
         // console.log(stdout);
         // console.log(stderr);
-        if (stderr) {
-            return { err: ErrorCode.RESULT_EXCEPTION, data: 0 }
-        } else {
-            let nSize: number = 0;
-            try {
-                let strMatch = stdout.match(/^([0-9]+)/g);
-                this.logger.debug(strMatch[0]);
-                nSize = parseInt(strMatch[0]);
-            } catch (e) {
-                this.logger.debug('monitor getDataDirSize ' + e);
-            }
-            return { err: ErrorCode.RESULT_OK, data: nSize }
-        }
+        // if (stderr) {
+        //     return { err: ErrorCode.RESULT_EXCEPTION, data: 0 }
+        // } else {
+        //     let nSize: number = 0;
+        //     try {
+        //         let strMatch = stdout.match(/^([0-9]+)/g);
+        //         this.logger.debug(strMatch[0]);
+        //         nSize = parseInt(strMatch[0]);
+        //     } catch (e) {
+        //         this.logger.debug('monitor getDataDirSize ' + e);
+        //     }
+        //     return { err: ErrorCode.RESULT_OK, data: nSize }
+        // }
+        return { err: ErrorCode.RESULT_OK, data: 1 }
     }
     public getVersionFromPackage(): string {
         let config = fs.readJSONSync('./package.json');
@@ -327,18 +328,19 @@ abstract class Monitor {
         }
     }
     private async getDockerVersion(): Promise<string> {
-        try {
-            const { stdout, stderr } = await exec(`docker --version`);
-            if (stderr) {
-                this.logger.warn('Run docker --version failed');
-                return '';
-            } else {
-                return stdout;
-            }
-        } catch (e) {
-            this.logger.error('Error, getDockerVersion()');
-            return 'known';
-        }
+        // try {
+        //     const { stdout, stderr } = await exec(`docker --version`);
+        //     if (stderr) {
+        //         this.logger.warn('Run docker --version failed');
+        //         return '';
+        //     } else {
+        //         return stdout;
+        //     }
+        // } catch (e) {
+        //     this.logger.error('Error, getDockerVersion()');
+        //     return 'known';
+        // }
+        return 'known'
 
     }
 
@@ -457,19 +459,19 @@ abstract class Monitor {
         }
     }
     public updateOutbounds(remoteLst: string[]) {
-        this.logger.debug('Monitor updateOutbounds');
+        //this.logger.debug('Monitor updateOutbounds');
         // this.connInfo.outbound = remoteLst;
     }
     public updateInbounds(remoteLst: string[]) {
-        this.logger.debug('Monitor updateInbounds');
+        //this.logger.debug('Monitor updateInbounds');
         // this.connInfo.inbound = remoteLst;
     }
     public updateBlocksMined(num: number) {
-        this.logger.debug('Monitor updateBlocksMined ' + num);
+        //this.logger.debug('Monitor updateBlocksMined ' + num);
         this.processInfo.blocksMined++;
     }
     public updateBlock(txNum: number) {
-        this.logger.debug('Monitor updateBlock : ' + txNum);
+        //this.logger.debug('Monitor updateBlock : ' + txNum);
         counterTx += txNum;
         this.processInfo.blocks++;
 
@@ -491,7 +493,7 @@ abstract class Monitor {
         }
     }
     public updateTx(txInputSize: number) {
-        this.logger.debug('Monitor updateTx: ' + txInputSize);
+        //this.logger.debug('Monitor updateTx: ' + txInputSize);
         this.processInfo.txs++;
         counterSizeTx += txInputSize;
 
@@ -514,7 +516,7 @@ abstract class Monitor {
     }
 
     public updateRecvBlocks(num: number) {
-        this.logger.debug('Monitor updateRecvBlocks');
+        //this.logger.debug('Monitor updateRecvBlocks');
 
         if (num === undefined) {
             this.contribInfo.recvBlocks++;
@@ -524,7 +526,7 @@ abstract class Monitor {
 
     }
     public updateSendBlocks(num: number) {
-        this.logger.debug('Monitor updateSendBlocks');
+        //this.logger.debug('Monitor updateSendBlocks');
         if (num === undefined) {
             this.contribInfo.sendBlocks++;
         } else {
@@ -533,7 +535,7 @@ abstract class Monitor {
 
     }
     public updateRecvHeaders(num: number) {
-        this.logger.debug('Monitor updateRecvHeaders');
+        //this.logger.debug('Monitor updateRecvHeaders');
         if (num === undefined) {
             this.contribInfo.recvHeaders++;
         } else {
@@ -542,7 +544,7 @@ abstract class Monitor {
 
     }
     public updateSendHeaders(num: number) {
-        this.logger.debug('Monitor updateSendHeaders');
+        //this.logger.debug('Monitor updateSendHeaders');
         if (num === undefined) {
             this.contribInfo.sendHeaders++;
         } else {
@@ -550,7 +552,7 @@ abstract class Monitor {
         }
     }
     public updateRecvTxs(num: number) {
-        this.logger.debug('Monitor updateRecvTxs');
+        //this.logger.debug('Monitor updateRecvTxs');
         if (num === undefined) {
             this.contribInfo.recvTxs++;
         } else {
@@ -559,7 +561,7 @@ abstract class Monitor {
 
     }
     public updateSendTxs(num: number) {
-        this.logger.debug('Monitor updateSendTxs');
+        //this.logger.debug('Monitor updateSendTxs');
         if (num === undefined) {
             this.contribInfo.sendTxs++;
         } else {
@@ -567,7 +569,7 @@ abstract class Monitor {
         }
     }
     public updateRecvRpcs() {
-        this.logger.debug('Monitor updateRecvRpcs');
+        //this.logger.debug('Monitor updateRecvRpcs');
         this.contribInfo.recvRpcs++;
     }
     public updateSendRpcs() {

@@ -136,7 +136,7 @@ export class DposBftMiner extends DposMiner {
             this.m_chain!.node.txBuffer.beginTipSign();
 
             let address = libAddress.addressFromPublicKey(sign.pubkey)!;
-            this.m_logger.info(`===============tipSign from ${address} hash=${sign.hash} `);
+            //this.m_logger.info(`===============tipSign from ${address} hash=${sign.hash} `);
             let entry: DposBftSignEntry = { number: -1, bInBestChain: false, sign };
             let hr = await this.chain.getHeader(sign.hash);
             if (!hr.err) {
@@ -176,19 +176,19 @@ export class DposBftMiner extends DposMiner {
             // let data = inpkg.data;
             let body: PackageTipSignBody = inpkg.body;
 
-            console.log('tipSignPkg, body.froms:', body.froms)
+            //console.log('tipSignPkg, body.froms:', body.froms)
 
             // if body is empty, from older nodes
             if (!body.froms) {
                 // emit tipSign
-                this.m_logger.info('Emit tipSign (from old version)');
+                //this.m_logger.info('Emit tipSign (from old version)');
                 this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
 
                 // then broadcast it out, 
                 await this.handleOldTipSign(hash, pubkey, sign, inpkg);
                 return;
             } else {
-                this.m_logger.info('New tipSign');
+                //this.m_logger.info('New tipSign');
             }
 
             await this.handleNewTipSign(hash, pubkey, sign, inpkg);
@@ -204,24 +204,24 @@ export class DposBftMiner extends DposMiner {
         let addresses: string[] = body.froms;
         let tipSignId = body.height + ':' + body.source;
 
-        this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
-        console.log('tipSignCache:')
-        console.log(this.m_tipSignCache);
-        console.log('tip body:')
-        console.log(body)
-        console.log('tipSignId: ', tipSignId);
+        // this.m_logger.info(`=====tipSignPkg from ${addresses} height=${body.height}`);
+        // console.log('tipSignCache:')
+        // console.log(this.m_tipSignCache);
+        // console.log('tip body:')
+        // console.log(body)
+        // console.log('tipSignId: ', tipSignId);
 
 
         // if body.depth === 0
         if (this.m_tipSignCache.has(tipSignId) || body.depth === 0) {
-            this.m_logger.info('<<< No need to relay tipSign:' + tipSignId)
+            //this.m_logger.info('<<< No need to relay tipSign:' + tipSignId)
             return;
         } else {
             this.m_tipSignCache.add(tipSignId);
         }
 
         if (body.source !== this.address) {
-            this.m_logger.info('Emit tipSign');
+            //this.m_logger.info('Emit tipSign');
             this.m_bftNode!.emit('tipSign', { hash, pubkey, sign });
         }
 
@@ -231,11 +231,11 @@ export class DposBftMiner extends DposMiner {
         // prepare pkg to be sent
         let dataToSend = inpkg.copyData();
         let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
-        console.log('new body:')
-        console.log(body)
+        // console.log('new body:')
+        // console.log(body)
 
         // Broadcast it 
-        console.log('RelayTipSign: ')
+        //console.log('RelayTipSign: ')
 
         let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
         console.log(hret);
@@ -270,11 +270,11 @@ export class DposBftMiner extends DposMiner {
         body.froms.push(fakeAddress);
         let dataToSend = inpkg.copyData();
         let pkg = PackageStreamWriter.fromPackage(DPOS_BFT_SYNC_CMD_TYPE.tipSign, body, dataToSend.length).writeData(dataToSend);
-        console.log('new body:')
-        console.log(body)
+        // console.log('new body:')
+        // console.log(body)
 
         // Broadcast it 
-        console.log('RelayTipSign: ')
+        // console.log('RelayTipSign: ')
 
         let hret = await this.m_bftNode!.relayTipSign(pkg, []);
         console.log(hret);

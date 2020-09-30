@@ -66,7 +66,7 @@ export class BlockStorage implements IBlockStorage {
 
     public get(blockHash: string): Block | undefined {
         let blockRaw;
-        this.m_logger.info('get(), Before read block')
+        //this.m_logger.info('get(), Before read block')
         console.log('blockHash', blockHash)
         try {
             blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
@@ -74,7 +74,7 @@ export class BlockStorage implements IBlockStorage {
             this.m_logger.warn(`readBlockFile ${this._pathOfBlock(blockHash)} failed.`);
             this.m_logger.error(error);
         }
-        this.m_logger.info('After read block')
+        //this.m_logger.info('After read block')
         if (blockRaw) {
             try {
                 let block = new Block({ headerType: this.m_blockHeaderType, transactionType: this.m_transactionType, receiptType: this.m_receiptType });
