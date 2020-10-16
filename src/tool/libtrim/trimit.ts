@@ -38,6 +38,7 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     if (result !== 0) { return -1; }
 
     let bCheckTxView = cfgOption.txServer;
+    let bIgnoreClean = cfgOption.ignoreClean;
 
     let trimItemLst: IfBestItem[] = [];
     async function fetchTrimItemsLst(mDb: TrimDataBase): Promise<IFeedBack> {
@@ -104,15 +105,18 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     let hret = await trimDatabaseBest(height, logger, path);
     if (hret !== 0) { return -1; }
 
-    // delete redundant rows from headers which not exists in best table
-    console.log('\nClear headers table according to best table');
-    hret = await trimHeadersFromBest(logger, path);
-    if (hret !== 0) { return -1; }
+    if (bIgnoreClean === false) {
+        // delete redundant rows from headers which not exists in best table
+        console.log('\nClear headers table according to best table');
+        hret = await trimHeadersFromBest(logger, path);
+        if (hret !== 0) { return -1; }
 
-    // remove redundant block files from Block/ which not exists in best table
-    console.log('\nClear Block/ files 0 size');
-    hret = await clearEmptyBlocks(logger, path);
-    if (hret !== 0) { return -1; }
+        // remove redundant block files from Block/ which not exists in best table
+        console.log('\nClear Block/ files 0 size');
+        hret = await clearEmptyBlocks(logger, path);
+        if (hret !== 0) { return -1; }
+    }
+
 
     // rm files under tmp/
     console.log('Delete files under tmp/')
