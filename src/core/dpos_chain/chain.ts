@@ -160,7 +160,7 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
             // blockHash: this.chainTipState.IRB.hash
-            blockHash: (block.number === 2683620)?block.header.preBlockHash:this.chainTipState.IRB.hash
+            blockHash: (block.number === 2683620 ||block.number === 3039480)?block.header.preBlockHash:this.chainTipState.IRB.hash
         });
         if (csr.err) {
             return { err: csr.err };

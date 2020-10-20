@@ -231,7 +231,7 @@ export class Network extends EventEmitter {
             let connCount = 0;
             for (let r of results) {
                 this.m_connecting.delete(r.peerid);
-                this.logger.debug(`connect to ${r.peerid} err: `, r.err);
+                // this.logger.debug(`connect to ${r.peerid} err: `, r.err);
                 if (r.conn) {
                     this.m_nodeStorage!.add(r.conn.remote!);
                     this.emit('outbound', r.conn);
