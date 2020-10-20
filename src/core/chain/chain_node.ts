@@ -343,7 +343,8 @@ export class ChainNode extends EventEmitter {
                 let buffer = pkg.copyData();
                 let headerReader = new BufferReader(buffer);
                 let headers = [];
-                this.logger.debug(`receive headers from ${conn.fullRemote} err ${pkg.body.error} request `, pkg.body.request);
+                // Yang 
+                // this.logger.debug(`receive headers from ${conn.fullRemote} err ${pkg.body.error} request `, pkg.body.request);
 
                 if (!pkg.body.error) {
                     let err = ErrorCode.RESULT_OK;

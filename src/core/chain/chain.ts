@@ -1273,7 +1273,7 @@ export class Chain extends EventEmitter implements IConsistency {
                 }
                 this.m_node!.broadcast(hr.headers!, {
                     filter: (conn: NodeConnection) => {
-                        this.m_logger.debug(`broadcast to ${conn.fullRemote}: ${!broadcastExcept.has(conn.fullRemote)}`);
+                        // this.m_logger.debug(`broadcast to ${conn.fullRemote}: ${!broadcastExcept.has(conn.fullRemote)}`);
                         return !broadcastExcept.has(conn.fullRemote);
                     }
                 });

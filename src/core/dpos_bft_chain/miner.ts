@@ -238,7 +238,7 @@ export class DposBftMiner extends DposMiner {
         //console.log('RelayTipSign: ')
 
         let hret = await this.m_bftNode!.relayTipSign(pkg, addresses);
-        console.log(hret);
+        // console.log(hret);
 
         this.cleanTipSignCache();
     }

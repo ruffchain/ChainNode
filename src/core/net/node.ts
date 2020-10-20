@@ -247,7 +247,7 @@ export class INode extends EventEmitter {
             // console.log('conns length: ', conns.length);
             for (let i = 0; i < conns.length; i++) {
                 let remo = conns[i].remote;
-                console.log(remo);
+                // console.log(remo);
                 if (addresses.indexOf(remo!) === -1) {
                     // console.log('send it to: ', remo);
                     conns[i].addPendingWriter(writer.clone());
