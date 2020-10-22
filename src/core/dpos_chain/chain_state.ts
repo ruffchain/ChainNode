@@ -100,16 +100,21 @@ export class DposChainTipState {
         let needConfireCount: number = Math.ceil(gm.creators!.length * 2 / 3);
 
         this.m_confirmInfo.push({ header, count: needConfireCount });
+        this.logger.debug("needConfirmCount:" + needConfireCount);
 
         // Yang remove -1
-        let index = this.m_confirmInfo.length ;
-        this.logger.debug(`index:${index}`);
+        let index = this.m_confirmInfo.length -1;
+        this.logger.debug(`Initial index:${index}`);
 
-        while (index >= 0 && numPreBlocks !== 0) {
+        while (index >= 0 && numPreBlocks > -1) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
-            entry.count--;
-            this.logger.debug("entry.count:" + entry.count);
+            
+            this.logger.debug(`index:${index} entry.count: ${entry.count}`);
             this.logger.debug(`entry.header ${entry.header.number} numPreBlocks:${numPreBlocks}`);
+
+            entry.count--;
+            this.logger.debug("entry.count--:" + entry.count);
+
             if (entry.count === 0) {
                 this.logger.debug("### check IRB")
                 this.m_proposedIRBNum = entry.header.number;
