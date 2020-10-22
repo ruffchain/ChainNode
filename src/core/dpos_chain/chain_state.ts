@@ -4,6 +4,7 @@ import { ErrorCode, stringifyErrorCode } from '../error_code';
 import { LoggerInstance } from '../lib/logger_util';
 import { DposBlockHeader } from './block';
 import { IHeaderStorage } from '../chain';
+import { isThisTypeNode } from 'typescript';
 
 type ConfireEntry = {
     header: DposBlockHeader,
@@ -107,7 +108,8 @@ export class DposChainTipState {
         while (index >= 0 && numPreBlocks !== 0) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
             entry.count--;
-            this.logger.debug(`,entry.header ${entry.header.number}  entry.count:${entry.count} numPreBlocks:${numPreBlocks}`);
+            this.logger.debug("entry.count:" + entry.count);
+            this.logger.debug(`entry.header ${entry.header.number} numPreBlocks:${numPreBlocks}`);
             if (entry.count === 0) {
                 this.logger.debug("### check IRB")
                 this.m_proposedIRBNum = entry.header.number;
