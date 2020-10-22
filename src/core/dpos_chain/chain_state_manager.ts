@@ -116,6 +116,9 @@ export class DposChainTipStateManager {
         if (this.m_bestTipState!.tip !== tipHeader) {
             this.m_logger.error(`#### best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
         }
+
+        this.m_logger.debug(`#### compareIRB best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
+        
         //if (this.m_bestTipState!.tip !== tipHeader) {
         //    return {err: ErrorCode.RESULT_NOT_FOUND};
         //}

@@ -328,7 +328,7 @@ export class DposBftMiner extends DposMiner {
 
     // Yang Jun 2019-10-25
     private cleanTipSignCache() {
-        let irbNum = this.chain.chainTipState.IRB.number - 2;
+        let irbNum = this.chain.chainTipState.IRB.number - 14;
 
         let arr: string[] = [];
         this.m_tipSignCache.forEach((str) => {
