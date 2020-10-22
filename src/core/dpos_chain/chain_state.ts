@@ -100,8 +100,8 @@ export class DposChainTipState {
 
         this.m_confirmInfo.push({ header, count: needConfireCount });
 
-        /
-        let index = this.m_confirmInfo.length -1;
+        // Yang remove -1
+        let index = this.m_confirmInfo.length ;
         this.logger.debug(`index:${index}`);
 
         while (index >= 0 && numPreBlocks !== 0) {
