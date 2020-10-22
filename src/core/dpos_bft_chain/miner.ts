@@ -328,7 +328,7 @@ export class DposBftMiner extends DposMiner {
 
     // Yang Jun 2019-10-25
     private cleanTipSignCache() {
-        let irbNum = this.chain.chainTipState.IRB.number - 14;
+        let irbNum = this.chain.chainTipState.IRB.number - 21;
 
         let arr: string[] = [];
         this.m_tipSignCache.forEach((str) => {
@@ -343,7 +343,7 @@ export class DposBftMiner extends DposMiner {
         }
 
         // limit size of cache , during initialization 2019-11-6
-        if (this.m_tipSignCache.size > 21 * 14) {
+        if (this.m_tipSignCache.size > 21 * 21) {
             this.m_tipSignCache.clear();
         }
     }

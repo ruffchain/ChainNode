@@ -83,7 +83,7 @@ export class ChainHost {
         let eMonitor = commandOptions.get('perfMonitor')
 
         if ((eTxServer && eTxServer === true) || (eMonitor && eMonitor === true)) {
-            this.m_server = new ChainServer(logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
+            this.m_server = new ChainServer(false, logger, cr.miner!.chain!, iesr.chainContext, cr.miner!);
             this.m_server.init(commandOptions);
         }
 
@@ -124,7 +124,7 @@ export class ChainHost {
             console.error('init context server fail parseInstanceOptions');
             return { ret: false };
         }
-        this.m_server = new ChainServer(logger, cr.chain!, iesr.chainContext);
+        this.m_server = new ChainServer(true, logger, cr.chain!, iesr.chainContext);
         this.m_server.init(commandOptions);
         return { ret: true, chain: cr.chain };
     }

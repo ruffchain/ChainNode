@@ -30,14 +30,17 @@ export class ChainServer {
     private m_logger: LoggerInstance;
     private m_chainContext?: HostChainContext;
     private m_peerid: string;
+    // Yang Jun
+    private m_bPeer: boolean;
 
-    constructor(logger: LoggerInstance, chain: Chain, chainContext?: HostChainContext, miner?: Miner) {
+    constructor(bPeer: boolean, logger: LoggerInstance, chain: Chain, chainContext?: HostChainContext, miner?: Miner) {
         this.m_chain = chain;
         this.m_miner = miner;
         this.m_logger = logger;
         this.m_chainContext = chainContext;
 
         this.m_peerid = '';
+        this.m_bPeer = bPeer;
     }
 
     init(commandOptions: CommandOptions): boolean {
@@ -318,8 +321,14 @@ export class ChainServer {
             let tipState = dChain.chainTipState as DposBftChainTipState;
 
             let bftNum = tipState.getBftIRB();
-            let proposedNum = tipState.getProposedIRB();
-            // let proposedNum = tipState.getIRB();
+            let proposedNum:number = 0;
+            if(this.m_bPeer === true){
+                proposedNum = tipState.getIRB();
+            }else{
+                tipState.getProposedIRB();
+            }
+            
+            // 
             
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
 

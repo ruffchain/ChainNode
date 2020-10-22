@@ -80,7 +80,7 @@ export class DposChainTipState {
     async updateTip(header: DposBlockHeader): Promise<ErrorCode> {
 
         // Added by Yang 2020-04-10
-        this.logger.debug(`m_tip : ${this.m_tip.number} ${this.m_tip.hash}`);
+        this.logger.debug(`updateTip m_tip : ${this.m_tip.number} ${this.m_tip.hash}`);
         if (header.preBlockHash !== this.m_tip.hash || header.number !== this.m_tip.number + 1) {
             this.logger.error(`updateTip failed for header error, header.number ${header.number} should equal tip.number+1 ${this.m_tip.number + 1}, header.preBlockHash '${header.preBlockHash}' should equal tip.hash ${this.m_tip.hash} headerhash=${header.hash}`);
             return ErrorCode.RESULT_INVALID_PARAM;
@@ -93,6 +93,7 @@ export class DposChainTipState {
         }
 
         let numPreBlocks = this._getNumberPrevBlocks(header);
+        this.logger.debug(`numPreBlocks:${numPreBlocks}`);
         this.m_producerInfo.lastProduced.set(header.miner, header.number);
 
         let needConfireCount: number = Math.ceil(gm.creators!.length * 2 / 3);
@@ -104,6 +105,7 @@ export class DposChainTipState {
         while (index >= 0 && numPreBlocks !== 0) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
             entry.count--;
+            this.logger.debug(`entry.count:${entry.count}`);
             if (entry.count === 0) {
                 this.m_proposedIRBNum = entry.header.number;
                 this.m_producerInfo.lastImpliedIRB.set(entry.header.miner, entry.header);
