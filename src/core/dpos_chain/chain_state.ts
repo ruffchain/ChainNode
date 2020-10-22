@@ -100,12 +100,14 @@ export class DposChainTipState {
 
         this.m_confirmInfo.push({ header, count: needConfireCount });
 
-        let index = this.m_confirmInfo.length - 1;
+        /
+        let index = this.m_confirmInfo.length -1;
+        this.logger.debug(`index:${index}`);
 
         while (index >= 0 && numPreBlocks !== 0) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
             entry.count--;
-            this.logger.debug(`entry.count:${entry.count}`);
+            this.logger.debug(`,entry.header ${entry.header.number}  entry.count:${entry.count} numPreBlocks:${numPreBlocks}`);
             if (entry.count === 0) {
                 this.logger.debug("### check IRB")
                 this.m_proposedIRBNum = entry.header.number;
@@ -124,6 +126,7 @@ export class DposChainTipState {
 
         if (numPreBlocks === 0 || index === 0) {
             // 清除重复
+            this.logger.debug("Clean redundant");
             let i = 0;
             for (i = 0; i < this.m_confirmInfo.length - 1; i++) {
                 if (this.m_confirmInfo[i].count !== this.m_confirmInfo[i + 1].count && this.m_confirmInfo[i].count === this.m_confirmInfo[0].count) {
@@ -212,6 +215,15 @@ export class DposChainTipState {
     protected _promote(miners: string[]) {
         let newImpliedIrb: Map<string, DposBlockHeader> = new Map();
         let newProduced: Map<string, number> = new Map();
+        
+        // for (let m of miners) {
+        //     let irb = this.m_producerInfo.lastImpliedIRB.get(m);
+        //     newImpliedIrb.set(m, irb ? irb : this.m_irb);
+
+        //     let pr = this.m_producerInfo.lastProduced.get(m);
+        //     newProduced.set(m, pr ? pr : this.m_irb.number);
+        // }
+        // Yang
         for (let m of miners) {
             let irb = this.m_producerInfo.lastImpliedIRB.get(m);
             newImpliedIrb.set(m, irb ? irb : this.m_irb);
