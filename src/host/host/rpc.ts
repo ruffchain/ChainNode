@@ -41,6 +41,12 @@ export class ChainServer {
 
         this.m_peerid = '';
         this.m_bPeer = bPeer;
+
+        if(this.m_bPeer){
+            this.m_logger.debug('ChainServer is Peer')
+        }else{
+            this.m_logger.debug('ChainServer is miner')
+        }
     }
 
     init(commandOptions: CommandOptions): boolean {

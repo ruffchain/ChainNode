@@ -107,6 +107,7 @@ export class DposChainTipState {
             entry.count--;
             this.logger.debug(`entry.count:${entry.count}`);
             if (entry.count === 0) {
+                this.logger.debug("check IRB");
                 this.m_proposedIRBNum = entry.header.number;
                 this.m_producerInfo.lastImpliedIRB.set(entry.header.miner, entry.header);
                 // 当前block为候选不可逆块,需要做：1.清理之前的entry
