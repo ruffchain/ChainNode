@@ -92,7 +92,7 @@ export class DposChainTipStateManager {
                 this.m_logger.error('getIRB("latest") error: ' + gi.err)
             }
         }
-        this.m_logger.debug('bestTipState: ' + this.m_bestTipState!.IRB.number);
+        this.m_logger.debug('onUpdateTip, bestTipState: ' + this.m_bestTipState!.IRB.number);
         // 可能分叉了 已经切换分支了，所以需要从fork上去bulid
         let hr = await this._getState(header);
         if (hr.err) {
@@ -118,7 +118,7 @@ export class DposChainTipStateManager {
         }
 
         this.m_logger.debug(`#### compareIRB best tip.number=${this.m_bestTipState!.tip.number}, tipHeader.number=${tipHeader.number}`);
-        
+
         //if (this.m_bestTipState!.tip !== tipHeader) {
         //    return {err: ErrorCode.RESULT_NOT_FOUND};
         //}
