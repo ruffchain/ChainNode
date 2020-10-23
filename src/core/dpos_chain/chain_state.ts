@@ -94,7 +94,7 @@ export class DposChainTipState {
         }
 
         let numPreBlocks = this._getNumberPrevBlocks(header);
-        this.logger.debug(`numPreBlocks:${numPreBlocks}`);
+        // this.logger.debug(`numPreBlocks:${numPreBlocks}`);
         this.m_producerInfo.lastProduced.set(header.miner, header.number);
 
         let needConfireCount: number = Math.ceil(gm.creators!.length * 2 / 3);
@@ -141,7 +141,7 @@ export class DposChainTipState {
 
         if (numPreBlocks === 0 || index === 0) {
             // 清除重复
-            this.logger.debug("Clean redundant");
+            // this.logger.debug("Clean redundant");
             let i = 0;
             for (i = 0; i < this.m_confirmInfo.length - 1; i++) {
                 if (this.m_confirmInfo[i].count !== this.m_confirmInfo[i + 1].count && this.m_confirmInfo[i].count === this.m_confirmInfo[0].count) {
@@ -224,7 +224,7 @@ export class DposChainTipState {
 
             for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
                 if (irbNumber === info.number) {
-                    this.logger.debug("Caught irbNumber:" + irbNumber)
+                    // this.logger.debug("Caught irbNumber:" + irbNumber)
                     this.m_irb = info;
                 }
             }
@@ -235,13 +235,6 @@ export class DposChainTipState {
         let newImpliedIrb: Map<string, DposBlockHeader> = new Map();
         let newProduced: Map<string, number> = new Map();
 
-        // for (let m of miners) {
-        //     let irb = this.m_producerInfo.lastImpliedIRB.get(m);
-        //     newImpliedIrb.set(m, irb ? irb : this.m_irb);
-
-        //     let pr = this.m_producerInfo.lastProduced.get(m);
-        //     newProduced.set(m, pr ? pr : this.m_irb.number);
-        // }
         // Yang
         for (let m of miners) {
             let irb = this.m_producerInfo.lastImpliedIRB.get(m);
