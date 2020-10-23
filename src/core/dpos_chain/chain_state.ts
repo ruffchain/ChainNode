@@ -102,13 +102,20 @@ export class DposChainTipState {
         this.m_confirmInfo.push({ header, count: needConfireCount });
         this.logger.debug("needConfirmCount:" + needConfireCount);
 
-        // Yang remove -1
-        let index = this.m_confirmInfo.length -1;
+        let index = this.m_confirmInfo.length - 1;
         this.logger.debug(`Initial index:${index}`);
 
-        while (index >= 0 && numPreBlocks > -1) {
+        // Yang jun , for mismatch problem for 3039480
+        let mJudgePreBlocks =0;
+        if(header.number > 3039380 && numPreBlocks > 0){
+            mJudgePreBlocks = -1;
+        }else{
+            mJudgePreBlocks = 0;
+        }
+
+        while (index >= 0 && numPreBlocks !== mJudgePreBlocks) {
             let entry: ConfireEntry = this.m_confirmInfo[index];
-            
+
             this.logger.debug(`index:${index} entry.count: ${entry.count}`);
             this.logger.debug(`entry.header ${entry.header.number} numPreBlocks:${numPreBlocks}`);
 
@@ -130,6 +137,7 @@ export class DposChainTipState {
 
             index--;
         }
+
 
         if (numPreBlocks === 0 || index === 0) {
             // 清除重复
@@ -205,14 +213,18 @@ export class DposChainTipState {
         for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
             numbers.push(info.number);
         }
+        this.logger.debug("calcIRB:" + JSON.stringify(numbers));
+
         if (numbers.length > 0) {
             numbers.sort();
             // 2/3的人推荐某个block成为候选不可逆block，那么这个块才能成为不可逆，那么上一个不可逆块号就是1/3中最大的
             let n = Math.floor((numbers.length - 1) / 3);
             let irbNumber = numbers[n];
+            this.logger.debug(`n:${n} irbNumber: ${irbNumber}`)
 
             for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
                 if (irbNumber === info.number) {
+                    this.logger.debug("Caught irbNumber:" + irbNumber)
                     this.m_irb = info;
                 }
             }
@@ -222,7 +234,7 @@ export class DposChainTipState {
     protected _promote(miners: string[]) {
         let newImpliedIrb: Map<string, DposBlockHeader> = new Map();
         let newProduced: Map<string, number> = new Map();
-        
+
         // for (let m of miners) {
         //     let irb = this.m_producerInfo.lastImpliedIRB.get(m);
         //     newImpliedIrb.set(m, irb ? irb : this.m_irb);
