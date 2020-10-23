@@ -331,10 +331,8 @@ export class ChainServer {
             if(this.m_bPeer === true){
                 proposedNum = tipState.getIRB();
             }else{
-                tipState.getProposedIRB();
+                proposedNum= tipState.getProposedIRB();
             }
-            
-            // 
             
             let num = (bftNum > proposedNum) ? bftNum : proposedNum;
 
