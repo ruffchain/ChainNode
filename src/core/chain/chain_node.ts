@@ -507,7 +507,9 @@ export class ChainNode extends EventEmitter {
 
     // 这里必须实现成同步的
     public requestBlocks(from: string, options: { headers?: BlockHeader[], redoLog?: number }): ErrorCode {
-        this.logger.debug(`request blocks from ${from} with options `, options);
+        // this.logger.debug(`request blocks from ${from} with options `, options);
+        this.logger.debug(`request blocks from ${from} with options `);
+
         let connRequesting = this._getConnRequesting(from);
         if (!connRequesting) {
             this.logger.debug(`request blocks from ${from} skipped for connection not found with options `, options);

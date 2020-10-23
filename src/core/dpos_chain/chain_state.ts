@@ -213,7 +213,7 @@ export class DposChainTipState {
         for (let [_, info] of this.m_producerInfo.lastImpliedIRB) {
             numbers.push(info.number);
         }
-        this.logger.debug("calcIRB:" + JSON.stringify(numbers));
+        // this.logger.debug("calcIRB:" + JSON.stringify(numbers));
 
         if (numbers.length > 0) {
             numbers.sort();
