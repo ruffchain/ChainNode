@@ -549,7 +549,7 @@ export class Chain extends EventEmitter implements IConsistency {
         _instanceOptions.initializePeerCount = !isNullOrUndefined(instanceOptions.initializePeerCount) ? instanceOptions.initializePeerCount : 1;
         // 初始化时，一次请求的最大header数目
         // change headerReqLimit to be 100 from 2000
-        _instanceOptions.headerReqLimit = !isNullOrUndefined(instanceOptions.headerReqLimit) ? instanceOptions.headerReqLimit : 100;
+        _instanceOptions.headerReqLimit = !isNullOrUndefined(instanceOptions.headerReqLimit) ? instanceOptions.headerReqLimit : 200;
         // confirm数目，当块的depth超过这个值时，认为时绝对安全的；分叉超过这个depth的两个fork，无法自动合并回去
         _instanceOptions.confirmDepth = !isNullOrUndefined(instanceOptions.confirmDepth) ? instanceOptions.confirmDepth : 6;
 
