@@ -67,7 +67,7 @@ export class BlockStorage implements IBlockStorage {
     public get(blockHash: string): Block | undefined {
         let blockRaw;
         //this.m_logger.info('get(), Before read block')
-        // console.log('blockHash', blockHash)
+        console.log('blockHash', blockHash)
         try {
             blockRaw = fs.readFileSync(this._pathOfBlock(blockHash));
         } catch (error) {

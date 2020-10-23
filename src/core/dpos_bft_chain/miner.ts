@@ -96,7 +96,7 @@ export class DposBftMiner extends DposMiner {
                 await this.sendSign();
             }
 
-            this.m_logger.info(`---------------------checkImpl end  bftLib=${(this.chain.chainTipState as DposBftChainTipState).bftIRB.number} `);
+            this.m_logger.info(`----checkImpl end  bftLib=${(this.chain.chainTipState as DposBftChainTipState).bftIRB.number} `);
         };
 
         let check = async () => {

@@ -574,7 +574,7 @@ abstract class Monitor {
         this.contribInfo.recvRpcs++;
     }
     public updateSendRpcs() {
-        this.logger.debug('Monitor updateSendRpcs');
+        // this.logger.debug('Monitor updateSendRpcs');
         this.contribInfo.sendRpcs++;
     }
 }

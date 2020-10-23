@@ -194,7 +194,7 @@ export class TxBuffer extends EventEmitter {
         if (this.m_rpcBuffer.length <= 0) {
             return;
         } else {
-            this.m_logger.info('m_rpcBuffer len: ' + this.m_rpcBuffer.length);
+            // this.m_logger.info('m_rpcBuffer len: ' + this.m_rpcBuffer.length);
         }
 
         let num = this.getRpcNumToSend();
