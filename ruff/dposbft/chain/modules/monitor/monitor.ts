@@ -392,12 +392,13 @@ abstract class Monitor {
 
         // update connInfo
 
-        let feedback = await this.getDataDirSize('./data');
-        if (feedback.err) {
-            this.connInfo.dataDirSize = 0;
-        } else {
-            this.connInfo.dataDirSize = feedback.data;
-        }
+        // let feedback = await this.getDataDirSize('./data');
+        // if (feedback.err) {
+        //     this.connInfo.dataDirSize = 0;
+        // } else {
+        //     this.connInfo.dataDirSize = feedback.data;
+        // }
+        this.connInfo.dataDirSize = 0;
 
         this.connInfo.timestamp = timestamp;
         this.connInfo.timeDelta = deltaSeconds;
