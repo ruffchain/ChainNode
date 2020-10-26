@@ -105,7 +105,7 @@ export async function trimMain(height: number, logger: winston.LoggerInstance, p
     let hret = await trimDatabaseBest(height, logger, path);
     if (hret !== 0) { return -1; }
 
-    if (bIgnoreClean === false) {
+    if (bIgnoreClean === false || bIgnoreClean == null) {
         // delete redundant rows from headers which not exists in best table
         console.log('\nClear headers table according to best table');
         hret = await trimHeadersFromBest(logger, path);
