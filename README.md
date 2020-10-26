@@ -64,6 +64,6 @@ The bootstrap and orchestrate tools for Blockchain, it is the Best practice of R
 
 2020-09-21  - Image version 1.16.40, several bug fixes: getLIB api, 2683620 mismatch, memory usage improvement during syncing.
 
-
+2020-10-26  - Image version 1.16.41, several bug fixes: block mismatch during syncing, fix bug in DPOS checking process; remove unnecessary log printing.
 
 ```
