@@ -92,7 +92,7 @@ export class DposChainTipState {
             this.logger.error(`get miners failed errcode=${stringifyErrorCode(gm.err)}, state=${this.dump()}`);
             return gm.err;
         }
-
+        // header block number to last produced block number,
         let numPreBlocks = this._getNumberPrevBlocks(header);
         // this.logger.debug(`numPreBlocks:${numPreBlocks}`);
         this.m_producerInfo.lastProduced.set(header.miner, header.number);
@@ -106,10 +106,10 @@ export class DposChainTipState {
         this.logger.debug(`Initial index:${index}`);
 
         // Yang jun , for mismatch problem for 3039480
-        let mJudgePreBlocks =0;
-        if(header.number > 3039380 && numPreBlocks > 0){
+        let mJudgePreBlocks = 0;
+        if (header.number > 3039380 && numPreBlocks > 0) {
             mJudgePreBlocks = -1;
-        }else{
+        } else {
             mJudgePreBlocks = 0;
         }
 
