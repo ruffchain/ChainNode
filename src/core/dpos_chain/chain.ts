@@ -151,11 +151,11 @@ export class DposChain extends ValueChain implements IChainStateStorage {
         }
 
         // delay some time to wait for sometimes low-speed morking process
-        // await new Promise((resolve) => {
-        //     setTimeout(() => {
-        //         resolve('')
-        //     }, 500)
-        // })
+        await new Promise((resolve) => {
+            setTimeout(() => {
+                resolve('')
+            }, 500)
+        })
 
         const csr = await this.executorParamCreator.createStorage({
             storageManager: this.storageManager,
