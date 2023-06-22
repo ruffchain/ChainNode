@@ -44,7 +44,7 @@
     "tslint": "^5.16.0",
     "web3-utils": "^1.2.1",
     "winston": "^2.4.2",
-    "winston-daily-rotate-file": "^3.8.0",
+    "winston-daily-rotate-file": "^4.0.0",
     "xmlhttprequest": "^1.8.0"
   },
   "devDependencies": {
